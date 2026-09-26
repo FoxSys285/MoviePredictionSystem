@@ -26,6 +26,16 @@ project/
 
 Các thư mục `src/` hiện là khung để từng thành viên bổ sung mã. Chưa có mô hình được huấn luyện hay kết quả thực nghiệm.
 
+## Theo dõi công việc 4 tuần
+
+Mỗi thành viên đánh dấu tiến độ trong file riêng. Các bảng trong từng file nêu rõ sản phẩm phải tạo, vị trí lưu và điều kiện để xác nhận hoàn thành:
+
+- [TV1 — dữ liệu, chia tập, baseline](tasks/TV1.md)
+- [TV2 — regression và classification](tasks/TV2.md)
+- [TV3 — SVD, KNN, giảm chiều, phân cụm](tasks/TV3.md)
+- [TV4 — NCF](tasks/TV4.md)
+- [TV5 — Apriori, web và báo cáo](tasks/TV5.md)
+
 ## Dữ liệu
 
 Dữ liệu đã có tại `../Dataset/ml-25m` (tính từ thư mục `project`). File [configs/default.json](configs/default.json) trỏ tới đó; không cần sao chép bộ dữ liệu vào `data/raw`. Xem [nguồn MovieLens 25M](https://grouplens.org/datasets/movielens/25m/) và README đi kèm dữ liệu trước khi sử dụng.
@@ -52,3 +62,5 @@ Nếu thực hiện Q-Learning mở rộng, cài thêm `python -m pip install -r
 - **Báo cáo:** mỗi người viết phần mình phụ trách trong `report/`; TV5 ghép bản cuối sau khi mọi người xác nhận số liệu.
 
 Không dùng tập test để chọn tham số hoặc mô hình. Điểm chưa có trong ma trận user–item là tương tác chưa quan sát, không phải rating bằng 0.
+
+File dự đoán đầy đủ có thể rất lớn nên `results/predictions_*.csv` chỉ lưu cục bộ và được Git bỏ qua; mã chạy lại và file metric vẫn có thể đưa lên Git.

@@ -16,6 +16,9 @@ data/processed/*
 artifacts/*
 !artifacts/.gitkeep
 
+# Full prediction files are generated locally from the scripts.
+results/predictions_*.csv
+
 # Local secrets and temporary files
 .env
 *.tmp
