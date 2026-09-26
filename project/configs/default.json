@@ -1,0 +1,16 @@
+{
+  "dataset_dir": "../Dataset/ml-25m",
+  "processed_dir": "data/processed",
+  "artifacts_dir": "artifacts",
+  "results_dir": "results",
+  "figures_dir": "figures",
+  "random_seed": 42,
+  "split_ratios": {
+    "train": 0.70,
+    "validation": 0.15,
+    "test": 0.15
+  },
+  "time_cv_folds": 5,
+  "positive_rating_threshold": 4.0,
+  "top_k": 10
+}

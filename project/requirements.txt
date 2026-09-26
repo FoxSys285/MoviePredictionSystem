@@ -1,0 +1,15 @@
+# Dependencies for the core experiments and Streamlit demo.
+# Record the exact resolved versions after the team's environment is working.
+numpy
+pandas
+scipy
+pyarrow
+scikit-learn
+xgboost
+torch
+optuna
+mlxtend
+streamlit
+matplotlib
+seaborn
+joblib

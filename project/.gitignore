@@ -1,0 +1,22 @@
+# Python and local environments
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local MovieLens data and generated processed sets
+data/raw/*
+!data/raw/README.md
+data/processed/*
+!data/processed/.gitkeep
+*.parquet
+
+# Large model checkpoints
+artifacts/*
+!artifacts/.gitkeep
+
+# Local secrets and temporary files
+.env
+*.tmp
+*.log
