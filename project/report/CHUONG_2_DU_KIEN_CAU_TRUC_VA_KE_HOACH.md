@@ -2,27 +2,28 @@
 
 ## 2.1. Dự kiến cấu trúc các nội dung nghiên cứu, thực hiện trong đồ án
 
+Ba chương đầu của báo cáo cuối dự kiến có nội dung như sau:
+
 **Chương 1: Tổng quan**
 
-Chương 1 giới thiệu bài toán gợi ý phim từ lịch sử đánh giá của người dùng. Phần mở đầu nêu khó khăn khi dữ liệu tương tác thưa, nhiều người dùng hoặc phim có ít lịch sử, và khi hệ thống cần tạo danh sách phim gợi ý từ các điểm dự đoán. Tiếp đó, chương tóm tắt các hướng nghiên cứu liên quan đến phân rã ma trận, học từ đặc trưng và Neural Collaborative Filtering; làm rõ đóng góp của đồ án là xây dựng một quy trình so sánh có thể kiểm tra lại trên MovieLens 25M. Cuối chương trình bày mục tiêu, đối tượng, phạm vi dữ liệu và những giới hạn của việc đánh giá ngoại tuyến. Nội dung này tương ứng với bản **Chương 1 – Mở đầu** nhóm đã soạn.
+Chương đầu giải thích vì sao nhóm chọn bài toán gợi ý phim. Người dùng chỉ đánh giá một phần rất nhỏ số phim có trong hệ thống; với người vừa tham gia, lịch sử này còn ít hơn. Từ vấn đề đó, nhóm giới thiệu MovieLens 25M, điểm qua những hướng dự đoán điểm đánh giá đã được nghiên cứu và xác định câu hỏi cần trả lời trong đồ án: mô hình nào phù hợp với dữ liệu, tài nguyên tính toán và web demo của nhóm. Phần cuối nêu mục tiêu, phạm vi nghiên cứu cùng giới hạn của việc đánh giá bằng dữ liệu có sẵn. Nội dung này đã được viết trong bản **Chương 1 – Mở đầu**.
 
 **Chương 2: Cơ sở lý thuyết**
 
-Chương 2 cung cấp kiến thức cần thiết để hiểu các mô hình và kết quả ở những chương sau. Trước hết là cách biểu diễn dữ liệu người dùng–phim, sự khác nhau giữa điểm đánh giá đã quan sát và ô chưa có dữ liệu, cùng hai trường hợp người dùng mới và phim mới. Chương giải thích nguyên lý của baseline điểm trung bình, hồi quy tuyến tính, XGBoost, lọc cộng tác bằng KNN, phân rã ma trận/SVD và NCF; chỉ rõ đầu vào, đầu ra và điều kiện áp dụng của từng phương pháp. Các kỹ thuật phân loại, giảm chiều, phân cụm và khai phá luật kết hợp được trình bày ở mức cần thiết cho các thí nghiệm bổ sung. Phần cuối giới thiệu RMSE, MAE, các chỉ số gợi ý Top-N và các chỉ số riêng của từng bài toán. Các công trình, định nghĩa và công thức sử dụng trong chương sẽ có trích dẫn nguồn.
+Phần lý thuyết bắt đầu từ ma trận người dùng–phim và ý nghĩa của một ô chưa có rating. Sau đó, nhóm trình bày cách các phương pháp được chọn xử lý bài toán: dự đoán từ đặc trưng bằng hồi quy, dự đoán từ lịch sử tương tác bằng KNN và phân rã ma trận, hoặc học quan hệ người dùng–phim bằng NCF. Mô hình điểm trung bình được giải thích như một mốc đối chiếu. Với mỗi phương pháp, chương nêu ý tưởng, dữ liệu đầu vào và trường hợp dễ gặp khó khăn, nhất là khi người dùng hoặc phim chưa xuất hiện trong train. Những kiến thức về phân loại, phân cụm, giảm chiều và luật kết hợp được đưa vào đúng phần thí nghiệm có sử dụng. Chương cũng giải thích các thước đo cần thiết để người đọc hiểu bảng kết quả ở phần sau; định nghĩa và công thức sẽ được dẫn nguồn.
 
 **Chương 3: Phương pháp đề xuất**
 
-Chương 3 mô tả quy trình mà nhóm áp dụng cho MovieLens 25M. Quy trình gồm kiểm tra và làm sạch dữ liệu, chia tập theo thời gian, tạo đặc trưng từ train, huấn luyện các mô hình, dự đoán và đánh giá. Chương trình bày cụ thể tỷ lệ chia mục tiêu 70/15/15, năm lần kiểm chứng tiến theo thời gian trong train, cách lưu ID bản ghi để mọi mô hình dùng đúng cùng dữ liệu và quy tắc ngăn thông tin từ validation/test đi vào huấn luyện. Với các mô hình cần ID đã xuất hiện trong train, chương nêu cách báo cáo riêng nhóm có đủ lịch sử và cách dự phòng cho người dùng/phim mới. Sau cùng là quy trình tạo danh sách Top-N, loại phim người dùng đã chọn và tiêu chí chọn mô hình cho web demo dựa trên chất lượng dự đoán cùng thời gian xử lý.
+Chương này mô tả các bước nhóm thực hiện trên MovieLens 25M để người khác có thể làm lại thí nghiệm. Sau khi kiểm tra và làm sạch dữ liệu, rating được sắp theo thời gian rồi chia thành train, validation và test với tỷ lệ mục tiêu 70/15/15. Trong train, nhóm tạo năm lần kiểm chứng tiến theo thời gian. Chương ghi rõ dữ liệu nào được dùng để tạo đặc trưng, huấn luyện và chọn tham số; mỗi dự đoán được gắn với ID bản ghi để đối chiếu đúng điểm thật. Do validation có nhiều người dùng chưa xuất hiện trong train, kết quả trên toàn tập và trên nhóm đã có đủ lịch sử sẽ được báo cáo riêng. Cuối chương là cách xử lý người dùng mới, tạo danh sách phim chưa xem và chọn mô hình cho demo dựa trên cả độ chính xác lẫn thời gian xử lý.
 
 ## 2.2. Kế hoạch thực hiện dự kiến
 
-Đồ án được tổ chức trong bốn tuần theo thứ tự **thu thập dữ liệu → chia tập → huấn luyện → dự đoán → đánh giá**. Việc huấn luyện và đánh giá trên train/validation có thể lặp lại khi cần điều chỉnh tham số; tập test chỉ được sử dụng sau khi nhóm thống nhất cấu hình cuối.
+Nhóm dự kiến làm trong bốn tuần. Thứ tự chung là **thu thập dữ liệu, chia tập, huấn luyện, dự đoán và đánh giá**. Trong lúc thử mô hình, nhóm có thể quay lại bước huấn luyện sau khi xem kết quả validation; tập test được giữ cho lần đánh giá cuối.
 
-| Thời gian | Công việc trọng tâm | Sản phẩm cần có |
-|---|---|---|
-| Tuần 1 | Kiểm tra MovieLens 25M, khám phá dữ liệu, làm sạch và chia tập theo thời gian; thống nhất định dạng dữ liệu bàn giao. | Bộ dữ liệu đã chia, biểu đồ mô tả, quy tắc tiền xử lý và giao thức đánh giá chung. |
-| Tuần 2 | Huấn luyện baseline và phiên bản đầu của Linear Regression, XGBoost, SVD, NCF; thử nghiệm các bài toán bổ sung và bản web demo ban đầu. | Mã huấn luyện, kết quả validation đầu tiên, bản demo nhận phim người dùng đã chọn. |
-| Tuần 3 | Tìm tham số, chạy năm lần kiểm chứng, kiểm tra rò rỉ dữ liệu và so sánh chất lượng với chi phí tính toán. | Bảng so sánh validation, log thực nghiệm, mô hình và quy tắc dự phòng được chọn cho demo. |
-| Tuần 4 | Khóa cấu hình, đánh giá trên test, hoàn thiện web, báo cáo và slide. | Kết quả test cuối cùng, web demo chạy được, báo cáo có thể đối chiếu với file kết quả. |
+**Tuần 1:** Kiểm tra MovieLens 25M, làm sạch rating và thống nhất cách chia dữ liệu. Kết thúc tuần, mọi thành viên cần đọc được cùng các tập train, validation, test và hiểu rằng cặp người dùng–phim chưa có rating là tương tác chưa được quan sát.
 
-Phân công và sản phẩm chi tiết của từng thành viên được theo dõi trong các file `tasks/TV1.md` đến `tasks/TV5.md`; khi ghép báo cáo, nhóm sẽ cập nhật kế hoạch này theo phần việc và kết quả thực tế.
+**Tuần 2:** Chạy baseline và các mô hình đầu tiên trên train, lấy dự đoán ở validation. Thành viên phụ trách web chuẩn bị giao diện chọn phim để kiểm tra luồng gợi ý, kể cả trường hợp người dùng mới.
+
+**Tuần 3:** Điều chỉnh tham số bằng các lần kiểm chứng trong train, rà soát rò rỉ dữ liệu và tổng hợp kết quả validation. Nhóm chọn mô hình đưa vào demo sau khi đối chiếu sai số, số trường hợp dự đoán được và thời gian chạy.
+
+**Tuần 4:** Giữ nguyên cấu hình đã chọn để đánh giá trên test. Các thành viên hoàn thiện phần báo cáo mình phụ trách; nhóm ghép báo cáo, kiểm tra lại số liệu và chạy thử web trước khi trình bày.
