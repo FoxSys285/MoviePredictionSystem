@@ -8,4 +8,4 @@ Mỗi thành viên viết phần mình phụ trách và xác nhận bảng số 
 - TV4: NCF, Optuna, learning curve và kết quả.
 - TV5: Apriori, web demo, bảng tổng hợp và kết luận chọn mô hình.
 
-Nội dung chi tiết xem [hướng dẫn công việc](../../HUONG_DAN_CONG_VIEC_TUNG_THANH_VIEN.md).
+Nội dung chi tiết xem [hướng dẫn công việc](../docs/HUONG_DAN_CONG_VIEC_TUNG_THANH_VIEN.md). Phần TV1 hiện nằm ở [tv1_data.md](tv1_data.md).

@@ -1,12 +1,14 @@
 # MovieLens 25M — Đồ án Học máy
 
-Dự án gợi ý phim của nhóm 5 thành viên. Phân công và hướng dẫn chi tiết nằm tại [kế hoạch 4 tuần](../KE_HOACH_NHOM_4_TUAN.md) và [hướng dẫn công việc](../HUONG_DAN_CONG_VIEC_TUNG_THANH_VIEN.md).
+Dự án gợi ý phim của nhóm 5 thành viên. Phân công và hướng dẫn chi tiết nằm tại [kế hoạch 4 tuần](docs/KE_HOACH_NHOM_4_TUAN.md) và [hướng dẫn công việc](docs/HUONG_DAN_CONG_VIEC_TUNG_THANH_VIEN.md).
 
 ## Cấu trúc
 
 ```text
 project/
 ├── configs/default.json       # Đường dẫn dữ liệu và quy tắc thực nghiệm chung
+├── docs/                      # Kế hoạch và hướng dẫn công việc của nhóm
+├── tasks/                     # Checklist 4 tuần cho từng thành viên
 ├── data/
 │   ├── raw/                   # Chỉ có hướng dẫn; dữ liệu gốc đang ở ../Dataset/ml-25m
 │   └── processed/             # Train/validation/test sau tiền xử lý (TV1)
@@ -24,7 +26,7 @@ project/
 └── report/                     # Phần viết của từng thành viên và báo cáo cuối
 ```
 
-Các thư mục `src/` hiện là khung để từng thành viên bổ sung mã. Chưa có mô hình được huấn luyện hay kết quả thực nghiệm.
+TV1 đã có pipeline dữ liệu và baseline trong `src/data/`; các thư mục mô hình còn lại là khung để thành viên tương ứng bổ sung mã.
 
 ## Theo dõi công việc 4 tuần
 
@@ -40,7 +42,7 @@ Mỗi thành viên đánh dấu tiến độ trong file riêng. Các bảng tron
 
 Dữ liệu đã có tại `../Dataset/ml-25m` (tính từ thư mục `project`). File [configs/default.json](configs/default.json) trỏ tới đó; không cần sao chép bộ dữ liệu vào `data/raw`. Xem [nguồn MovieLens 25M](https://grouplens.org/datasets/movielens/25m/) và README đi kèm dữ liệu trước khi sử dụng.
 
-TV1 sẽ tạo dữ liệu đã chia trong `data/processed`. Cả nhóm dùng chung danh sách ID train/validation/test; không tự chia lại theo cách khác.
+TV1 đã tạo dữ liệu đã chia trong `data/processed`. Cả nhóm dùng chung `train.parquet`, `validation.parquet`, `test.parquet`, `splits.json` và `cv_folds.json`; không tự chia lại theo cách khác. `train.parquet` là tập huấn luyện chính. `train_core.parquet` chỉ dành cho phân tích tương tác đủ dày theo ngưỡng cấu hình. Để so sánh mô hình trên cùng nhóm warm-start, dùng `validation_warm.parquet` và `cv_warm_ids.parquet` (cột `fold,row_id`). Báo cáo số liệu và giới hạn nằm tại [phần TV1](report/tv1_data.md).
 
 ## Chuẩn bị môi trường
 
@@ -52,7 +54,27 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-Nếu thực hiện Q-Learning mở rộng, cài thêm `python -m pip install -r requirements-rl.txt`. Sau khi nhóm xác nhận môi trường chạy được, ghi phiên bản thư viện đã dùng vào báo cáo hoặc file khóa phiên bản để tái lập. Các phụ thuộc trong `requirements.txt` là danh sách khởi đầu, chưa được cài hoặc kiểm thử trong thư mục này.
+Nếu thực hiện Q-Learning mở rộng, cài thêm `python -m pip install -r requirements-rl.txt`. Sau khi nhóm xác nhận môi trường chạy được, ghi phiên bản thư viện đã dùng vào báo cáo hoặc file khóa phiên bản để tái lập. Pipeline TV1 đã được chạy bằng Python 3.14.3 và DuckDB 1.5.5 trên máy hiện tại; các phần mô hình khác vẫn là danh sách phụ thuộc dự kiến.
+
+## Chạy pipeline TV1
+
+Từ thư mục `project`, sau khi cài `requirements.txt`:
+
+```powershell
+python -m src.data.prepare
+python -m src.data.split
+python -m src.data.eda
+python -m src.data.baseline --split validation
+python -m src.data.baseline --cv
+python -m src.data.audit
+python -m src.data.cold_start --ratings 1:5 296:4.5 --top-n 10
+```
+
+`prepare` và `split` yêu cầu `--force` nếu muốn tạo lại file đã có. Baseline test vẫn khóa cho tới khi nhóm ghi quyết định chọn mô hình ở `report/model_selection.md`; sau đó mới chạy `python -m src.data.baseline --split test --allow-test`.
+
+Nếu nhóm đổi ngưỡng `min_user_ratings`/`min_movie_ratings` trong cấu hình, chạy lại `split --force`, baseline validation/CV và audit, rồi cập nhật các số liệu trong báo cáo TV1. `row_id` là khóa chung của mọi file dự đoán; năm fold ở `cv_folds.json` ghi khoảng `row_id` cho train và validation của từng fold.
+
+**Lưu ý về giao thức:** cách chia theo thời gian toàn cục tạo tỷ lệ user mới rất cao trong validation. Các mô hình embedding ID cần báo cáo riêng kết quả warm-start và kết quả toàn tập khi dùng fallback; xem `results/coverage_validation.csv`.
 
 ## Quy ước bàn giao
 

@@ -4,6 +4,7 @@ numpy
 pandas
 scipy
 pyarrow
+duckdb
 scikit-learn
 xgboost
 torch

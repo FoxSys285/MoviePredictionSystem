@@ -1,0 +1,121 @@
+{
+  "source_rows": 25000095,
+  "missing_rows": 0,
+  "invalid_ids": 0,
+  "invalid_ratings": 0,
+  "invalid_timestamps": 0,
+  "source_users": 162541,
+  "rated_movies": 59047,
+  "min_timestamp": 789652009,
+  "max_timestamp": 1574327703,
+  "min_rating": 0.5,
+  "max_rating": 5.0,
+  "movies_rows": 62423,
+  "distinct_movies": 62423,
+  "invalid_movies_rows": 0,
+  "valid_before_dedup": 25000095,
+  "exact_duplicate_rows": 0,
+  "clean_rows": 25000095,
+  "source_files": {
+    "ratings.csv": {
+      "bytes": 678260987,
+      "sha256": "9c85525758597dca76e8d98cebb9c13e018c2317b09a0878b6d383179526e385"
+    },
+    "movies.csv": {
+      "bytes": 3038099,
+      "sha256": "c50dea6973e619f9bc1decd4afa3e35358b83a5fb663dac0ec82252a011d023d"
+    }
+  },
+  "clean_file": "data/processed/ratings_clean.parquet",
+  "preparation_seconds": 15.666,
+  "engine": {
+    "duckdb": "1.5.5"
+  },
+  "split": {
+    "train": {
+      "rows": 17500066,
+      "ratio": 0.699999980000076,
+      "min_row_id": 0,
+      "max_row_id": 17500065,
+      "min_timestamp": 789652009,
+      "max_timestamp": 1421944973,
+      "min_time_utc": "1995-01-09T11:46:49+00:00",
+      "max_time_utc": "2015-01-22T16:42:53+00:00"
+    },
+    "validation": {
+      "rows": 3750014,
+      "ratio": 0.149999990000038,
+      "min_row_id": 17500066,
+      "max_row_id": 21250079,
+      "min_timestamp": 1421944985,
+      "max_timestamp": 1490320202,
+      "min_time_utc": "2015-01-22T16:43:05+00:00",
+      "max_time_utc": "2017-03-24T01:50:02+00:00"
+    },
+    "test": {
+      "rows": 3750015,
+      "ratio": 0.15000002999988601,
+      "min_row_id": 21250080,
+      "max_row_id": 25000094,
+      "min_timestamp": 1490320205,
+      "max_timestamp": 1574327703,
+      "min_time_utc": "2017-03-24T01:50:05+00:00",
+      "max_time_utc": "2019-11-21T09:15:03+00:00"
+    }
+  },
+  "train_core": {
+    "rows": 17444718,
+    "users": 121946,
+    "movies": 12354
+  },
+  "eda": {
+    "rating_counts": {
+      "0.5": 393068,
+      "1.0": 776815,
+      "1.5": 399490,
+      "2.0": 1640868,
+      "2.5": 1262797,
+      "3.0": 4896928,
+      "3.5": 3177318,
+      "4.0": 6639798,
+      "4.5": 2200539,
+      "5.0": 3612474
+    },
+    "ratings_per_user": {
+      "min": 20,
+      "median": 71.0,
+      "p90": 353.0,
+      "p99": 1228.0,
+      "max": 32202
+    },
+    "ratings_per_rated_movie": {
+      "min": 1,
+      "median": 6.0,
+      "p90": 413.0,
+      "p99": 9941.620000000003,
+      "max": 81491
+    },
+    "rated_movie_count": 59047,
+    "genres_top_18": {
+      "Drama": 25606,
+      "Comedy": 16870,
+      "Thriller": 8654,
+      "Romance": 7719,
+      "Action": 7348,
+      "Horror": 5989,
+      "Documentary": 5605,
+      "Crime": 5319,
+      "Adventure": 4145,
+      "Sci-Fi": 3595,
+      "Children": 2935,
+      "Animation": 2929,
+      "Mystery": 2925,
+      "Fantasy": 2731,
+      "War": 1874,
+      "Western": 1399,
+      "Musical": 1054,
+      "Film-Noir": 353
+    }
+  },
+  "validation_warm_rows": 337481
+}

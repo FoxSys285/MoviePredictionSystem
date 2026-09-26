@@ -1,6 +1,6 @@
 # Hướng dẫn thực hiện công việc cho nhóm 5 thành viên
 
-Tài liệu này là hướng dẫn thao tác đi kèm [kế hoạch 4 tuần](./KE_HOACH_NHOM_4_TUAN.md). Thay `TV1`–`TV5` bằng tên thật của nhóm. [Khung thư mục `project`](./project/README.md) đã được tạo; từng thành viên bổ sung mã và kết quả vào phần mình phụ trách.
+Tài liệu này là hướng dẫn thao tác đi kèm [kế hoạch 4 tuần](./KE_HOACH_NHOM_4_TUAN.md). Thay `TV1`–`TV5` bằng tên thật của nhóm. [Khung thư mục `project`](../README.md) đã được tạo; từng thành viên bổ sung mã và kết quả vào phần mình phụ trách.
 
 ## 1. Cách làm việc chung trước khi chia việc
 

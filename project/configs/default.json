@@ -5,6 +5,10 @@
   "results_dir": "results",
   "figures_dir": "figures",
   "random_seed": 42,
+  "duckdb_memory_limit": "2GB",
+  "duckdb_threads": 2,
+  "min_user_ratings": 10,
+  "min_movie_ratings": 20,
   "split_ratios": {
     "train": 0.70,
     "validation": 0.15,

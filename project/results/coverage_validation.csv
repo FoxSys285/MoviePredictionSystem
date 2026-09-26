@@ -1,0 +1,9 @@
+cohort,rows,share
+all,3750014,1.0
+warm,337481,0.0899946
+unseen_user,3317850,0.8847567
+unseen_movie,258066,0.06881734
+both_unseen,192161,0.05124274
+low_history_user,7565,0.00201733
+low_history_movie,88873,0.02369938
+not_warm,3412533,0.9100054
