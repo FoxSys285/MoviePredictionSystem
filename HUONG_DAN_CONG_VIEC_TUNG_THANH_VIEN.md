@@ -4,6 +4,20 @@ Tài liệu này là hướng dẫn thao tác đi kèm [kế hoạch 4 tuần](.
 
 ## 1. Cách làm việc chung trước khi chia việc
 
+### Quy trình 5 bước của toàn nhóm
+
+Mỗi người có thể làm song song phần chuẩn bị của mình, nhưng sản phẩm chính phải đi qua đúng thứ tự sau:
+
+| Bước | Công việc và người phụ trách | Sản phẩm để chuyển sang bước tiếp theo |
+|---|---|---|
+| **1. Thu thập dữ liệu** | TV1 lấy và xác minh MovieLens 25M, đọc `ratings.csv`/`movies.csv`, kiểm tra dữ liệu, làm EDA; các thành viên còn lại thống nhất dữ liệu cần dùng | Dữ liệu nguồn đã xác minh, thống kê và biểu đồ EDA, quy tắc làm sạch |
+| **2. Chia tập** | TV1 sắp xếp theo `timestamp`, chia 70/15/15, tạo năm lần chia tiến theo thời gian trong train; cả nhóm kiểm tra quy tắc lọc và rò rỉ dữ liệu | ID train/validation/test, các lần chia kiểm chứng, số dòng và mốc thời gian |
+| **3. Huấn luyện** | TV1 làm baseline; TV2 làm regression/classification; TV3 làm SVD/KNN/PCA/clustering; TV4 làm NCF; TV5 làm Apriori | Model hoặc kết quả thí nghiệm, cấu hình tham số, seed và log huấn luyện |
+| **4. Dự đoán** | TV1–TV4 xuất dự đoán cho validation, sau đó cho test khi cấu hình đã khóa; TV5 dùng model được chọn để trả Top-N trên web | CSV dự đoán có `row_id`, điểm dự đoán/xác suất, danh sách phim gợi ý không lặp phim đã xem |
+| **5. Đánh giá** | Mỗi người tính chỉ số của phần mình; TV5 ghép bảng, cả nhóm nhận xét và chọn mô hình từ validation | Bảng metric, thời gian train/suy luận, biểu đồ, kết luận và demo |
+
+**Trong tuần 2–3, nhóm lặp bước 3→4→5 trên train/validation** để cải thiện mô hình. Cuối tuần 3 khóa lựa chọn; tuần 4 chỉ chạy dự đoán và đánh giá trên test một lần. Không tính kết quả test rồi quay lại sửa tham số hoặc đổi mô hình.
+
 ### 1.1. Sản phẩm cần nộp sau 4 tuần
 
 - Mã nguồn và hướng dẫn chạy lại từ dữ liệu gốc.
@@ -19,7 +33,7 @@ project/
 ├── README.md                  # TV1 hướng dẫn chuẩn bị dữ liệu; TV5 bổ sung cách chạy web
 ├── requirements.txt           # Các thư viện và phiên bản thực tế đã dùng
 ├── data/
-│   ├── raw/                   # MovieLens gốc; không đưa dữ liệu lớn vào mã nguồn nộp
+│   ├── raw/                   # Hướng dẫn dữ liệu; MovieLens gốc ở ../Dataset/ml-25m
 │   └── processed/             # Tập chia và file ánh xạ ID
 ├── src/
 │   ├── data/                  # TV1: tiền xử lý, chia tập, baseline
@@ -70,6 +84,8 @@ Không ghi "đã huấn luyện xong" nếu chưa có file model, file dự đo�
 
 TV1 tạo đầu vào tin cậy cho toàn nhóm. Mọi thành viên phải đọc cùng một bộ ID train/validation/test; TV1 chịu trách nhiệm phát hiện rò rỉ dữ liệu ở bước này.
 
+**Bước phụ trách:** 1. Thu thập dữ liệu; 2. Chia tập; 3. Huấn luyện baseline; hỗ trợ bước 4–5.
+
 ### Hướng dẫn làm từng bước
 
 1. **Tải và kiểm tra dữ liệu gốc (tuần 1).** Lấy MovieLens 25M từ [GroupLens](https://grouplens.org/datasets/movielens/25m/), đọc README và ghi nguồn/phiên bản. Kiểm tra các cột bắt buộc, kiểu dữ liệu, rating ngoài khoảng hợp lệ, timestamp thiếu và bản ghi trùng. Lưu số dòng gốc và số dòng sau mỗi bước xử lý.
@@ -100,6 +116,8 @@ TV1 tạo đầu vào tin cậy cho toàn nhóm. Mọi thành viên phải đọ
 
 TV2 cung cấp hai mô hình rating dựa trên đặc trưng và hai mô hình phân loại thích/không thích, cùng file kết quả có thể so sánh với SVD/NCF.
 
+**Bước phụ trách:** 3. Huấn luyện; 4. Dự đoán; 5. Đánh giá cho regression/classification.
+
 ### Hướng dẫn làm từng bước
 
 1. **Đọc giao thức của TV1 (tuần 1).** Nạp đúng ID chia tập, xác nhận số dòng. Thiết kế đặc trưng có thể tính tại thời điểm dự đoán: ID người dùng/phim mã hóa thưa, thể loại/năm phim, số lần tương tác, rating trung bình lịch sử. Với đặc trưng trung bình theo user/item, khi tạo hàng train phải loại rating của chính hàng đó hoặc chỉ dùng lịch sử trước thời điểm hàng đó; validation/test chỉ dùng thống kê từ train.
@@ -127,6 +145,8 @@ TV2 cung cấp hai mô hình rating dựa trên đặc trưng và hai mô hình 
 ### Mục tiêu
 
 TV3 xây hướng gợi ý cộng tác, kiểm tra việc giảm chiều và phân nhóm người dùng/phim từ dữ liệu train.
+
+**Bước phụ trách:** 3. Huấn luyện; 4. Dự đoán; 5. Đánh giá cho SVD/KNN/giảm chiều/phân cụm.
 
 ### Hướng dẫn làm từng bước
 
@@ -156,6 +176,8 @@ TV3 xây hướng gợi ý cộng tác, kiểm tra việc giảm chiều và ph�
 
 TV4 huấn luyện NCF gồm embedding user/item và MLP để dự đoán rating; kết quả phải so sánh công bằng với Linear, XGBoost và SVD.
 
+**Bước phụ trách:** 3. Huấn luyện; 4. Dự đoán; 5. Đánh giá cho NCF.
+
 ### Hướng dẫn làm từng bước
 
 1. **Ánh xạ ID và tạo DataLoader (tuần 1).** Học `userId -> index` và `movieId -> index` từ train. Lưu ánh xạ cùng checkpoint. Tạo batch `(user_index, movie_index, rating)`; xác định trước cách xử lý ID chưa thấy để không truy cập embedding ngoài phạm vi.
@@ -183,6 +205,8 @@ TV4 huấn luyện NCF gồm embedding user/item và MLP để dự đoán ratin
 ### Mục tiêu
 
 TV5 làm thí nghiệm luật kết hợp, ghép mô hình đã chọn thành demo có thể sử dụng và tổng hợp báo cáo mà không tự gánh phần viết của bốn người còn lại.
+
+**Bước phụ trách:** 3. Huấn luyện/thực nghiệm Apriori; 4. Tích hợp dự đoán và Top-N; 5. Đánh giá, tổng hợp và trình bày.
 
 ### Hướng dẫn làm từng bước
 

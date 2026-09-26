@@ -8,13 +8,15 @@ Nguồn dữ liệu: [MovieLens 25M – GroupLens](https://grouplens.org/dataset
 
 ## 1. Phạm vi và nguyên tắc chung
 
-### Phần bắt buộc trong 4 tuần
+### Quy trình bắt buộc trong 4 tuần
 
-1. Tiền xử lý và chia dữ liệu theo thời gian: **70% train, 15% validation, 15% test**.
-2. Baseline điểm trung bình; bốn mô hình dự đoán rating: **Linear Regression, XGBoost, SVD, NCF**.
-3. Classification: Logistic Regression, Random Forest. Clustering: K-Means, DBSCAN. Giảm chiều: PCA hoặc TruncatedSVD. Association: Apriori.
-4. So sánh trên cùng dữ liệu và giao thức đo: chất lượng dự đoán, thời gian huấn luyện, độ trễ suy luận. Web demo cho người dùng chọn và chấm điểm phim đã xem để nhận Top-N gợi ý.
-5. Báo cáo, mã nguồn, cấu hình chạy, file kết quả và slide thuyết trình.
+1. **Thu thập dữ liệu:** lấy MovieLens 25M, kiểm tra các file, khám phá phân bố rating và làm sạch bản ghi không hợp lệ. TV1 bàn giao dữ liệu gốc đã xác minh cùng báo cáo EDA.
+2. **Chia tập:** sắp xếp theo thời gian, tách **70% train, 15% validation, 15% test** và tạo năm lần kiểm chứng tiến theo thời gian trong train. TV1 bàn giao ID của từng tập và quy tắc lọc tương tác ít.
+3. **Huấn luyện:** TV1 làm baseline; TV2 huấn luyện Linear, XGBoost, Logistic, Random Forest; TV3 huấn luyện SVD, KNN và các thí nghiệm giảm chiều/phân cụm; TV4 huấn luyện NCF; TV5 chạy Apriori. Mỗi người lưu model, cấu hình, seed và log.
+4. **Dự đoán:** các mô hình tạo rating hoặc xác suất trên validation; sau khi khóa cấu hình, tạo dự đoán trên test. TV5 tích hợp mô hình được chọn vào web để xếp hạng và trả Top-N phim chưa xem.
+5. **Đánh giá:** mỗi người tính chỉ số của mô hình mình; TV5 tổng hợp bảng so sánh độ chính xác, thời gian huấn luyện, độ trễ và kết quả web. Nhóm chọn mô hình triển khai từ validation và chỉ dùng test để báo cáo kết quả cuối.
+
+**Luồng thực hiện:** tuần 1 hoàn thành bước 1–2; tuần 2–3 lặp bước 3–5 trên train/validation để cải thiện mô hình; tuần 4 khóa cấu hình rồi thực hiện bước 4–5 trên test một lần. Báo cáo, mã nguồn và slide là sản phẩm ghi lại kết quả của cả năm bước.
 
 ### Phần mở rộng nếu hoàn thành phần bắt buộc đúng hạn
 
@@ -151,12 +153,14 @@ Khối lượng dưới đây là **ước tính giờ làm việc chủ động
 
 ## 4. Lịch 4 tuần và mốc nghiệm thu
 
+Các bước trong bảng là năm bước đã nêu ở mục 1. Thí nghiệm trên validation có thể quay lại huấn luyện khi kết quả chưa đạt; tập test chỉ tham gia sau khi nhóm đã chốt cấu hình.
+
 | Tuần | TV1 | TV2 | TV3 | TV4 | TV5 | Mốc cuối tuần |
 |---|---|---|---|---|---|---|
-| **1 — Thiết lập** | Tải, EDA, chia tập | Pipeline Linear/XGBoost | Ma trận thưa, KNN | Ánh xạ ID, khung NCF | Khung web, định dạng log | Dữ liệu/giao thức chung được khóa; mọi pipeline chạy thử trên tập nhỏ |
-| **2 — Có kết quả đầu** | Baseline, cold-start | Regression + classification | SVD + giảm chiều | NCF bản đầu, learning curve | Apriori + web dùng baseline | Có kết quả validation sơ bộ và file dự đoán từ bốn mô hình chính |
-| **3 — Tối ưu, chọn mô hình** | Kiểm tra rò rỉ, hỗ trợ tích hợp | Tuning + 5 lần chia | Tuning + 5 lần chia, clustering | Optuna + 5 lần chia | Tích hợp web, bảng so sánh validation | Chốt tham số và **chọn mô hình triển khai**, không dùng test để quyết định |
-| **4 — Chốt và nộp** | Kiểm thử dữ liệu/web, viết báo cáo | Test + viết báo cáo | Test + viết báo cáo | Test + viết báo cáo | Test chung, hoàn thiện web/báo cáo/slide | Chạy test một lần, demo hoạt động, nộp đầy đủ tài liệu |
+| **1 — Bước 1–2** | Tải, EDA, chia tập | Pipeline Linear/XGBoost | Ma trận thưa, KNN | Ánh xạ ID, khung NCF | Khung web, định dạng log | Dữ liệu/giao thức chung được khóa; mọi pipeline chạy thử trên tập nhỏ |
+| **2 — Bước 3–5 trên validation** | Baseline, cold-start | Regression + classification | SVD + giảm chiều | NCF bản đầu, learning curve | Apriori + web dùng baseline | Có kết quả validation sơ bộ và file dự đoán từ bốn mô hình chính |
+| **3 — Bước 3–5 trên validation** | Kiểm tra rò rỉ, hỗ trợ tích hợp | Tuning + 5 lần chia | Tuning + 5 lần chia, clustering | Optuna + 5 lần chia | Tích hợp web, bảng so sánh validation | Chốt tham số và **chọn mô hình triển khai**, không dùng test để quyết định |
+| **4 — Bước 4–5 trên test** | Kiểm thử dữ liệu/web, viết báo cáo | Test + viết báo cáo | Test + viết báo cáo | Test + viết báo cáo | Test chung, hoàn thiện web/báo cáo/slide | Chạy test một lần, demo hoạt động, nộp đầy đủ tài liệu |
 
 **Họp ngắn hai lần mỗi tuần (15–20 phút):** đầu tuần chốt việc, giữa tuần xử lý vướng mắc. Cuối mỗi tuần, từng người cập nhật trạng thái `Hoàn thành / Đang làm / Bị chặn`, đường dẫn sản phẩm và số liệu đã có. Nếu một đầu việc trễ quá hai ngày, nhóm điều chỉnh phạm vi phần mở rộng trước khi ảnh hưởng đến mốc bắt buộc.
 
