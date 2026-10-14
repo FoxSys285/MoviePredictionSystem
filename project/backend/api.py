@@ -31,9 +31,11 @@ app.add_middleware(
 )
 
 engine: Recommender | None = None
+engine_metrics_mtime: int | None = None
 if (MODEL_DIR / "metadata.joblib").exists():
     try:
         engine = Recommender(MODEL_DIR)
+        engine_metrics_mtime = (MODEL_DIR / "metrics.joblib").stat().st_mtime_ns
     except Exception:
         LOGGER.exception("Could not load trained MovieLens model artifacts")
 
@@ -51,6 +53,15 @@ class PredictionRequest(BaseModel):
 
 
 def require_engine() -> Recommender:
+    global engine, engine_metrics_mtime
+    metrics_path = MODEL_DIR / "metrics.joblib"
+    try:
+        current_metrics_mtime = metrics_path.stat().st_mtime_ns
+        if engine is None or current_metrics_mtime != engine_metrics_mtime:
+            engine = Recommender(MODEL_DIR)
+            engine_metrics_mtime = current_metrics_mtime
+    except Exception:
+        LOGGER.exception("Could not refresh trained MovieLens model artifacts")
     if engine is None:
         raise HTTPException(
             status_code=503,

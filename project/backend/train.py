@@ -36,14 +36,14 @@ FEATURE_CHUNK = 200_000
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train rating prediction models on processed MovieLens 25M data.")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--linear-rows", type=int, default=1_500_000)
-    parser.add_argument("--xgboost-rows", type=int, default=600_000)
-    parser.add_argument("--svd-rows", type=int, default=1_500_000)
-    parser.add_argument("--ncf-rows", type=int, default=600_000)
+    parser.add_argument("--linear-rows", type=int, default=0, help="Training rows for Linear Regression; 0 uses the full train split.")
+    parser.add_argument("--xgboost-rows", type=int, default=0, help="Training rows for XGBoost; 0 uses the full train split.")
+    parser.add_argument("--svd-rows", type=int, default=0, help="Training rows for SVD / MF; 0 uses the full train split.")
+    parser.add_argument("--ncf-rows", type=int, default=0, help="Training rows for NCF; 0 uses the full train split.")
     parser.add_argument("--svd-epochs", type=int, default=5)
     parser.add_argument("--ncf-epochs", type=int, default=6)
     parser.add_argument("--torch-threads", type=int, default=8)
-    parser.add_argument("--ranking-users", type=int, default=20_000)
+    parser.add_argument("--ranking-users", type=int, default=0, help="Users for ranking evaluation; 0 evaluates every eligible test user.")
     parser.add_argument("--ranking-negatives", type=int, default=100)
     parser.add_argument("--relevance-threshold", type=float, default=4.0)
     return parser.parse_args()
@@ -221,7 +221,7 @@ class FeatureContext:
 
 
 def sample_indices(size: int, limit: int, rng: np.random.Generator) -> np.ndarray:
-    if size <= limit:
+    if limit <= 0 or size <= limit:
         return np.arange(size, dtype=np.int64)
     return rng.choice(size, size=limit, replace=False)
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import {
+  ArrowLeft,
   ArrowRight,
   BarChart3,
   Bell,
@@ -26,7 +27,7 @@ import {
 } from 'lucide-react'
 import movieLensCatalogData from './data/movielens-catalog.json'
 
-type Screen = 'auth' | 'home' | 'recommend' | 'compare'
+type Screen = 'auth' | 'home' | 'recommend' | 'history' | 'compare'
 type AuthMode = 'login' | 'register'
 type Theme = 'dark' | 'light'
 
@@ -260,7 +261,7 @@ function Sidebar({ screen, onNavigate, onLogout, profile }: { screen: Screen; on
       <div className="nav-caption">KHÔNG GIAN CỦA BẠN</div>
       <nav className="side-nav" aria-label="Điều hướng chính">
         <button className={screen === 'home' ? 'nav-item active' : 'nav-item'} onClick={() => onNavigate('home')}><Home size={18} /><span>Trang chủ</span></button>
-        <button className={screen === 'recommend' ? 'nav-item active' : 'nav-item'} onClick={() => onNavigate('recommend')}><Sparkles size={18} /><span>Gợi ý phim</span><span className="nav-new">AI</span></button>
+        <button className={screen === 'recommend' || screen === 'history' ? 'nav-item active' : 'nav-item'} onClick={() => onNavigate('recommend')}><Sparkles size={18} /><span>Gợi ý phim</span><span className="nav-new">AI</span></button>
         <button className={screen === 'compare' ? 'nav-item active' : 'nav-item'} onClick={() => onNavigate('compare')}><BarChart3 size={18} /><span>So sánh mô hình</span></button>
       </nav>
       <div className="sidebar-spacer" />
@@ -319,12 +320,13 @@ function HomeScreen({ onRecommend, search }: { onRecommend: () => void; search: 
   )
 }
 
-function RecommendationScreen({ search, setSearch, profile, onSaveRating, onRemoveRating }: {
+function RecommendationScreen({ search, setSearch, profile, onSaveRating, onRemoveRating, onViewAll }: {
   search: string
   setSearch: (value: string) => void
   profile: UserProfile
   onSaveRating: (movieId: number, rating: number) => void
   onRemoveRating: (movieId: number) => void
+  onViewAll: () => void
 }) {
   const [editingMovieId, setEditingMovieId] = useState<number | null>(null)
   const [draftRating, setDraftRating] = useState('4')
@@ -421,7 +423,7 @@ function RecommendationScreen({ search, setSearch, profile, onSaveRating, onRemo
             if (!movie) return null
             return <div className="history-row" key={entry.movieId}><Poster movie={movie} className="history-poster" /><div className="history-copy"><b>{movie.title}</b><span><Star size={11} fill="currentColor" /> {formatRating(entry.rating)} <i>·</i> {dateLabel(entry.timestamp)}</span></div><button className="history-edit" onClick={() => startEditing(movie)}>Sửa</button><button className="history-remove" aria-label={`Xóa đánh giá ${movie.title}`} onClick={() => onRemoveRating(movie.movieId)}><X size={14} /></button></div>
           })}</div> : <div className="history-empty">Bạn chưa thêm phim nào. Tìm phim bên dưới rồi chấm điểm để bắt đầu.</div>}
-          {profile.ratings.length > historyRows.length && <p className="history-more">Đang hiển thị 8 phim gần đây nhất.</p>}
+          {profile.ratings.length > 0 && <button className="history-view-all" type="button" onClick={onViewAll}>Xem toàn bộ danh sách <span>{formatCount(profile.ratings.length)} phim</span><ArrowRight size={13} /></button>}
           {editingMovie && <form className="rating-editor" onSubmit={saveRating}><div className="rating-editor-title"><b>{ratingsByMovie.has(editingMovie.movieId) ? 'Sửa đánh giá' : 'Thêm phim đã xem'}</b><button type="button" aria-label="Đóng" onClick={() => setEditingMovieId(null)}><X size={14} /></button></div><div className="rating-editor-movie"><Poster movie={editingMovie} className="history-poster" /><span>{editingMovie.title}<small>{editingMovie.genres.slice(0, 3).join(' · ') || 'Chưa có thể loại'}</small></span></div><label htmlFor="movie-rating">Đánh giá của bạn</label><div className="rating-editor-controls"><select id="movie-rating" value={draftRating} onChange={(event) => setDraftRating(event.target.value)}>{ratingOptions.map((rating) => <option key={rating} value={rating}>{formatRating(rating)} / 5 sao</option>)}</select><button className="primary-button" type="submit">Lưu đánh giá <Check size={14} /></button></div></form>}
           <div className="picker-search"><Search size={15} /><input aria-label="Tìm phim trong MovieLens" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm trong 14.427 phim..." /></div>
           <div className="movie-list-caption">DANH MỤC · {formatCount(filtered.length)} KẾT QUẢ</div>
@@ -453,6 +455,53 @@ function RecommendationScreen({ search, setSearch, profile, onSaveRating, onRemo
           </section>
         </div>
       </div>
+      {notice && <div className="toast"><CheckCircle2 size={17} />{notice}<button onClick={() => setNotice('')} aria-label="Đóng"><X size={15} /></button></div>}
+    </div>
+  )
+}
+
+function RatedMoviesScreen({ search, setSearch, profile, onNavigate, onSaveRating, onRemoveRating }: {
+  search: string
+  setSearch: (value: string) => void
+  profile: UserProfile
+  onNavigate: (next: Screen) => void
+  onSaveRating: (movieId: number, rating: number) => void
+  onRemoveRating: (movieId: number) => void
+}) {
+  const [editingMovieId, setEditingMovieId] = useState<number | null>(null)
+  const [draftRating, setDraftRating] = useState('4')
+  const [notice, setNotice] = useState('')
+  const entries = useMemo(() => [...profile.ratings]
+    .sort((left, right) => right.timestamp - left.timestamp)
+    .flatMap((entry) => {
+      const movie = movieById(entry.movieId)
+      return movie ? [{ entry, movie }] : []
+    }), [profile.ratings])
+  const query = search.trim().toLocaleLowerCase('vi')
+  const filtered = entries.filter(({ movie }) => !query || `${movie.title} ${movie.year ?? ''} ${movie.genres.join(' ')} ${movie.originalGenres.join(' ')}`.toLocaleLowerCase('vi').includes(query))
+  const ratingOptions = Array.from({ length: 10 }, (_, index) => (index + 1) / 2)
+
+  const saveEdit = (event: FormEvent<HTMLFormElement>, movie: Movie) => {
+    event.preventDefault()
+    onSaveRating(movie.movieId, Number(draftRating))
+    setEditingMovieId(null)
+    setNotice(`Đã cập nhật điểm cho ${movie.title}.`)
+    window.setTimeout(() => setNotice(''), 3000)
+  }
+
+  return (
+    <div className="rated-movies-page page-enter">
+      <button className="rated-movies-back" type="button" onClick={() => onNavigate('recommend')}><ArrowLeft size={15} /> Quay lại gợi ý phim</button>
+      <section className="recommend-heading"><div><div className="eyebrow section-eyebrow"><Star size={13} /> HỒ SƠ {profile.displayName.toLocaleUpperCase('vi')}</div><h1>Phim đã xem <span>và đánh giá</span></h1><p>Toàn bộ phim trong lịch sử của hồ sơ này, sắp xếp theo thời gian đánh giá gần nhất.</p></div><div className="heading-orb"><Film size={24} /></div></section>
+      <section className="rated-movies-panel panel-card">
+        <div className="rated-movies-toolbar"><div><h2>Danh sách đã đánh giá</h2><p>{formatCount(filtered.length)} / {formatCount(entries.length)} phim</p></div><label className="picker-search rated-movies-search"><Search size={15} /><input aria-label="Tìm trong danh sách đã đánh giá" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm tên phim hoặc thể loại..." /></label></div>
+        {filtered.length ? <div className="rated-movies-list">{filtered.map(({ entry, movie }) => (
+          <article className="rated-movie-item" key={entry.movieId}>
+            <div className="rated-movie-row"><Poster movie={movie} className="rated-movie-poster" /><div className="rated-movie-copy"><b>{movie.title}</b><span>{movie.year ?? 'Năm chưa rõ'} · {movie.genres.join(' · ') || 'Chưa phân loại'}</span><small><Star size={12} fill="currentColor" /> {formatRating(entry.rating)} / 5 <i>·</i> {dateLabel(entry.timestamp)}</small></div><div className="rated-movie-actions"><button className="history-edit" type="button" onClick={() => { setEditingMovieId(editingMovieId === movie.movieId ? null : movie.movieId); setDraftRating(String(entry.rating)) }}>{editingMovieId === movie.movieId ? 'Đóng' : 'Sửa'}</button><button className="history-remove" type="button" aria-label={`Xóa đánh giá ${movie.title}`} title="Xóa đánh giá" onClick={() => { onRemoveRating(movie.movieId); if (editingMovieId === movie.movieId) setEditingMovieId(null) }}><X size={15} /></button></div></div>
+            {editingMovieId === movie.movieId && <form className="rating-editor rated-movie-editor" onSubmit={(event) => saveEdit(event, movie)}><div className="rating-editor-title"><b>Sửa đánh giá · {movie.title}</b><button type="button" aria-label="Đóng" onClick={() => setEditingMovieId(null)}><X size={14} /></button></div><label htmlFor={`movie-rating-${movie.movieId}`}>Điểm của bạn</label><div className="rating-editor-controls"><select id={`movie-rating-${movie.movieId}`} value={draftRating} onChange={(event) => setDraftRating(event.target.value)}>{ratingOptions.map((rating) => <option key={rating} value={rating}>{formatRating(rating)} / 5 sao</option>)}</select><button className="primary-button" type="submit">Lưu đánh giá <Check size={14} /></button></div></form>}
+          </article>
+        ))}</div> : <div className="rated-movies-empty">{entries.length ? 'Không tìm thấy phim khớp với từ khóa.' : 'Hồ sơ này chưa có phim nào được đánh giá.'}</div>}
+      </section>
       {notice && <div className="toast"><CheckCircle2 size={17} />{notice}<button onClick={() => setNotice('')} aria-label="Đóng"><X size={15} /></button></div>}
     </div>
   )
@@ -683,7 +732,7 @@ export default function App() {
       <div className={`sidebar-wrap ${sidebarOpen ? 'sidebar-open' : ''}`}><Sidebar screen={screen} onNavigate={navigate} onLogout={logout} profile={profile} /></div>
       <main className="main-area">
         <Topbar search={search} setSearch={setSearch} onLogout={logout} onMenu={() => setSidebarOpen((value) => !value)} profile={profile} theme={theme} onToggleTheme={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')} />
-        <div className="page-container">{screen === 'home' ? <HomeScreen onRecommend={() => navigate('recommend')} search={search} /> : screen === 'compare' ? <ComparisonScreen profile={profile} /> : <RecommendationScreen search={search} setSearch={setSearch} profile={profile} onSaveRating={saveRating} onRemoveRating={removeRating} />}</div>
+        <div className="page-container">{screen === 'home' ? <HomeScreen onRecommend={() => navigate('recommend')} search={search} /> : screen === 'compare' ? <ComparisonScreen profile={profile} /> : screen === 'history' ? <RatedMoviesScreen search={search} setSearch={setSearch} profile={profile} onNavigate={navigate} onSaveRating={saveRating} onRemoveRating={removeRating} /> : <RecommendationScreen search={search} setSearch={setSearch} profile={profile} onSaveRating={saveRating} onRemoveRating={removeRating} onViewAll={() => navigate('history')} />}</div>
       </main>
     </div>
   )
