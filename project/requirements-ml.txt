@@ -1,0 +1,7 @@
+-r requirements-data.txt
+fastapi>=0.118,<1
+uvicorn[standard]>=0.35,<1
+scikit-learn>=1.7,<2
+xgboost-cpu>=3.1,<4
+torch>=2.6
+joblib>=1.4

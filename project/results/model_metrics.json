@@ -1,0 +1,172 @@
+{
+  "linear": {
+    "training_seconds": 0.6764163000007102,
+    "sampled_train_rows": 1500000,
+    "validation": {
+      "rmse": 0.8712165301227711,
+      "mae": 0.6628129482269287,
+      "inference_ms_per_1000": 0.27162900797914935,
+      "ranking": {
+        "precision_at_10": 0.21398499999999998,
+        "recall_at_10": 0.23418598322478057,
+        "ndcg_at_10": 0.2684169320497412,
+        "item_coverage": 0.16482983295210368,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    },
+    "test": {
+      "rmse": 0.8878393276717128,
+      "mae": 0.6744981408119202,
+      "inference_ms_per_1000": 0.2950356211983649,
+      "ranking": {
+        "precision_at_10": 0.21963000000000002,
+        "recall_at_10": 0.22485731308502574,
+        "ndcg_at_10": 0.26933956898894795,
+        "item_coverage": 0.1682262424620503,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    }
+  },
+  "xgboost": {
+    "training_seconds": 5.7014225000002625,
+    "sampled_train_rows": 600000,
+    "validation": {
+      "rmse": 0.8481023994307506,
+      "mae": 0.6427230834960938,
+      "inference_ms_per_1000": 0.8337780452888103,
+      "ranking": {
+        "precision_at_10": 0.233685,
+        "recall_at_10": 0.24841638933005197,
+        "ndcg_at_10": 0.30711922558279414,
+        "item_coverage": 0.4818742635336522,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    },
+    "test": {
+      "rmse": 0.8677105056778244,
+      "mae": 0.6564041376113892,
+      "inference_ms_per_1000": 0.805364566038399,
+      "ranking": {
+        "precision_at_10": 0.23726,
+        "recall_at_10": 0.23709706854000814,
+        "ndcg_at_10": 0.30297754637684055,
+        "item_coverage": 0.48201289249324186,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    }
+  },
+  "svd": {
+    "training_seconds": 23.024430700000266,
+    "sampled_train_rows": 1500000,
+    "validation": {
+      "rmse": 1.0640462395186026,
+      "mae": 0.8188657164573669,
+      "inference_ms_per_1000": 0.08382488912395497,
+      "ranking": {
+        "precision_at_10": 0.10714000000000001,
+        "recall_at_10": 0.096241218553169,
+        "ndcg_at_10": 0.1425704654862067,
+        "item_coverage": 0.8983849726207804,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    },
+    "test": {
+      "rmse": 1.087467899067966,
+      "mae": 0.8370187878608704,
+      "inference_ms_per_1000": 0.06374064195307876,
+      "ranking": {
+        "precision_at_10": 0.11104499999999998,
+        "recall_at_10": 0.09539152751558051,
+        "ndcg_at_10": 0.1453700514712585,
+        "item_coverage": 0.897345255423858,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    }
+  },
+  "ncf": {
+    "training_seconds": 8.972234699999717,
+    "sampled_train_rows": 600000,
+    "validation": {
+      "rmse": 0.9417153005503571,
+      "mae": 0.7214390635490417,
+      "inference_ms_per_1000": 0.2331656029299159,
+      "ranking": {
+        "precision_at_10": 0.26533999999999996,
+        "recall_at_10": 0.2953476450109179,
+        "ndcg_at_10": 0.3329418609423207,
+        "item_coverage": 0.16711721078533306,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    },
+    "test": {
+      "rmse": 0.9617926351518705,
+      "mae": 0.7367313504219055,
+      "inference_ms_per_1000": 0.17500624169322362,
+      "ranking": {
+        "precision_at_10": 0.27006,
+        "recall_at_10": 0.2865942335278401,
+        "ndcg_at_10": 0.33235248041364174,
+        "item_coverage": 0.16829555694184514,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    }
+  },
+  "baseline": {
+    "training_seconds": 0.0,
+    "sampled_train_rows": 16865237,
+    "validation": {
+      "rmse": 0.9534875774204429,
+      "mae": 0.7347443103790283,
+      "inference_ms_per_1000": 0.0,
+      "ranking": {
+        "precision_at_10": 0.25578,
+        "recall_at_10": 0.28287781816335233,
+        "ndcg_at_10": 0.33431451614822255,
+        "item_coverage": 0.16212656824010535,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    },
+    "test": {
+      "rmse": 0.9566385202941545,
+      "mae": 0.7366292476654053,
+      "inference_ms_per_1000": 0.0,
+      "ranking": {
+        "precision_at_10": 0.259395,
+        "recall_at_10": 0.2706074807395049,
+        "ndcg_at_10": 0.3309143391753562,
+        "item_coverage": 0.16573092118943647,
+        "users_evaluated": 20000,
+        "negative_candidates_per_user": 100,
+        "relevance_threshold": 4.0,
+        "candidate_protocol": "all held-out ratings + fixed sampled unrated movies"
+      }
+    }
+  }
+}
