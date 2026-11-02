@@ -30,12 +30,12 @@ from movie_rating.windows_dlls import enable_unicode_dll_paths
 
 enable_unicode_dll_paths()
 
-GROUPS = ('rating', 'classification', 'clustering', 'association', 'pca', 'reinforcement')
+GROUPS = ('rating', 'classification', 'clustering', 'association', 'pca')
 CATALOG = json.loads(Path(__file__).with_name('lab_catalog.json').read_text(encoding='utf-8'))
 
 
 class LabRequest(BaseModel):
-    group: Literal['rating', 'classification', 'clustering', 'association', 'pca', 'reinforcement']
+    group: Literal['rating', 'classification', 'clustering', 'association', 'pca']
     seed: int = Field(default=42, ge=0, le=1_000_000)
     max_users: int = Field(default=150, ge=10, le=1000)
     repeats: int = Field(default=1, ge=1, le=3)
@@ -46,7 +46,6 @@ class LabRequest(BaseModel):
     min_samples: int = Field(default=5, ge=2, le=30)
     max_items: int = Field(default=80, ge=10, le=120)
     min_support: float = Field(default=0.08, ge=0.02, le=0.5)
-    episodes: int = Field(default=1200, ge=100, le=5000)
     cluster_object: Literal['movies', 'users'] = 'movies'
 
 
@@ -71,7 +70,18 @@ def native(value):
 def save_json(path, value):
     temporary = path.with_suffix('.' + uuid4().hex + '.tmp')
     temporary.write_text(json.dumps(native(value), ensure_ascii=False, allow_nan=False), encoding='utf-8')
-    os.replace(temporary, path)
+    try:
+        for attempt in range(8):
+            try:
+                os.replace(temporary, path)
+                return
+            except PermissionError:
+                # Windows readers/antivirus can briefly deny replacement of job.json.
+                if attempt == 7:
+                    raise
+                time.sleep(.01*(attempt+1))
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 @contextmanager
@@ -224,6 +234,8 @@ class LabService:
                 job = json.loads(path.read_text(encoding='utf-8'))
             except (OSError, ValueError):
                 continue
+            if job.get('schema_version') != 2 or job['group'] not in GROUPS:
+                continue
             if group is None or job['group'] == group:
                 if job['status'] in ('queued', 'running') and job.get('process_id') != os.getpid():
                     job.update(status='interrupted', message='Máy chủ đã khởi động lại. Hãy chạy lại thực nghiệm.')
@@ -253,7 +265,7 @@ class LabService:
             run_id = datetime.now(UTC).strftime('%Y%m%dT%H%M%S') + '-' + uuid4().hex[:8]
             folder = self.directory / run_id
             folder.mkdir(parents=True)
-            job = {'id': run_id, 'group': request.group, 'status': 'queued', 'progress': 0,
+            job = {'id': run_id, 'group': request.group, 'schema_version': 2, 'status': 'queued', 'progress': 0,
                    'message': 'Đang chuẩn bị dữ liệu', 'created_at': datetime.now(UTC).isoformat(),
                    'request': request.model_dump(), 'process_id': os.getpid(), 'cancel_requested': False}
             save_json(folder / 'job.json', job)
@@ -305,22 +317,17 @@ class LabService:
         try:
             update(2, 'Lấy mẫu toàn bộ lịch sử user và chia theo thời gian')
             splits, movies, provenance = self._load(request)
-            from movie_rating.lab_supervised import classification, rating
-            from movie_rating.lab_unsupervised import association, clustering, pca_experiment
-            from movie_rating.lab_reinforcement import reinforcement
+            from movie_rating.lab_compact import HANDLERS
 
-            handlers = {'rating': rating, 'classification': classification, 'clustering': clustering,
-                        'association': association, 'pca': pca_experiment, 'reinforcement': reinforcement}
-            result = handlers[request.group](splits, movies, request, update)
+            result = HANDLERS[request.group](splits, movies, request, update)
             update(98, 'Lưu bảng tiêu chí, số liệu biểu đồ và dấu vết lần chạy')
             result.update(provenance=provenance, group=request.group, config=request.model_dump(),
                           notes=[*result.get('notes', []),
                                  'Kết quả thuộc mẫu user công bố ở trên; không đại diện tự động cho toàn bộ MovieLens 25M.',
-                                 'RAM là RSS tiến trình lấy mẫu trong phép đo, có thể gồm bộ nhớ của máy chủ; không phải RAM riêng của mô hình.',
                                  'Chọn cấu hình trên validation; test chỉ báo cáo đánh giá cuối, không dùng để tuning tiếp.'])
             result['runtime'] = {'python': platform.python_version(),
                                  'libraries': {name: version(name) for name in ['numpy', 'pandas', 'scikit-learn', 'torch', 'xgboost', 'mlxtend']},
-                                 'code_sha256': hashlib.sha256(b''.join(Path(__file__).with_name(name).read_bytes() for name in ['lab.py', 'lab_supervised.py', 'lab_unsupervised.py', 'lab_reinforcement.py', 'lab_catalog.json'])).hexdigest()}
+                                 'code_sha256': hashlib.sha256(b''.join(Path(__file__).with_name(name).read_bytes() for name in ['lab.py', 'lab_compact.py', 'lab_catalog.json'])).hexdigest()}
             save_json(path / 'result.json', result)
             job.update(status='completed', progress=100, message='Đã hoàn tất', finished_at=datetime.now(UTC).isoformat())
         except Cancelled:

@@ -254,7 +254,7 @@ try {
   await page.getByRole("link", { name: "Mở trang thực nghiệm so sánh", exact: true }).click();
   await page.waitForURL("**/experiments");
   await expectText(page, "Chưa có kết quả thực nghiệm");
-  assert.equal(await page.locator(".lab-sidebar nav button").count(), 6);
+  assert.equal(await page.locator(".lab-sidebar nav button").count(), 5);
   assert.equal(await page.locator(".lab-algorithms article").count(), 4);
   assert.equal(await page.locator(".lab-chart").count(), 0);
   const protocolResponse = await page.request.get(`${base}/api/v1/experiments/documents/protocol`);
@@ -268,10 +268,10 @@ try {
 
   // Full group execution is covered by check-experiments.mjs with real data.
   await page.locator('.lab-sidebar nav button').nth(1).click();
-  await page.getByRole('heading', { name: 'Phân loại sở thích', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Phân loại', exact: true }).waitFor();
   assert.equal(await page.locator('.lab-algorithms article').count(), 2);
   await page.locator('.lab-sidebar nav button').first().click();
-  await page.getByRole('heading', { name: 'Dự đoán rating', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Hồi quy', exact: true }).waitFor();
   for (const route of ["about", "contact", "login", "register", "home", "genres", "experiments", "watch-history", "movies/79132"]) {
     await page.goto(`${base}/${route}`);
     await prepareScreenshot(page, route);

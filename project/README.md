@@ -1,6 +1,6 @@
 # Ứng dụng học máy dự đoán đánh giá phim — MovieLens 25M
 
-Trang **Thực nghiệm** có sidebar 6 nhóm nhiệm vụ và đầy đủ 12 thuật toán theo tài liệu Mô tả.docx. Mỗi nhóm có mô tả, tiêu chí giải thích rõ câu hỏi đánh giá, bộ chạy nền, lịch sử, bảng so sánh, biểu đồ và xuất CSV/JSON. Xem [hướng dẫn phòng thực nghiệm](docs/experiment-lab.md).
+Trang **Thực nghiệm** có sidebar 5 nhóm với 11 thuật toán. Chỉ so sánh các chỉ số đã chốt: hồi quy (4), phân loại (4), phân cụm (3), luật kết hợp (3), PCA (3). Validation và Test hiển thị cùng lúc; mỗi chỉ số có đúng một biểu đồ cột kèm giá trị. Xem [hướng dẫn phòng thực nghiệm](docs/experiment-lab.md).
 
 Login có 5 tài khoản demo lấy lịch sử từ MovieLens, hiển thị email/mật khẩu và nút
 điền nhanh. [Luồng tài khoản mới và hồ sơ dataset](docs/user-profiles.md) mô tả cách

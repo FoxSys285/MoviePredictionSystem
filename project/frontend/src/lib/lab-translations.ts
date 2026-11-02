@@ -1,4 +1,11 @@
 export const labTranslations: Record<string,string> = {
+  "Hồi quy":"Regression", "Phân loại":"Classification", "Giảm chiều dữ liệu":"Dimensionality reduction", "chỉ số":"metrics",
+  "So sánh thuật toán theo các chỉ số chính":"Compare algorithms using the essential metrics",
+  "Kết quả Validation và Test":"Validation and Test results", "Biểu đồ so sánh":"Comparison charts",
+  "Chạy nhóm để xem Validation và Test cùng lúc.":"Run a group to see Validation and Test together.",
+  "không đủ dữ liệu hoặc chỉ số không xác định.":"insufficient data or undefined metric.",
+  "Khám phá 11 thuật toán trong 5 nhóm nhiệm vụ, so sánh Validation và Test bằng các chỉ số chính.":"Explore 11 algorithms in 5 task groups and compare Validation and Test using essential metrics.",
+  "5 nhóm thực nghiệm":"5 experiment groups", "11 thuật toán · 17 chỉ số · Validation và Test":"11 algorithms · 17 metrics · Validation and Test",
   "Thực nghiệm": "Experiments", "Phòng thực nghiệm": "Experiment lab", "NHÓM THUẬT TOÁN": "ALGORITHM GROUPS",
   "Danh mục nhóm thuật toán": "Algorithm group navigation", "Dự đoán rating": "Rating prediction", "Phân loại sở thích": "Preference classification", "Phân cụm": "Clustering", "Luật kết hợp": "Association rules", "Giảm chiều": "Dimensionality reduction", "Gợi ý tuần tự": "Sequential recommendation",
   "nhóm": "groups", "thuật toán": "algorithms", "Tài liệu mô tả": "Methodology document", "ĐẦU RA": "OUTPUT",

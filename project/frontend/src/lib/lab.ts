@@ -1,20 +1,18 @@
-export type LabGroupId = "rating" | "classification" | "clustering" | "association" | "pca" | "reinforcement";
-export type Criterion = { name: string; definition: string; interpretation: string; question: string };
+export type LabGroupId = "rating" | "classification" | "clustering" | "association" | "pca";
+export type Criterion = { key: string; name: string; definition: string; interpretation: string; question: string };
 export type ChartGuide = { name: string; axes: string; question: string };
 export type LabGroup = { id: LabGroupId; title: string; question: string; algorithms: { id: string; name: string; description: string; output: string }[]; metrics: Criterion[]; charts: ChartGuide[] };
-export type LabCatalog = { version: number; source: string; groups: LabGroup[]; protocol: string[]; resources: Criterion[]; ranking_metrics: Criterion[]; references: string[]; data_ready: boolean; dataset: { splits: Record<string, { ratings: number; users: number; movies: number }> } | null };
-export type LabPoint = { x: string | number; y: number | null; error?: number; count?: number; label?: string; value?: number };
-export type LabChart = { index: number; title: string; kind: "line" | "bar" | "scatter" | "heatmap"; x_label: string; y_label: string; series: { label: string; points: LabPoint[] }[]; split: string; matrix?: number[][]; row_labels?: string[]; column_labels?: string[]; normalize_rows?: boolean; note?: string; color_value?: string };
-export type LabRow = { algorithm: string; name: string; split: string; std?: Record<string, number>; [key: string]: unknown };
-export type LabResult = { group: LabGroupId; rows: LabRow[]; seed_rows?: LabRow[]; charts: LabChart[]; notes: string[]; selection: string; rules?: { antecedents: string[]; consequents: string[]; support: number; confidence: number; lift: number }[]; common_subset?: { algorithm: string; points: number; silhouette: number | null; davies_bouldin: number | null }[]; bootstrap?: Record<string, { algorithm: string; reference: string; metric: string; ci_low: number; ci_high: number; users: number }[]>; class_balance?: Record<string, { positive: number; negative: number }>; provenance: { prepared_ratings: number; sampled_ratings: number; sampled_users: number; data_seed: number; sample_sha256: string; data_manifest_sha256: string; splits: Record<string, { ratings: number; users: number; movies: number; min_timestamp: number; max_timestamp: number }> } };
-export type LabJob = { id: string; group: LabGroupId; status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted"; progress: number; message: string; created_at: string; finished_at?: string; cancel_requested?: boolean; result?: LabResult; request: Record<string, unknown> };
+export type LabCatalog = { version: number; source: string; groups: LabGroup[]; data_ready: boolean };
+export type LabPoint = { x: string | number; y: number | null };
+export type LabChart = { index: number; metric_key: string; title: string; kind: "bar"; x_label: string; y_label: string; series: { label: string; points: LabPoint[] }[]; split: "comparison" };
+export type LabRow = { algorithm: string; name: string; split: "validation" | "test"; [key: string]: unknown };
+export type LabResult = { schema_version: number; group: LabGroupId; rows: LabRow[]; charts: LabChart[]; notes: string[]; provenance: { sampled_ratings: number; sampled_users: number; splits: Record<string, { ratings: number }> } };
+export type LabJob = { id: string; group: LabGroupId; status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted"; progress: number; message: string; created_at: string; cancel_requested?: boolean; result?: LabResult };
 export const busy = (job: LabJob) => ["queued", "running"].includes(job.status);
-export const LAB_METRICS: Record<string, string> = { rmse: "RMSE ↓", mae: "MAE ↓", bias: "Độ lệch có dấu", macro_f1: "Macro-F1 ↑", precision: "Precision ↑", recall: "Recall ↑", accuracy: "Accuracy ↑", balanced_accuracy: "Balanced Accuracy ↑", roc_auc: "ROC-AUC ↑", average_precision: "AP ↑", threshold: "Ngưỡng xác suất", silhouette: "Silhouette ↑", davies_bouldin: "Davies–Bouldin ↓", clusters: "Số cụm", coverage: "Tỷ lệ bao phủ", noise_fraction: "Tỷ lệ nhiễu", stability_ari: "ARI giữa các seed", itemsets: "Tập phổ biến", rules: "Số luật", same_itemsets: "Trùng tập phổ biến", rule_seconds: "Sinh luật (s)", components: "Số chiều", variance_retained: "Phương sai giữ lại", dimension_reduction: "Mức giảm chiều", reconstruction_mse: "MSE tái tạo ↓", return_mean: "Return ↑", episode_return_std: "Std qua episode", repeat_fraction: "Tỷ lệ lặp ↓", invalid_fraction: "Hành động lỗi ↓", steps_to_popular: "Bước để đạt Popular", fit_seconds: "Fit / khai phá (s)", peak_rss_mb: "RSS đỉnh (MiB)", latency_p50_ms: "p50 (ms)", latency_p95_ms: "p95 (ms)", topn_p95_ms: "Top-N p95 (ms)", model_bytes: "Hiện vật (byte)", ndcg_at_10: "NDCG@10 ↑", recall_at_10: "Recall@10 ↑", known_pair_fraction: "User + phim đã biết" };
-export const GROUP_METRICS: Record<LabGroupId, string[]> = {
-  rating: ["rmse", "mae", "bias", "known_pair_fraction", "ndcg_at_10", "recall_at_10", "coverage_at_20", "fit_seconds", "latency_p95_ms", "topn_p95_ms", "peak_rss_mb", "model_bytes"],
-  classification: ["macro_f1", "precision", "recall", "roc_auc", "average_precision", "accuracy", "balanced_accuracy", "threshold", "fit_seconds", "latency_p95_ms", "peak_rss_mb", "model_bytes"],
-  clustering: ["silhouette", "davies_bouldin", "clusters", "coverage", "noise_fraction", "stability_ari", "fit_seconds", "peak_rss_mb", "model_bytes"],
-  association: ["itemsets", "rules", "same_itemsets", "fit_seconds", "rule_seconds", "peak_rss_mb", "model_bytes"],
-  pca: ["components", "variance_retained", "dimension_reduction", "reconstruction_mse", "rmse", "mae", "fit_seconds", "latency_p95_ms", "peak_rss_mb", "model_bytes"],
-  reinforcement: ["return_mean", "episode_return_std", "coverage", "repeat_fraction", "invalid_fraction", "steps_to_popular", "fit_seconds", "latency_p95_ms", "peak_rss_mb", "model_bytes"],
+export const metricNumber = (value: unknown, language = "vi") => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "N/A";
+  const tiny=value!==0 && Math.abs(value)<1e-6;
+  return value.toLocaleString(language === "en" ? "en-US" : "vi-VN", tiny
+    ? { notation:"scientific",maximumSignificantDigits:6 }
+    : { maximumFractionDigits:8 });
 };

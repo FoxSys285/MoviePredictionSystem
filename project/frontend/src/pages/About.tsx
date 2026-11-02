@@ -42,13 +42,13 @@ export function About({ dataset }: { dataset: Dataset | null }) {
               {t("MOVIE là đồ án khám phá phim và dự đoán điểm đánh giá từ dữ liệu MovieLens. Bạn có thể tìm kiếm phim, xem điểm cộng đồng và khám phá những bộ phim cùng thể loại.")}
             </p>
             <p>
-              {t("Khám phá 12 thuật toán trong 6 nhóm nhiệm vụ, chạy thực nghiệm và đối chiếu kết quả bằng các tiêu chí cùng biểu đồ phân tích.")}
+              {t("Khám phá 11 thuật toán trong 5 nhóm nhiệm vụ, so sánh Validation và Test bằng các chỉ số chính.")}
             </p>
             <div className="feature-grid">
               <Feature
                 icon={BrainCircuit}
-                title={t("6 nhóm thực nghiệm")}
-                description={t("12 thuật toán · Tiêu chí rõ ràng · Kết quả thực tế")}
+                title={t("5 nhóm thực nghiệm")}
+                description={t("11 thuật toán · 17 chỉ số · Validation và Test")}
               />
               <Feature
                 icon={Clapperboard}

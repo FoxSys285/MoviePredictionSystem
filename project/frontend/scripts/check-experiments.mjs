@@ -36,14 +36,12 @@ try {
   for (const group of catalog.groups) {
     await page.goto(`${base}/experiments?group=${group.id}`);
     await page.locator(".lab-sidebar nav button").last().waitFor();
-    assert.equal(await page.locator(".lab-sidebar nav button").count(),6);
+    assert.equal(await page.locator(".lab-sidebar nav button").count(),5);
     assert.equal(await page.locator(".lab-algorithms article").count(),group.algorithms.length);
     assert.equal(await page.locator(".lab-criteria").first().locator("tbody tr").count(),group.metrics.length);
     assert.ok((await page.locator(".lab-criteria").first().innerText()).includes("Câu hỏi được trả lời"));
     await page.getByLabel("Số user tối đa",{ exact:true }).fill("80");
-    if (["rating","classification","clustering","reinforcement"].includes(group.id)) await page.getByLabel("Số seed huấn luyện",{ exact:true }).fill("2");
     if (group.id === "rating") await page.getByLabel("Epochs SVD / NCF",{ exact:true }).fill("4");
-    if (group.id === "reinforcement") await page.getByLabel("Episode huấn luyện",{ exact:true }).fill("300");
     if (["clustering","association"].includes(group.id)) await page.getByLabel("Số phim tối đa",{ exact:true }).fill("40");
     const button = page.getByRole("button",{ name:"Chạy thực nghiệm nhóm",exact:true });
     await button.waitFor();
@@ -57,16 +55,26 @@ try {
     const finished = await (await page.request.get(`${base}/api/v1/experiment-lab/runs/${job.id}`)).json();
     assert.equal(finished.status,"completed",finished.message);
     await page.locator(".lab-results .lab-comparison tbody tr").first().waitFor();
-    assert.ok(await page.locator(".lab-chart").count() >= group.charts.length);
+    assert.equal(await page.locator(".lab-chart").count(),group.metrics.length);
+    assert.equal(finished.result.charts.length,group.metrics.length);
+    assert.equal(await page.locator('.lab-comparison th.lab-split-label').count(),2);
+    assert.equal(await page.locator('.lab-segments').count(),0);
+    assert.equal(await page.locator('.lab-details').count(),0);
+    assert.equal(await page.locator('.lab-bar-value').count(),await page.locator('.lab-plot rect').count());
+    assert.ok(await page.locator('.lab-bar-value').count()>0);
+    assert.ok(await page.locator('.lab-bar-value').evaluateAll(nodes=>nodes.every(node=>{
+      const value=Number(node.getAttribute('data-value'));
+      return value===0 || Math.abs(value)>=1e-6 || /E|e/.test(node.textContent);
+    })), 'Tiny nonzero values must not be rounded to zero');
+    assert.equal((await page.locator('.lab-comparison [data-split="validation"]').count()),(await page.locator('.lab-comparison [data-split="test"]').count()));
+    assert.deepEqual(finished.result.charts.map(c=>c.metric_key),group.metrics.map(m=>m.key));
     assert.ok((await page.locator(".lab-chart svg").count()) > 0);
     assert.equal(finished.result.provenance.sampled_users,80);
     assert.ok(finished.result.provenance.splits.train.max_timestamp < finished.result.provenance.splits.validation.min_timestamp);
     const csv = await page.request.get(`${base}/api/v1/experiment-lab/runs/${job.id}/export/csv`);
     assert.equal(csv.status(),200); assert.ok((await csv.text()).includes("algorithm"));
-    const testButton = page.getByRole("group",{ name:"Tập dữ liệu đánh giá" }).getByRole("button",{ name:"Test",exact:true });
-    if (await testButton.count()) { await testButton.click(); assert.ok((await page.locator(".lab-comparison caption").innerText()).includes("test")); }
-    const legend = page.locator(".lab-legend button").first();
-    await legend.click(); assert.equal(await legend.getAttribute("aria-pressed"),"false"); await legend.click();
+    assert.ok((await page.locator('.lab-comparison caption').innerText()).includes('Validation & Test'));
+    assert.equal(await page.locator('.lab-legend button').count(),0);
     await page.locator(".lab-results").scrollIntoViewIfNeeded();
     await page.screenshot({ path:path.join(output,`lab-${group.id}-results.png`) });
     for (const theme of ["dark","light"]) {
@@ -95,7 +103,7 @@ try {
   await page.locator(".lab-algorithms article").last().waitFor();
   assert.deepEqual(errors,[]);
   await writeFile(path.join(output,"lab-real-runs.json"),JSON.stringify(summary,null,2));
-  console.log("PASS sidebar, reload, exports, split switching, chart legends, six groups, mobile dark/light and error recovery.");
+  console.log("PASS five groups, exact 4/4/3/3/3 charts, simultaneous valid/test, value labels, exports, mobile dark/light and error recovery.");
 } finally {
   await browser?.close(); server.kill();
 }
