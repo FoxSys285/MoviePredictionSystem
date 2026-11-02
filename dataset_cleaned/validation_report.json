@@ -1,0 +1,25 @@
+{
+  "status": "passed",
+  "verified_at": "2026-10-24T04:16:14.526906+00:00",
+  "saved_csv_rows": {
+    "movies.csv": 62423,
+    "ratings.csv": 25000095,
+    "tags.csv": 1093332,
+    "links.csv": 62423
+  },
+  "unique_rating_users": 162541,
+  "duplicate_rating_pairs": 0,
+  "duplicate_user_movie_tags": 0,
+  "orphan_movie_references": 0,
+  "original_sha256_unchanged": true,
+  "output_sha256_matches_report": true,
+  "checks": [
+    "CSV schemas",
+    "all saved rating rows and scales",
+    "ID integrity",
+    "all rating pairs across chunk boundaries",
+    "normalized tags and duplicates",
+    "optional external IDs and IMDb leading zeroes",
+    "input/output file checksums"
+  ]
+}

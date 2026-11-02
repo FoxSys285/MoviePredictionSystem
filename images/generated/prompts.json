@@ -1,0 +1,107 @@
+{
+  "tool": "Built-in image_gen.imagegen",
+  "transparent_background": false,
+  "notes": "Original generated illustrations, not official movie posters or real team portraits. PNG originals retained here; resized WebP assets are in project/frontend/public/assets. Source UI screenshots remain unchanged.",
+  "assets": [
+    {
+      "file": "cinema.png",
+      "web_asset": "../../project/frontend/public/assets/cinema.webp",
+      "prompt": "Use case: photorealistic-natural. Asset type: wide website cinematic hero / login background, landscape 16:9. Create a premium realistic editorial photograph inside a dark movie theater. In the LEFT half of frame, a young adult man with dark curly hair, dark sunglasses and black hoodie sits in a plush deep-red velvet cinema chair holding a paper bucket of popcorn, contemplative side profile looking toward an unseen screen to the right. Other audience members softly out of focus farther behind. Cinema crimson aisle lights, warm red rim light on his face, deep black shadows, warm brown photographic highlights, subtle film grain, shallow depth of field, sophisticated cinematic lighting. RIGHT half should fade into deep shadow and dark out-of-focus theater seats with no main subject to accommodate an overlaid login form. Real anatomy, photographic realism. No lettering, no logos, no watermark. This is an image asset only, not a screenshot or mockup."
+    },
+    {
+      "file": "theater.png",
+      "web_asset": "../../project/frontend/public/assets/theater.webp",
+      "prompt": "Use case: photorealistic-natural. Asset type: website About page photograph, 4:3 landscape. A premium empty movie theater photographed from the back right, rows of deep crimson velvet cinema chairs receding toward a giant silver screen, dramatic dark black walls with thin red architectural lighting, warm crimson glow. On the screen the single bold condensed uppercase word MOVIE in red, perfectly spelled. Photo realistic interior architecture, deep black and red palette, cinematic high contrast, slight film grain, no people, no extra lettering, no watermarks."
+    },
+    {
+      "file": "contact.png",
+      "web_asset": "../../project/frontend/public/assets/contact.webp",
+      "prompt": "Use case: photorealistic-natural. Asset type: wide contact page banner 16:9 landscape. Behind the scenes of a film production in a dark movie theater: professional movie camera on a tripod and a filmmaker in profile positioned on the far RIGHT third of the composition, silhouette of theater seats and subtle spotlights in the background. Crimson red stage light beams, deep black shadows, subtle smoky atmosphere. Keep left and center mostly dark and uncluttered for title overlay. Photographic cinematic realism, elegant, no text, no watermarks."
+    },
+    {
+      "file": "about.png",
+      "web_asset": "../../project/frontend/public/assets/about.webp",
+      "prompt": "Use case: photorealistic-natural. Asset type: website About page hero banner, landscape 16:9. A mature fictional male cinema enthusiast with short dark hair and clear eyeglasses, wearing a dark jacket, seated in a deep crimson velvet movie theater, positioned at the far RIGHT third of the image, head and shoulders turning thoughtfully toward the left. Red theater aisle lights and black walls, distant out-of-focus audience, subtle rich red rim lighting on his face and glasses, low key cinematic photography, grain. Left two thirds are dark mostly empty atmosphere for a large red title to be placed later. Original face, no recognizable celebrity. No text, no logos, no watermarks. Create a photograph asset, not a website mockup."
+    },
+    {
+      "file": "posters/inception.png",
+      "web_asset": "../../project/frontend/public/assets/posters/inception.webp",
+      "prompt": "Use case: stylized-concept. Asset type: one premium movie poster artwork, vertical 2:3 portrait. Create an original cinematic illustration of a lone man in a dark suit holding a small suitcase standing in the middle of an impossibly folded city, monumental skyscrapers curving overhead, blue-gray mist, reflections on wet street, cerebral science fiction thriller. Detailed movie-poster photography aesthetic, sophisticated composition, rich film grain, strong contrast and a dark lower edge for a title added later in code. Not a collage or contact sheet: one cohesive single poster. No text, no letters, no typography, no watermarks, no brand logos."
+    },
+    {
+      "file": "posters/interstellar.png",
+      "web_asset": "../../project/frontend/public/assets/posters/interstellar.webp",
+      "prompt": "Use case: stylized-concept. Asset type: one premium movie poster artwork, vertical 2:3 portrait. Create an original cinematic illustration of a lone astronaut in a weathered white spacesuit standing on a barren icy alien planet, enormous pale ringed planet and dark starfield above, white silver blue palette, epic human scale and space exploration. Detailed movie-poster photography aesthetic, sophisticated composition, rich film grain, strong contrast and a dark lower edge for a title added later in code. Not a collage or contact sheet: one cohesive single poster. No text, no letters, no typography, no watermarks, no brand logos."
+    },
+    {
+      "file": "posters/fight-club.png",
+      "web_asset": "../../project/frontend/public/assets/posters/fight-club.webp",
+      "prompt": "Use case: stylized-concept. Asset type: one premium movie poster artwork, vertical 2:3 portrait. Create an original cinematic illustration of two rebellious fictional men back to back in an underground industrial basement, one with a crimson leather jacket, one with dark rumpled shirt, magenta neon and gritty green shadows, psychological thriller, no recognizable celebrity. Detailed movie-poster photography aesthetic, sophisticated composition, rich film grain, strong contrast and a dark lower edge for a title added later in code. Not a collage or contact sheet: one cohesive single poster. No text, no letters, no typography, no watermarks, no brand logos."
+    },
+    {
+      "file": "posters/godfather.png",
+      "web_asset": "../../project/frontend/public/assets/posters/godfather.webp",
+      "prompt": "Use case: stylized-concept. Asset type: one premium movie poster artwork, vertical 2:3 portrait. Create an original cinematic illustration of an older fictional powerful man in black tuxedo with a red rose in a dark wood-paneled study, dramatic chiaroscuro portrait with face half in shadow, warm sepia black color palette, classic organized crime drama, no recognizable celebrity. Detailed movie-poster photography aesthetic, sophisticated composition, rich film grain, strong contrast and a dark lower edge for a title added later in code. Not a collage or contact sheet: one cohesive single poster. No text, no letters, no typography, no watermarks, no brand logos."
+    },
+    {
+      "file": "posters/justice-league.png",
+      "web_asset": "../../project/frontend/public/assets/posters/justice-league.webp",
+      "prompt": "Use case: stylized-concept. Asset type: one premium movie poster artwork, vertical 2:3 portrait. Create an original cinematic illustration of a team of five original fantasy superheroes wearing intricate dark metallic armor standing together on a smoky battlefield, intense sepia monochrome, dramatic rays of light from above, epic widescreen feeling in a portrait composition. Detailed movie-poster photography aesthetic, sophisticated composition, rich film grain, strong contrast and a dark lower edge for a title added later in code. Not a collage or contact sheet: one cohesive single poster. No text, no letters, no typography, no watermarks, no brand logos."
+    },
+    {
+      "file": "posters/lord-rings.png",
+      "web_asset": "../../project/frontend/public/assets/posters/lord-rings.webp",
+      "prompt": "Use case: stylized-concept. Asset type: one premium movie poster artwork, vertical 2:3 portrait. Create an original cinematic illustration of a mysterious cloaked traveler with a sword standing before ancient stone mountains and a colossal glowing gold ring shape in the stormy sky, epic dark medieval fantasy, warm black and gold, detailed cinematic matte painting. Detailed movie-poster photography aesthetic, sophisticated composition, rich film grain, strong contrast and a dark lower edge for a title added later in code. Not a collage or contact sheet: one cohesive single poster. No text, no letters, no typography, no watermarks, no brand logos."
+    },
+    {
+      "file": "posters/avengers.png",
+      "web_asset": "../../project/frontend/public/assets/posters/avengers.webp",
+      "prompt": "Use case: stylized-concept. Asset type: one premium movie poster artwork, vertical 2:3 portrait. Create an original cinematic illustration of an ensemble of six original futuristic heroes arranged in a dramatic triangular composition against a glowing purple nebula, different futuristic armor suits, cosmic superhero adventure, violet magenta and gold palette, no logos. Detailed movie-poster photography aesthetic, sophisticated composition, rich film grain, strong contrast and a dark lower edge for a title added later in code. Not a collage or contact sheet: one cohesive single poster. No text, no letters, no typography, no watermarks, no brand logos."
+    },
+    {
+      "file": "posters/dune.png",
+      "web_asset": "../../project/frontend/public/assets/posters/dune.webp",
+      "prompt": "Use case: stylized-concept. Asset type: one premium movie poster artwork, vertical 2:3 portrait. Create an original cinematic illustration of a lone young desert traveler with a long dark cloak stands on monumental windswept sand dunes, a vast orange sun in the hazy sky, sparse futuristic aircraft silhouettes, science fiction epic, warm sandy gold and deep black palette. Detailed movie-poster photography aesthetic, sophisticated composition, rich film grain, strong contrast and a dark lower edge for a title added later in code. Not a collage or contact sheet: one cohesive single poster. No text, no letters, no typography, no watermarks, no brand logos."
+    },
+    {
+      "file": "posters/dark-knight.png",
+      "web_asset": "../../project/frontend/public/assets/posters/dark-knight.webp",
+      "prompt": "Use case: stylized-concept. Asset type: single original cinematic movie poster artwork, portrait 2:3. Scene: a mysterious masked vigilante in a charcoal armored suit with a long flowing cape, standing on a Gotham-like skyscraper ledge, blue smoky city at night and orange fire illuminating clouds behind, dramatic cinematic composition. Premium photographic poster aesthetic, detailed, high contrast, subtle film grain, dark bottom edge for title overlay later. One cohesive illustration, not a collage. No text, no lettering, no typography, no watermarks. No identifiable celebrities."
+    },
+    {
+      "file": "posters/martian.png",
+      "web_asset": "../../project/frontend/public/assets/posters/martian.webp",
+      "prompt": "Use case: stylized-concept. Asset type: single original cinematic movie poster artwork, portrait 2:3. Scene: a fictional middle-aged astronaut in a bulky white space suit standing on rust orange Martian terrain, close view of reflective helmet visor showing the sandy landscape and a small scientific habitat, realistic survival space exploration story, warm golden orange palette. Premium photographic poster aesthetic, detailed, high contrast, subtle film grain, dark bottom edge for title overlay later. One cohesive illustration, not a collage. No text, no lettering, no typography, no watermarks. No identifiable celebrities."
+    },
+    {
+      "file": "posters/joker.png",
+      "web_asset": "../../project/frontend/public/assets/posters/joker.webp",
+      "prompt": "Use case: stylized-concept. Asset type: single original portrait 2:3 cinematic drama poster illustration. A solitary adult performer in a deep red suit seen from BEHIND at the bottom of a long weathered city staircase, stepping upward toward warm sunlight. Urban architecture rises in green and ochre shadows, a tiny figure against a monumental city, a poignant story about loneliness and finding belonging. Beautiful realistic painted film-poster composition with subtle grain, deep colors, nonviolent, contemplative. Face not visible. No text, no logos, no watermark, no weapons, no injuries."
+    },
+    {
+      "file": "posters/batman-superman.png",
+      "web_asset": "../../project/frontend/public/assets/posters/batman-superman.webp",
+      "prompt": "Use case: stylized-concept. Asset type: original single portrait 2:3 cinematic science fiction poster artwork. An immense modern city at night seen from a rooftop in heavy rain. Two distant unoccupied towers face each other across a canyon of streets; the left tower glows icy blue and the right tower glows crimson red. Storm clouds part in the middle, reflections on wet architecture, a feeling of epic tension between two powerful forces. Rich black blue and red palette, premium realistic film poster illustration, subtle grain, no people, no characters, no violence, no text or lettering, no logos, no watermark."
+    },
+    {
+      "file": "team/frontend.png",
+      "web_asset": "../../project/frontend/public/assets/team/frontend.webp",
+      "prompt": "Use case: photorealistic-natural. Asset type: original square team avatar photograph for a movie technology academic project. Head-and-shoulders studio portrait of a friendly young Vietnamese man, short neatly styled black hair, charcoal casual blazer over a black t-shirt. Centered front-facing composition, natural relaxed expression, realistic skin and anatomy, clean dark gray softly blurred background, soft warm key light with very subtle red rim light, understated professional editorial portrait, subject fills most of image so it works cropped to a small circle. Fictional adult, not a recognizable real person. No text, no logo, no watermark."
+    },
+    {
+      "file": "team/backend.png",
+      "web_asset": "../../project/frontend/public/assets/team/backend.webp",
+      "prompt": "Use case: photorealistic-natural. Asset type: original square team avatar photograph for a movie technology academic project. Head-and-shoulders studio portrait of a professional young Vietnamese woman, shoulder-length black hair, charcoal blazer over an ivory blouse. Centered front-facing composition, natural relaxed expression, realistic skin and anatomy, clean dark gray softly blurred background, soft warm key light with very subtle red rim light, understated professional editorial portrait, subject fills most of image so it works cropped to a small circle. Fictional adult, not a recognizable real person. No text, no logo, no watermark."
+    },
+    {
+      "file": "team/ml.png",
+      "web_asset": "../../project/frontend/public/assets/team/ml.webp",
+      "prompt": "Use case: photorealistic-natural. Asset type: original square team avatar photograph for a movie technology academic project. Head-and-shoulders studio portrait of a thoughtful middle-aged Vietnamese man, short salt-and-pepper hair, thin dark eyeglasses, dark suit and white shirt. Centered front-facing composition, natural relaxed expression, realistic skin and anatomy, clean dark gray softly blurred background, soft warm key light with very subtle red rim light, understated professional editorial portrait, subject fills most of image so it works cropped to a small circle. Fictional adult, not a recognizable real person. No text, no logo, no watermark."
+    },
+    {
+      "file": "team/design.png",
+      "web_asset": "../../project/frontend/public/assets/team/design.webp",
+      "prompt": "Use case: photorealistic-natural. Asset type: original square team avatar photograph for a movie technology academic project. Head-and-shoulders studio portrait of a creative young Vietnamese man, short wavy dark hair, dark collared shirt. Centered front-facing composition, natural relaxed expression, realistic skin and anatomy, clean dark gray softly blurred background, soft warm key light with very subtle red rim light, understated professional editorial portrait, subject fills most of image so it works cropped to a small circle. Fictional adult, not a recognizable real person. No text, no logo, no watermark."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+export const labTranslations: Record<string,string> = {
+  "Thực nghiệm": "Experiments", "Phòng thực nghiệm": "Experiment lab", "NHÓM THUẬT TOÁN": "ALGORITHM GROUPS",
+  "Danh mục nhóm thuật toán": "Algorithm group navigation", "Dự đoán rating": "Rating prediction", "Phân loại sở thích": "Preference classification", "Phân cụm": "Clustering", "Luật kết hợp": "Association rules", "Giảm chiều": "Dimensionality reduction", "Gợi ý tuần tự": "Sequential recommendation",
+  "nhóm": "groups", "thuật toán": "algorithms", "Tài liệu mô tả": "Methodology document", "ĐẦU RA": "OUTPUT",
+  "Từ câu hỏi nghiên cứu đến bằng chứng thực nghiệm": "From research questions to experimental evidence",
+  "THIẾT KẾ ĐÁNH GIÁ": "EVALUATION DESIGN", "THỰC HIỆN": "RUN EXPERIMENT", "KẾT QUẢ": "RESULTS",
+  "Tiêu chí so sánh": "Comparison criteria", "Tiêu chí đánh giá": "Evaluation criteria", "Tiêu chí": "Criterion",
+  "Đánh giá gì / cách xác định": "What it measures / definition", "Cách diễn giải": "Interpretation", "Câu hỏi được trả lời": "Question answered", "Theo tài liệu": "From the document",
+  "Danh mục biểu đồ và câu hỏi phân tích": "Chart plan and research questions", "Câu hỏi:": "Question:", "Tiêu chí chi phí tính toán dùng chung": "Shared computational cost criteria",
+  "Chạy thực nghiệm": "Run experiment", "Chạy thực nghiệm nhóm": "Run group experiment", "Cấu hình thực nghiệm": "Experiment configuration", "Dữ liệu đã sẵn sàng": "Data ready", "Chưa chuẩn bị dữ liệu": "Data not prepared",
+  "Số user tối đa": "Maximum users", "Seed dữ liệu / mô hình": "Data / model seed", "Số seed huấn luyện": "Training seeds", "Epochs SVD / NCF": "SVD / NCF epochs", "Ngưỡng rating thích": "Positive rating threshold", "Đối tượng phân cụm": "Cluster objects", "Phim": "Movies", "Số cụm K-Means": "K-Means clusters", "Số phim tối đa": "Maximum movies", "Episode huấn luyện": "Training episodes",
+  "Lịch sử thực nghiệm": "Run history", "Đang chờ": "Queued", "Đang chạy": "Running", "Đã hoàn tất": "Completed", "Có lỗi": "Failed", "Đã dừng": "Cancelled", "Bị gián đoạn": "Interrupted", "Dừng": "Stop", "Đang dừng…": "Stopping…", "Đang chạy nhóm": "Running group", "Tiến độ thực nghiệm": "Experiment progress",
+  "Chưa tải được phần thực nghiệm": "Could not load the experiment lab", "Đang tải danh mục thuật toán…": "Loading algorithm catalog…", "So sánh từ lần chạy thực tế": "Comparison from a real run", "Kết quả thực nghiệm": "Experiment results", "Bảng so sánh kết quả": "Results comparison", "Thuật toán / cấu hình": "Algorithm / configuration",
+  "Mô phỏng": "Simulation", "Phân bố nhãn": "Class balance", "Thích": "Like", "Không thích": "Dislike", "Biểu đồ phân tích": "Analysis charts", "biểu đồ": "charts", "Không đủ dữ liệu hợp lệ để vẽ biểu đồ.": "Not enough valid data to plot.", "Cách đọc biểu đồ": "How to read this chart", "Ghi chú": "Notes", "Di chuột lên điểm để xem chi tiết.": "Hover over a point for details.",
+  "N/A: chưa đo hoặc không xác định. ± là std qua seed.": "N/A: not measured or undefined. ± is standard deviation across seeds.",
+  "Chọn cấu hình và chạy nhóm để tạo bảng so sánh cùng biểu đồ từ dữ liệu thực tế.": "Choose a configuration and run the group to create comparisons and charts from real data.",
+  "Khám phá 12 thuật toán trong 6 nhóm nhiệm vụ, chạy thực nghiệm và đối chiếu kết quả bằng các tiêu chí cùng biểu đồ phân tích.": "Explore 12 algorithms in 6 task groups, run experiments, and compare results using documented criteria and charts.", "6 nhóm thực nghiệm": "6 experiment groups", "12 thuật toán · Tiêu chí rõ ràng · Kết quả thực tế": "12 algorithms · Explicit criteria · Real results",
+};

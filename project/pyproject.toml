@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "movie-rating-prediction"
+version = "0.1.0"
+description = "MovieLens 25M rating prediction and reproducible algorithm comparison"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "numpy>=2.0,<2.3",
+    "pandas>=2.2,<3",
+    "scipy>=1.14,<2",
+    "numba>=0.61,<0.64",
+    "pyarrow>=18,<24",
+    "fastapi>=0.115,<1",
+    "pydantic>=2.9,<3",
+    "uvicorn>=0.34,<1",
+    "joblib>=1.4,<2",
+    "scikit-learn>=1.6,<2",
+    "xgboost>=2.1,<4",
+    "torch>=2.6,<3",
+    "mlxtend>=0.23,<0.24",
+    "psutil>=6,<8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "httpx>=0.28,<1", "ruff>=0.11,<1"]
+
+[project.scripts]
+movie-rating = "movie_rating.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+movie_rating = ["lab_catalog.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

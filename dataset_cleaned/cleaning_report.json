@@ -1,0 +1,108 @@
+{
+  "status": "complete",
+  "created_at": "2026-10-24T04:13:52.976148+00:00",
+  "source_directory": "D:\\HUIT\\Học máy\\Movie Rating Prediction\\dataset",
+  "output_directory": "D:\\HUIT\\Học máy\\Movie Rating Prediction\\dataset_cleaned",
+  "source_files": {
+    "movies.csv": {
+      "bytes": 3038099,
+      "sha256": "c50dea6973e619f9bc1decd4afa3e35358b83a5fb663dac0ec82252a011d023d"
+    },
+    "ratings.csv": {
+      "bytes": 678260987,
+      "sha256": "9c85525758597dca76e8d98cebb9c13e018c2317b09a0878b6d383179526e385"
+    },
+    "tags.csv": {
+      "bytes": 38810332,
+      "sha256": "84793c391a8e2a8b93190b5e780f781563a184c413d02ff2104cc2f442e2830a"
+    },
+    "links.csv": {
+      "bytes": 1368578,
+      "sha256": "dd07bbd9aa8e76d263d8323ddd18ec87b6e00a79a68a5896afe9a737af22322b"
+    }
+  },
+  "files": {
+    "movies.csv": {
+      "input_rows": 62423,
+      "output_rows": 62423,
+      "removed_invalid_rows": 0,
+      "removed_orphan_rows": 0,
+      "removed_duplicate_rows": 0,
+      "normalized_text_rows": 205,
+      "movies_without_year": 412,
+      "movies_without_genres": 5062,
+      "bytes": 2975469,
+      "sha256": "c44e3d6aac21cfd996391a969c359b454d6cf8038350e4100f44ce1669357624"
+    },
+    "ratings.csv": {
+      "input_rows": 25000095,
+      "output_rows": 25000095,
+      "removed_invalid_rows": 0,
+      "removed_orphan_rows": 0,
+      "removed_duplicate_rows": 0,
+      "normalized_text_rows": 0,
+      "unique_users": 162541,
+      "rated_movies": 59047,
+      "mean_rating": 3.533854451353085,
+      "rating_distribution": {
+        "0.5": 393068,
+        "1.0": 776815,
+        "1.5": 399490,
+        "2.0": 1640868,
+        "2.5": 1262797,
+        "3.0": 4896928,
+        "3.5": 3177318,
+        "4.0": 6639798,
+        "4.5": 2200539,
+        "5.0": 3612474
+      },
+      "bytes": 653260891,
+      "sha256": "ed15a641f9b057dfddaefdfa828295af6a4866087dc974b17d1e7f3f3c948c19"
+    },
+    "tags.csv": {
+      "input_rows": 1093360,
+      "output_rows": 1093332,
+      "removed_invalid_rows": 26,
+      "removed_orphan_rows": 0,
+      "removed_duplicate_rows": 2,
+      "normalized_text_rows": 274474,
+      "empty_tag_rows": 9,
+      "placeholder_tag_rows": 17,
+      "bytes": 37715437,
+      "sha256": "5e3b85c21cc98b297b42cf18398a6359fb199100999de4674f980140a7fc1b8f"
+    },
+    "links.csv": {
+      "input_rows": 62423,
+      "output_rows": 62423,
+      "removed_invalid_rows": 0,
+      "removed_orphan_rows": 0,
+      "removed_duplicate_rows": 0,
+      "normalized_text_rows": 0,
+      "missing_imdbId": 0,
+      "cleared_invalid_imdbId": 0,
+      "missing_tmdbId": 107,
+      "cleared_invalid_tmdbId": 0,
+      "bytes": 1306154,
+      "sha256": "8ea3d144a9d4cee390775653a00af4d6a462c84b84afe3a96b74b29f3b33c2e8"
+    }
+  },
+  "rules": [
+    "Preserve the four original CSV schemas and all valid records; no sampling.",
+    "Normalize text to Unicode NFC; trim and collapse whitespace.",
+    "Keep title spelling, punctuation and case; never invent a missing year.",
+    "Normalize genre separators; preserve unknown genres as (no genres listed).",
+    "Require positive 32-bit integer IDs, valid Unix timestamps and ratings 0.5..5 in steps of 0.5.",
+    "Remove invalid required values and references to movie IDs absent from cleaned movies.csv.",
+    "Deduplicate movie IDs by first valid row.",
+    "Deduplicate user/movie ratings by latest timestamp; last row wins on timestamp ties.",
+    "Casefold tags; remove empty/placeholder labels (na, n/a, null, none, nan).",
+    "Deduplicate user/movie/normalized-tag by latest timestamp.",
+    "Preserve identical tags assigned by different users.",
+    "Normalize IMDb IDs to at least seven digits, retaining leading zeroes.",
+    "Keep optional missing external IDs empty; clear malformed optional IDs.",
+    "Deduplicate link rows by most available valid external IDs, then first original row.",
+    "Retain unrated movies; do not impute ratings or remove statistical outliers."
+  ],
+  "original_files_unchanged": true,
+  "total_removed_rows": 28
+}

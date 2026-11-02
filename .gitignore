@@ -1,2 +1,34 @@
-# MovieLens data is downloaded locally and must not be pushed with the project.
-/Dataset/
+# Keep the original MovieLens files outside version control.
+.codex-artifacts/
+dataset/**
+!dataset/.gitkeep
+dataset_cleaned/**
+!dataset_cleaned/README.md
+!dataset_cleaned/cleaning_report.json
+!dataset_cleaned/validation_report.json
+.dataset_cleaned-*.staging/
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.egg-info/
+**/.env
+**/.env.*
+!**/.env.example
+**/*.sqlite3
+**/*.sqlite3-*
+**/*.log
+**/.coverage
+**/htmlcov/
+.DS_Store
+Thumbs.db
+Desktop.ini
+project/artifacts/**
+!project/artifacts/.gitkeep
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+project/frontend/.sites-runtime/
+project/frontend/test-results/
+project/.ui-test-data/

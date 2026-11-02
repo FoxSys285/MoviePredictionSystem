@@ -1,0 +1,32 @@
+{
+  "name": "movie-rating-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test:ui": "node scripts/check-ui.mjs",
+    "test:experiments": "node scripts/check-experiments.mjs",
+    "assets:optimize": "node scripts/prepare-assets.mjs"
+  },
+  "dependencies": {
+    "@fontsource/be-vietnam-pro": "^5.2.5",
+    "@fontsource/bebas-neue": "^5.2.5",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.51.0",
+    "sharp": "^0.35.5",
+    "typescript": "~5.7.3",
+    "vite": "^6.1.0"
+  }
+}

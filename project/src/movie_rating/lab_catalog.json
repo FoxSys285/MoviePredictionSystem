@@ -1,0 +1,609 @@
+{
+  "version": 1,
+  "source": "Mô tả.docx",
+  "groups": [
+    {
+      "id": "rating",
+      "title": "Dự đoán rating",
+      "question": "Người dùng sẽ chấm bộ phim bao nhiêu sao?",
+      "algorithms": [
+        {
+          "id": "linear",
+          "name": "Linear Regression",
+          "description": "Học quan hệ tuyến tính giữa đặc trưng và rating. Dễ diễn giải; hiệu quả phụ thuộc vào biểu diễn đầu vào và việc xây dựng đặc trưng.",
+          "output": "Một giá trị rating dự đoán, ví dụ 4,2 sao."
+        },
+        {
+          "id": "xgboost",
+          "name": "XGBoost Regressor",
+          "description": "Kết hợp các cây quyết định theo boosting để giảm sai số. Học quan hệ phi tuyến và tương tác giữa những đặc trưng đã cung cấp.",
+          "output": "Một giá trị rating dự đoán."
+        },
+        {
+          "id": "svd",
+          "name": "SVD/MF có bias",
+          "description": "Học vector nhân tố tiềm ẩn của user và movie từ rating quan sát được; kết hợp mức điểm chung, bias user/movie và tương tác nhân tố.",
+          "output": "Một giá trị rating dự đoán."
+        },
+        {
+          "id": "ncf",
+          "name": "NCF hồi quy",
+          "description": "Học embedding user/movie và tương tác bằng mạng neural. Trong đề tài phải dùng đầu ra và hàm mất mát phù hợp dự đoán rating.",
+          "output": "Một giá trị rating dự đoán."
+        }
+      ],
+      "metrics": [
+        {
+          "name": "RMSE — chính",
+          "definition": "Căn bậc hai của trung bình bình phương chênh lệch giữa rating dự đoán và rating thật. Tính trên thang sao gốc.",
+          "interpretation": "↓; cùng đơn vị sao; nhạy với các sai số lớn.",
+          "question": "Mô hình nào hạn chế những dự đoán lệch nhiều sao tốt hơn?"
+        },
+        {
+          "name": "MAE — chính",
+          "definition": "Trung bình giá trị tuyệt đối của chênh lệch dự đoán và rating thật.",
+          "interpretation": "↓; biểu thị độ lệch tuyệt đối trung bình theo sao.",
+          "question": "Trung bình một dự đoán lệch rating thật bao nhiêu sao?"
+        },
+        {
+          "name": "MAE theo rating",
+          "definition": "Tính MAE riêng cho từng mức rating thật 0,5; 1,0; …; 5,0. Kèm số mẫu của mỗi mức.",
+          "interpretation": "↓ trong từng mức; xem cùng phân bố số mẫu.",
+          "question": "Mô hình có bỏ qua sở thích cực thấp/cực cao và kéo dự đoán về trung bình không?"
+        },
+        {
+          "name": "Sai số theo lịch sử user",
+          "definition": "Chia user theo số rating có trong train rồi đo RMSE/MAE từng nhóm. Khóa ranh giới nhóm trước khi đọc test.",
+          "interpretation": "↓; xem cả user ít và nhiều tương tác.",
+          "question": "Mô hình tốt trên tổng thể có còn tốt với user ít lịch sử không?"
+        },
+        {
+          "name": "Độ lệch có dấu",
+          "definition": "Trung bình phần dư: rating dự đoán trừ rating thật; có thể xem riêng theo mức rating hoặc nhóm user.",
+          "interpretation": "Gần 0 là ít thiên lệch trung bình; vẫn phải xem MAE/RMSE.",
+          "question": "Mô hình thường chấm cao hay thấp hơn thực tế? Các sai số trái dấu có đang triệt tiêu nhau không?"
+        },
+        {
+          "name": "Độ ổn định / khoảng tin cậy",
+          "definition": "Ghi mean ± std qua seed; nếu cần, ước lượng khoảng tin cậy của chênh lệch sai số bằng lấy mẫu lại theo user.",
+          "interpretation": "Biến động nhỏ hơn là ổn định hơn; xem mức chênh lệch và độ bất định.",
+          "question": "Ưu thế quan sát được có lặp lại và đủ rõ để khẳng định vượt trội không?"
+        }
+      ],
+      "charts": [
+        {
+          "name": "RMSE và MAE — thiết yếu",
+          "axes": "Hai ô riêng. X: mô hình và baseline; Y: RMSE hoặc MAE. Có thanh sai số khi có các lần lặp phù hợp.",
+          "question": "So sánh chất lượng dự đoán tổng thể; mô hình phức tạp có cải thiện so với baseline không?"
+        },
+        {
+          "name": "MAE theo rating thật — thiết yếu",
+          "axes": "X: mức rating thật; Y: MAE. Mỗi mô hình một đường; kèm số mẫu theo mức bằng bảng nhỏ hoặc ô phụ.",
+          "question": "Phát hiện điểm yếu ở rating thấp/cao mà một giá trị trung bình tổng thể che khuất."
+        },
+        {
+          "name": "Train/validation loss của NCF — thiết yếu khi dùng NCF",
+          "axes": "X: epoch; Y: cùng một hàm loss, ví dụ MSE. Vẽ đường train và validation; đánh dấu epoch được chọn.",
+          "question": "Mạng đã hội tụ chưa? Train tiếp có làm validation xấu đi và gợi ý overfitting không?"
+        },
+        {
+          "name": "Phân phối phần dư — bổ sung",
+          "axes": "X: dự đoán − rating thật; Y: tần suất/tỷ lệ. Dùng cùng khoảng chia và cùng miền trục giữa các mô hình.",
+          "question": "Quan sát thiên lệch có dấu, độ phân tán và các đuôi sai số lớn."
+        },
+        {
+          "name": "Sai số theo mức hoạt động user — bổ sung",
+          "axes": "X: nhóm số rating trong train; Y: MAE/RMSE; mỗi mô hình một đường hoặc nhóm cột.",
+          "question": "So sánh chất lượng ở các nhóm user, đặc biệt nhóm ít tương tác."
+        }
+      ]
+    },
+    {
+      "id": "classification",
+      "title": "Phân loại sở thích",
+      "question": "Người dùng có thích bộ phim không?",
+      "algorithms": [
+        {
+          "id": "logistic",
+          "name": "Logistic Regression",
+          "description": "Ước lượng xác suất thuộc lớp; log-odds là hàm tuyến tính của đặc trưng. Là mốc so sánh phân loại đơn giản và dễ diễn giải.",
+          "output": "Xác suất thích và nhãn thích/không thích."
+        },
+        {
+          "id": "random_forest",
+          "name": "Random Forest Classifier",
+          "description": "Tổng hợp nhiều cây quyết định được huấn luyện với lấy mẫu và chọn đặc trưng ngẫu nhiên; học ranh giới phân loại phi tuyến.",
+          "output": "Xác suất và nhãn lớp."
+        }
+      ],
+      "metrics": [
+        {
+          "name": "Macro-F1 — chính đề xuất",
+          "definition": "Tính F1 cho từng lớp rồi lấy trung bình không trọng số; F1 của mỗi lớp là trung bình điều hòa của Precision và Recall.",
+          "interpretation": "↑; hai lớp có vai trò ngang nhau trong phép lấy trung bình.",
+          "question": "Mô hình có phục vụ cân bằng cả lớp thích và không thích, kể cả khi số mẫu lệch nhau không?"
+        },
+        {
+          "name": "Precision lớp thích",
+          "definition": "Số mẫu thực sự thích trong các mẫu được mô hình dự đoán là thích: TP/(TP+FP).",
+          "interpretation": "↑; cần đọc cùng Recall.",
+          "question": "Trong các phim hệ thống dự đoán user sẽ thích, bao nhiêu phim thực sự được thích?"
+        },
+        {
+          "name": "Recall lớp thích",
+          "definition": "Số mẫu thích được tìm đúng trên tổng số mẫu thực sự thích: TP/(TP+FN).",
+          "interpretation": "↑; cần đọc cùng Precision.",
+          "question": "Hệ thống bỏ sót bao nhiêu phim user thực sự thích?"
+        },
+        {
+          "name": "ROC-AUC",
+          "definition": "Khả năng xếp mẫu dương cao hơn mẫu âm khi thay đổi ngưỡng quyết định; tính từ điểm/xác suất, không chỉ từ nhãn cứng.",
+          "interpretation": "↑; không biểu thị chất lượng tại một ngưỡng triển khai cụ thể.",
+          "question": "Mô hình phân biệt hai lớp tốt tới đâu trên nhiều ngưỡng?"
+        },
+        {
+          "name": "Average Precision — AP",
+          "definition": "Tóm tắt đường Precision–Recall theo các bước tăng Recall. Nêu rõ lớp dương; AP không đồng nhất với mọi cách tính diện tích PR.",
+          "interpretation": "↑; xem cùng tỷ lệ lớp dương và đường baseline.",
+          "question": "Khả năng tìm đúng lớp quan tâm tốt tới đâu khi tăng mức bao phủ, đặc biệt nếu lớp này hiếm?"
+        },
+        {
+          "name": "Accuracy / Balanced Accuracy",
+          "definition": "Accuracy: tỷ lệ đúng tổng thể. Balanced Accuracy: trung bình Recall theo lớp.",
+          "interpretation": "↑; Accuracy chỉ là chỉ số bổ sung nếu mất cân bằng.",
+          "question": "Điểm tổng thể có đang cao chủ yếu do mô hình đoán tốt lớp đông mẫu không?"
+        }
+      ],
+      "charts": [
+        {
+          "name": "Confusion matrix — thiết yếu",
+          "axes": "Một ma trận cho mỗi mô hình; cùng thứ tự lớp. Ghi số lượng và tỷ lệ chuẩn hóa theo hàng (nhãn thật).",
+          "question": "Mô hình hay bỏ sót phim thích hay dự đoán thích nhầm? Nó phục vụ lớp ít mẫu thế nào?"
+        },
+        {
+          "name": "Precision / Recall / Macro-F1 — thiết yếu",
+          "axes": "X: mô hình; Y: chỉ số trong [0; 1]. Dùng các cột nhóm; giải thích rõ Precision/Recall đang tính cho lớp thích.",
+          "question": "So sánh trực tiếp sự đánh đổi giữa gợi ý đúng, bỏ sót và cân bằng hai lớp."
+        },
+        {
+          "name": "Precision–Recall curve — thiết yếu khi phân tích lớp thích",
+          "axes": "X: Recall; Y: Precision. Mỗi mô hình một đường; ghi AP và tỷ lệ lớp dương làm đường tham chiếu.",
+          "question": "Khi muốn tìm được nhiều phim thích hơn, Precision giảm thế nào? Có đạt yêu cầu sử dụng không?"
+        },
+        {
+          "name": "ROC curve — bổ sung",
+          "axes": "X: False Positive Rate; Y: True Positive Rate. Ghi AUC, cùng miền trục và đường chéo tham chiếu.",
+          "question": "So sánh khả năng phân biệt hai lớp trên nhiều ngưỡng; bổ sung cho PR curve."
+        }
+      ]
+    },
+    {
+      "id": "clustering",
+      "title": "Phân cụm",
+      "question": "Những người dùng hoặc bộ phim nào tương đồng?",
+      "algorithms": [
+        {
+          "id": "kmeans",
+          "name": "K-Means",
+          "description": "Chia đối tượng thành K cụm dựa trên khoảng cách tới tâm; phải chọn trước K. Phù hợp hơn với cụm tương đối gọn trong không gian đặc trưng.",
+          "output": "Nhãn cụm của từng đối tượng và các tâm cụm."
+        },
+        {
+          "id": "dbscan",
+          "name": "DBSCAN",
+          "description": "Tìm cụm theo mật độ với eps và min_samples; không đặt trước số cụm. Có thể phát hiện cụm hình dạng khác nhau và gán nhãn nhiễu.",
+          "output": "Nhãn cụm hoặc nhãn nhiễu của từng đối tượng."
+        }
+      ],
+      "metrics": [
+        {
+          "name": "Silhouette",
+          "definition": "So sánh khoảng cách trung bình trong cụm với khoảng cách tới cụm lân cận gần nhất.",
+          "interpretation": "↑, trong [−1; 1]; phụ thuộc biểu diễn và hình dạng cụm.",
+          "question": "Các điểm có gần cụm của mình và tách khỏi các cụm khác không?"
+        },
+        {
+          "name": "Davies–Bouldin",
+          "definition": "Đối chiếu độ phân tán trong cụm với khoảng cách giữa các tâm cụm; tổng hợp mức tương đồng với cụm cạnh tranh.",
+          "interpretation": "↓; dùng tham khảo cùng các tiêu chí khác.",
+          "question": "Các cụm có đủ gọn và cách xa nhau trong không gian đang dùng không?"
+        },
+        {
+          "name": "Tỷ lệ gán cụm / nhiễu",
+          "definition": "Tỷ lệ đối tượng thuộc cụm hợp lệ và tỷ lệ bị DBSCAN gán nhiễu. Công bố mẫu số và số cụm hợp lệ.",
+          "interpretation": "Mô tả; nhiều hay ít nhiễu đều cần giải thích.",
+          "question": "Điểm cụm cao có đạt được bằng cách loại bỏ phần lớn dữ liệu khó không?"
+        },
+        {
+          "name": "Số cụm và kích thước cụm",
+          "definition": "Thống kê số cụm, số phần tử và tỷ lệ của từng cụm; tách nhiễu khỏi cụm hợp lệ.",
+          "interpretation": "Không có chiều tối ưu cố định.",
+          "question": "Kết quả có quá vụn, quá lệch hoặc chỉ gom gần như mọi điểm vào một cụm không?"
+        },
+        {
+          "name": "Khả năng diễn giải",
+          "definition": "Mô tả cụm bằng các đặc trưng có ý nghĩa: tỷ lệ thể loại, số tương tác, xu hướng rating; xem cả quy mô mẫu.",
+          "interpretation": "Đánh giá theo tính nhất quán và ích lợi với nhiệm vụ.",
+          "question": "Mỗi cụm có đại diện một nhóm sở thích/hành vi có thể giải thích và sử dụng được không?"
+        },
+        {
+          "name": "Độ ổn định — bổ sung",
+          "definition": "Kiểm tra thay đổi khi đổi seed của K-Means hoặc nhiễu/lấy mẫu nhẹ dữ liệu; so sánh trên các đối tượng chung.",
+          "interpretation": "Ổn định hơn là ít phụ thuộc một lần chạy.",
+          "question": "Cấu trúc cụm có bền vững hay chỉ xuất hiện ở một thiết lập ngẫu nhiên?"
+        }
+      ],
+      "charts": [
+        {
+          "name": "Silhouette / Davies–Bouldin — thiết yếu",
+          "axes": "Hai ô riêng theo phương pháp/cấu hình; ghi kèm số cụm, tỷ lệ bao phủ và tập điểm dùng tính.",
+          "question": "Đối chiếu chất lượng hình học của các cụm với phạm vi dữ liệu thực sự được đánh giá."
+        },
+        {
+          "name": "Kích thước cụm — thiết yếu",
+          "axes": "X: cụm; Y: số đối tượng hoặc tỷ lệ. DBSCAN có một cột nhiễu được ghi nhãn riêng.",
+          "question": "Phát hiện cụm quá nhỏ, lệch quy mô hoặc tỷ lệ nhiễu quá lớn."
+        },
+        {
+          "name": "Heatmap đặc điểm cụm — thiết yếu",
+          "axes": "Hàng: cụm; cột: đặc trưng có ý nghĩa; màu: tỷ lệ/trung bình trên cùng thang đo. Kèm quy mô cụm.",
+          "question": "Giải thích từng cụm: nhóm thích thể loại nào, có mức hoạt động hay xu hướng chấm điểm ra sao?"
+        },
+        {
+          "name": "Scatter PCA 2D — bổ sung",
+          "axes": "Cùng tập điểm và cùng phép chiếu cho hai mô hình. X/Y: PC1/PC2; tô màu cụm; nhiễu có ký hiệu riêng.",
+          "question": "Minh họa cách chia dữ liệu; không thay cho chất lượng đo trong không gian dùng phân cụm."
+        },
+        {
+          "name": "Elbow / độ nhạy tham số — bổ sung",
+          "axes": "K-Means: K–inertia. DBSCAN: thay eps/min_samples, theo dõi số cụm và tỷ lệ nhiễu.",
+          "question": "Hỗ trợ chọn tham số và nhận diện cấu hình nhạy cảm; không dùng inertia để xếp hạng DBSCAN."
+        }
+      ]
+    },
+    {
+      "id": "association",
+      "title": "Luật kết hợp",
+      "question": "Những phim nào thường cùng được thích?",
+      "algorithms": [
+        {
+          "id": "apriori",
+          "name": "Apriori",
+          "description": "Tìm tập phim phổ biến bằng cách sinh và kiểm tra ứng viên theo từng mức độ dài; sau đó sinh luật từ các tập phổ biến.",
+          "output": "Tập phim phổ biến và luật A → B kèm các chỉ số."
+        },
+        {
+          "id": "fp_growth",
+          "name": "FP-Growth",
+          "description": "Nén giao dịch bằng FP-tree và khai thác các mẫu phổ biến qua cây điều kiện; không sinh tập ứng viên theo cách của Apriori.",
+          "output": "Tập phim phổ biến và luật A → B kèm các chỉ số."
+        }
+      ],
+      "metrics": [
+        {
+          "name": "Thời gian khai phá — chính",
+          "definition": "Đo riêng tìm tập phổ biến và sinh/lọc luật; ghi rõ có tính preprocessing hay không. Lặp phép đo khi phù hợp.",
+          "interpretation": "↓ trên cùng cấu hình và phần cứng.",
+          "question": "Thuật toán nào tìm cùng kết quả nhanh hơn? Bước nào chiếm thời gian chính?"
+        },
+        {
+          "name": "Bộ nhớ đỉnh — chính",
+          "definition": "Mức RAM cao nhất trong giai đoạn khai phá, đo theo cùng cách cho cả hai phương pháp.",
+          "interpretation": "↓; xem cùng thời gian.",
+          "question": "Thuật toán có chạy được với dữ liệu và giới hạn RAM hiện có không?"
+        },
+        {
+          "name": "Khả năng mở rộng",
+          "definition": "Thay số giao dịch hoặc min_support; theo dõi thời gian, bộ nhớ và trường hợp không hoàn thành.",
+          "interpretation": "Tăng chi phí chậm hơn là thuận lợi hơn.",
+          "question": "Phương pháp nào còn khả thi khi dữ liệu lớn hoặc ngưỡng support thấp?"
+        },
+        {
+          "name": "Tính trùng khớp kết quả",
+          "definition": "Đối chiếu tập mục và support, rồi luật sau cùng bộ lọc; bỏ qua thứ tự trả về, nêu dung sai số thực nếu có.",
+          "interpretation": "Phải tương đương khi cùng bài toán và khai phá đầy đủ.",
+          "question": "Hai chương trình có thực sự đang giải cùng nhiệm vụ và cho kết quả nhất quán không?"
+        },
+        {
+          "name": "Support của luật",
+          "definition": "Tỷ lệ giao dịch chứa đồng thời A và B: support(A ∪ B).",
+          "interpretation": "Mô tả độ phổ biến; không đơn thuần tối đa hóa.",
+          "question": "Luật được hỗ trợ bởi bao nhiêu người dùng, hay chỉ dựa trên rất ít trường hợp?"
+        },
+        {
+          "name": "Confidence của luật",
+          "definition": "Tỷ lệ giao dịch chứa B trong những giao dịch chứa A: support(A ∪ B)/support(A).",
+          "interpretation": "Cao là B thường đi cùng A; đọc cùng Support và Lift.",
+          "question": "Trong các user có A, bao nhiêu người cũng có B?"
+        },
+        {
+          "name": "Lift của luật",
+          "definition": "Confidence(A → B) chia cho support(B), tức so với mức phổ biến nền của B.",
+          "interpretation": ">1: liên kết dương; =1: mức độc lập; <1: liên kết âm.",
+          "question": "A và B đi cùng nhau nhiều hơn mức kỳ vọng từ độ phổ biến riêng của chúng không?"
+        },
+        {
+          "name": "Số tập phổ biến / số luật",
+          "definition": "Đếm kết quả sau cùng các điều kiện và bộ lọc; có thể xem phân bố độ dài luật.",
+          "interpretation": "Mô tả khối lượng kết quả, không phải càng nhiều càng tốt.",
+          "question": "Kết quả có quá ít để sử dụng hoặc quá nhiều để xem xét và lưu trữ không?"
+        }
+      ],
+      "charts": [
+        {
+          "name": "Thời gian theo min_support — thiết yếu",
+          "axes": "X: min_support; Y: thời gian; mỗi thuật toán một đường. Ghi rõ quy mô dữ liệu, giới hạn độ dài và phạm vi bước đo.",
+          "question": "Khi cho phép tìm mẫu hiếm hơn, chi phí của hai phương pháp thay đổi ra sao?"
+        },
+        {
+          "name": "Bộ nhớ theo min_support — thiết yếu",
+          "axes": "X: min_support; Y: RAM đỉnh. Đánh dấu trường hợp vượt giới hạn hoặc không hoàn thành, không thay bằng 0.",
+          "question": "Phương pháp nào khả thi hơn dưới giới hạn bộ nhớ?"
+        },
+        {
+          "name": "Scatter chất lượng luật — thiết yếu để mô tả luật",
+          "axes": "X: Support; Y: Confidence; màu: Lift. Chỉ thể hiện các luật qua bộ lọc đã công bố.",
+          "question": "Luật nào vừa đủ phổ biến vừa có liên kết đáng chú ý? Không cần vẽ hai bản trùng nhau cho hai thuật toán."
+        },
+        {
+          "name": "Thời gian theo số giao dịch — bổ sung",
+          "axes": "X: số giao dịch; Y: thời gian; hai đường thuật toán. Lấy mẫu theo quy tắc giống nhau.",
+          "question": "Khả năng mở rộng theo quy mô dữ liệu khác nhau thế nào?"
+        },
+        {
+          "name": "Số luật theo min_support — bổ sung",
+          "axes": "X: min_support; Y: số luật sau cùng bộ lọc; kết quả hai phương pháp kỳ vọng trùng nhau.",
+          "question": "Ngưỡng nào tạo khối lượng luật đủ để phân tích? Có bất nhất về kết quả cần kiểm tra không?"
+        }
+      ]
+    },
+    {
+      "id": "pca",
+      "title": "Giảm chiều",
+      "question": "Có thể biểu diễn dữ liệu bằng ít đặc trưng hơn không?",
+      "algorithms": [
+        {
+          "id": "pca",
+          "name": "PCA",
+          "description": "Chiếu dữ liệu đã được xử lý lên các thành phần tuyến tính trực giao, ưu tiên phương sai lớn. Không trực tiếp dự đoán rating nếu chưa ghép với mô hình sau đó.",
+          "output": "Vector ít chiều, các thành phần chính và tỷ lệ phương sai giải thích."
+        }
+      ],
+      "metrics": [
+        {
+          "name": "Phương sai giải thích tích lũy",
+          "definition": "Tổng tỷ lệ phương sai giải thích của k thành phần đầu. Phụ thuộc preprocessing và thang đo đặc trưng.",
+          "interpretation": "↑ khi tăng k; đọc cùng số chiều và chất lượng sau PCA.",
+          "question": "Với k chiều, giữ lại được bao nhiêu phương sai của biểu diễn đầu vào?"
+        },
+        {
+          "name": "Số chiều / mức thu gọn",
+          "definition": "Báo số chiều ban đầu d, số chiều sau PCA k và phần trăm giảm: (1 − k/d) × 100%.",
+          "interpretation": "Ít chiều hơn có lợi nếu vẫn đạt yêu cầu chất lượng.",
+          "question": "Biểu diễn được thu gọn bao nhiêu và có đáng với chi phí PCA không?"
+        },
+        {
+          "name": "Reconstruction error",
+          "definition": "MSE giữa vector đầu vào và vector tái tạo từ k thành phần trên validation; giữ chung preprocessing và không gian tính lỗi.",
+          "interpretation": "↓; không chọn k chỉ bằng cách giảm lỗi này.",
+          "question": "Giảm xuống k chiều làm mất bao nhiêu thông tin theo tiêu chuẩn tái tạo?"
+        },
+        {
+          "name": "Chất lượng nhiệm vụ sau PCA — chính nếu tích hợp",
+          "definition": "Giữ cùng mô hình/quy trình so sánh sau PCA, đo RMSE/MAE, Macro-F1 hoặc chỉ số cụm tùy nhiệm vụ; có baseline không PCA.",
+          "interpretation": "Đánh giá theo chỉ số chính của nhiệm vụ đó.",
+          "question": "Giữ phương sai cao có thực sự giúp dự đoán hoặc phân cụm tốt hơn không?"
+        },
+        {
+          "name": "Thời gian và bộ nhớ toàn pipeline",
+          "definition": "Tính cả fit/transform PCA và mô hình phía sau; tách chi phí huấn luyện với chi phí phục vụ.",
+          "interpretation": "↓ khi chất lượng vẫn đạt mục tiêu.",
+          "question": "PCA có tiết kiệm tổng chi phí hay chỉ làm giảm kích thước đầu vào trên danh nghĩa?"
+        }
+      ],
+      "charts": [
+        {
+          "name": "Phương sai tích lũy theo k — thiết yếu",
+          "axes": "X: số thành phần k; Y: tỷ lệ phương sai tích lũy; vẽ đường ngưỡng mục tiêu nếu đã chọn.",
+          "question": "Cần ít nhất bao nhiêu thành phần để đạt mức phương sai mong muốn?"
+        },
+        {
+          "name": "Chất lượng nhiệm vụ theo k — thiết yếu nếu dùng PCA trong pipeline",
+          "axes": "X: k; Y: chỉ số validation của nhiệm vụ; thêm đường tham chiếu không PCA.",
+          "question": "Giảm chiều có làm chất lượng giảm, giữ nguyên hay cải thiện? Cấu hình nào phù hợp để chốt trước test?"
+        },
+        {
+          "name": "Reconstruction error theo k — bổ sung",
+          "axes": "X: k; Y: MSE tái tạo trên validation; giữ nguyên preprocessing và cách tính.",
+          "question": "Mức mất mát thông tin giảm thế nào khi bổ sung thành phần?"
+        },
+        {
+          "name": "Thời gian toàn pipeline theo k — bổ sung",
+          "axes": "X: k; Y: thời gian; có baseline không PCA, cùng phần cứng và quy mô dữ liệu.",
+          "question": "Mức thu gọn nào tạo lợi ích tính toán thực tế?"
+        },
+        {
+          "name": "Scatter PC1–PC2 — bổ sung cho diễn giải",
+          "axes": "X/Y: hai thành phần đầu; có thể tô màu theo thể loại/nhóm đã định nghĩa; ghi tỷ lệ phương sai của hai trục.",
+          "question": "Hai chiều đầu cho thấy cấu trúc nào? Hình này chỉ minh họa, không đủ chứng minh chất lượng giảm chiều."
+        }
+      ]
+    },
+    {
+      "id": "reinforcement",
+      "title": "Gợi ý tuần tự",
+      "question": "Nên gợi ý phim nào tiếp theo?",
+      "algorithms": [
+        {
+          "id": "q_learning",
+          "name": "Q-Learning",
+          "description": "Học giá trị hành động trong từng trạng thái để tối đa hóa kỳ vọng tổng phần thưởng có chiết khấu; cần định nghĩa trạng thái, hành động, chuyển trạng thái và phần thưởng.",
+          "output": "Giá trị Q và chính sách chọn phim để gợi ý."
+        }
+      ],
+      "metrics": [
+        {
+          "name": "Evaluation return — chính",
+          "definition": "Trung bình tổng phần thưởng trong một episode đánh giá. Nếu dùng chiết khấu: G = r₀ + γr₁ + γ²r₂ + …; cố định γ và giới hạn episode.",
+          "interpretation": "↑ dưới cùng định nghĩa và môi trường.",
+          "question": "Chính sách tạo lợi ích tích lũy cao hơn baseline trong điều kiện đánh giá đã chọn không?"
+        },
+        {
+          "name": "Độ biến động qua seed",
+          "definition": "Huấn luyện nhiều seed; mỗi seed có nhiều episode đánh giá độc lập. Tổng hợp mean/std hoặc khoảng tin cậy theo đơn vị được công bố.",
+          "interpretation": "Biến động thấp hơn là ổn định hơn.",
+          "question": "Kết quả tốt có lặp lại hay chỉ đến từ một lần huấn luyện may mắn?"
+        },
+        {
+          "name": "Hiệu quả sử dụng tương tác",
+          "definition": "Số bước huấn luyện cần để đạt một mức evaluation return đã đặt trước; nêu trường hợp không đạt.",
+          "interpretation": "↓ khi so sánh cùng mục tiêu.",
+          "question": "Cần bao nhiêu tương tác để chính sách học được hành vi hữu ích?"
+        },
+        {
+          "name": "Tỷ lệ trùng / hành động không hợp lệ",
+          "definition": "Tỷ lệ gợi ý lặp trong cùng episode hoặc chọn phim bị loại khỏi tập hành động; quy định rõ phạm vi tính.",
+          "interpretation": "↓; nếu bị ngăn hoàn toàn bằng thiết kế thì báo như kiểm tra tính hợp lệ.",
+          "question": "Chính sách có lãng phí lượt gợi ý hoặc vi phạm quy tắc môi trường không?"
+        },
+        {
+          "name": "Độ phủ danh mục",
+          "definition": "Số phim khác nhau được gợi ý chia số phim ứng viên hợp lệ trong tập đánh giá; cố định số user/episode/lượt gợi ý.",
+          "interpretation": "Mô tả sự đa dạng về phạm vi; không tối đa hóa độc lập với return.",
+          "question": "Phần thưởng cao có đi kèm việc chỉ lặp lại một nhóm rất nhỏ phim phổ biến không?"
+        }
+      ],
+      "charts": [
+        {
+          "name": "Evaluation return theo bước tương tác — thiết yếu",
+          "axes": "X: số bước huấn luyện; Y: return trung bình tại các mốc đánh giá. Vẽ đường Q-Learning, các baseline và vùng sai số qua seed.",
+          "question": "Chính sách có học được, học nhanh đến đâu và có vượt baseline không?"
+        },
+        {
+          "name": "Return cuối giữa các chính sách — thiết yếu",
+          "axes": "X: chính sách; Y: return đánh giá cuối; biểu đồ điểm/cột có khoảng bất định đã nêu rõ.",
+          "question": "Ở cùng điều kiện cuối, chênh lệch chất lượng giữa Q-Learning và baseline lớn tới đâu?"
+        },
+        {
+          "name": "Kết quả qua seed — bổ sung",
+          "axes": "Mỗi điểm là return trung bình của một mô hình được huấn luyện bằng một seed; dùng dot plot hoặc boxplot khi đủ điểm.",
+          "question": "Ưu thế có bền vững qua các lần huấn luyện không? Không trộn episode và seed như các lần lặp tương đương."
+        },
+        {
+          "name": "Độ phủ và tỷ lệ lặp — bổ sung",
+          "axes": "Hai ô riêng theo chính sách; cố định số lượt đánh giá và tập ứng viên.",
+          "question": "Lợi ích tích lũy có đi kèm phạm vi gợi ý hữu ích và ít lặp không?"
+        }
+      ]
+    }
+  ],
+  "protocol": [
+    "Phạm vi dữ liệu. MovieLens 25M chứa 25.000.095 rating của 162.541 user; danh mục gồm 62.423 phim có rating hoặc tag. Rating có thang 0,5–5 sao. Khi đánh giá, báo cáo số user/movie thực tế còn lại sau xử lý; nếu lấy mẫu thì công bố quy tắc và phạm vi mẫu. Không giả định mọi phim trong danh mục đều có rating. [1]",
+    "Cùng nhiệm vụ, cùng dữ liệu. Chỉ xếp hạng trực tiếp những phương pháp cùng giải quyết một nhiệm vụ. Trong mỗi phép so sánh, thống nhất tập mẫu, đầu vào, preprocessing và cách đo. Nếu một mô hình dùng thêm thể loại/tag thì tách thành thực nghiệm bổ sung hoặc ghi rõ khác biệt về thông tin đầu vào.",
+    "Tách theo thời gian. Có thể dùng tỷ lệ train/validation/test 70/15/15 theo các mốc thời gian toàn cục. Đặt toàn bộ tương tác cùng timestamp vào cùng phía của ranh giới. Nếu dùng nhiều cửa sổ đánh giá, giữ nguyên nguyên tắc học từ quá khứ để dự đoán tương lai; không trộn k-fold ngẫu nhiên vào quy trình thời gian. [10]",
+    "Ngăn rò rỉ dữ liệu. Chỉ fit encoder, scaler, PCA, embedding, thống kê rating và đặc trưng lịch sử bằng dữ liệu được phép biết tại thời điểm dự đoán. Không dùng rating của chính mẫu làm đặc trưng. Rating chưa quan sát không đồng nghĩa 0 sao hoặc không thích; userId/movieId là định danh, không phải đại lượng có thứ tự.",
+    "Chọn mô hình. Chốt chỉ số chính, ngân sách tuning và ngưỡng quyết định trước khi đánh giá cuối. Chọn siêu tham số/mô hình bằng validation; giữ test cho so sánh cuối của các cấu hình đã khóa và không tiếp tục tuning theo test.",
+    "Độ ổn định và độ bất định. Với mô hình ngẫu nhiên, đề xuất 3–5 seed nếu tài nguyên cho phép; công bố rõ số lần chạy. Mean ± std qua seed mô tả biến động huấn luyện, không tự động là khoảng tin cậy của chất lượng dự đoán. Có thể bootstrap theo user để ước lượng khoảng tin cậy của chênh lệch sai số giữa mô hình trên cùng tập test.",
+    "Trình bày biểu đồ. Giữ cùng thang đo khi đối chiếu, ghi đơn vị và số mẫu; mỗi biểu đồ phải có chú giải. Nếu có thanh/vùng sai số, ghi rõ đó là std hay khoảng tin cậy và được tính qua seed, user hay cửa sổ thời gian. Không đưa các chỉ số khác đơn vị lên chung một trục số.",
+    "Phạm vi kết luận. Ghi rõ cách xử lý user/movie chưa có trong train; báo cáo kết quả warm-start và cold-start riêng nếu có. Loại bỏ các trường hợp khó không phải là bằng chứng đã giải quyết cold-start. Mọi kết luận “tốt nhất” chỉ áp dụng trong tập mô hình, dữ liệu và điều kiện đã khảo sát.",
+    "Quy ước: ↑ là cao hơn tốt hơn; ↓ là thấp hơn tốt hơn. Với tiêu chí mô tả như số cụm, số luật hoặc tỷ lệ nhiễu, không có chiều “tốt hơn” cố định. Baseline là mốc so sánh bổ sung, không được tính thêm vào danh sách 12 thuật toán ở phần 1."
+  ],
+  "resources": [
+    {
+      "name": "Thời gian fit / khai phá",
+      "definition": "Thời gian huấn luyện hoặc khai phá cho cấu hình đã chọn. Báo thêm tổng thời gian tuning nếu đánh giá chi phí nghiên cứu.",
+      "interpretation": "↓; đơn vị giây/phút.",
+      "question": "Mất bao lâu để có mô hình/kết quả sẵn dùng, và có phù hợp lịch cập nhật không?"
+    },
+    {
+      "name": "Độ trễ xử lý",
+      "definition": "Đo trên đầu vào và tải cố định; có thể báo median (p50) và p95 qua nhiều truy vấn. Chỉ áp dụng khi phương pháp có quy trình phục vụ rõ.",
+      "interpretation": "↓; đơn vị ms hoặc s.",
+      "question": "Một yêu cầu thông thường và một yêu cầu chậm phải đợi bao lâu?"
+    },
+    {
+      "name": "Thời gian tạo top-N",
+      "definition": "Tính cả chấm điểm/xếp hạng trên cùng tập ứng viên và các bước cần thiết để trả danh sách; nêu trước dữ liệu đã được tính sẵn.",
+      "interpretation": "↓; không thay bằng độ trễ của một cặp user–movie.",
+      "question": "Demo có trả được danh sách gợi ý trong thời gian mục tiêu không?"
+    },
+    {
+      "name": "Bộ nhớ đỉnh",
+      "definition": "RAM/VRAM lớn nhất của tiến trình trong bước đo; báo riêng hai loại nếu dùng GPU.",
+      "interpretation": "↓; kèm phạm vi đo.",
+      "question": "Hệ thống có chạy được trên máy hoặc môi trường triển khai đã chọn không?"
+    },
+    {
+      "name": "Kích thước mô hình / hiện vật",
+      "definition": "Dung lượng mô hình, embedding, bảng ánh xạ và dữ liệu cần thiết để phục vụ; với luật kết hợp có thể đo tập luật lưu lại.",
+      "interpretation": "↓ khi vẫn đạt chất lượng yêu cầu.",
+      "question": "Cần bao nhiêu dung lượng để lưu và nạp những thành phần phục vụ thực tế?"
+    }
+  ],
+  "ranking_metrics": [
+    {
+      "name": "Recall@K",
+      "definition": "Số phim phù hợp được tìm trong K gợi ý chia tổng số phim phù hợp đã biết của user trong phần giữ lại; tổng hợp theo user hợp lệ.",
+      "interpretation": "↑ tại cùng K và quy trình.",
+      "question": "Trong những phim phù hợp đã quan sát được, hệ thống tìm ra bao nhiêu ở top-K?"
+    },
+    {
+      "name": "NDCG@K",
+      "definition": "Đánh giá mức phù hợp có xét thứ tự; phim phù hợp xuất hiện sớm được trọng số cao hơn, chuẩn hóa theo thứ tự lý tưởng.",
+      "interpretation": "↑ tại cùng định nghĩa relevance.",
+      "question": "Hệ thống có đưa những phim phù hợp lên đầu danh sách không?"
+    },
+    {
+      "name": "Catalog coverage@K",
+      "definition": "Tỷ lệ phim khác nhau xuất hiện trong các danh sách top-K trên tập ứng viên đã quy định; cố định tập user.",
+      "interpretation": "Mô tả phạm vi; đọc cùng chất lượng xếp hạng.",
+      "question": "Danh sách gợi ý có tập trung vào rất ít phim hay bao phủ danh mục rộng hơn?"
+    }
+  ],
+  "decisions": [
+    {
+      "group": "Dự đoán rating",
+      "basis": "Ưu tiên RMSE theo giao thức đã chốt; xem MAE, độ ổn định, chất lượng theo nhóm và chi phí.",
+      "avoid": "Khẳng định NCF thắng chỉ vì là Deep Learning hoặc dùng điểm test để tuning tiếp."
+    },
+    {
+      "group": "Phân loại",
+      "basis": "Theo Macro-F1 hoặc mục tiêu Precision/Recall đã đặt trước; kiểm tra từng lớp và ngưỡng.",
+      "avoid": "Chọn chỉ bằng Accuracy trên dữ liệu mất cân bằng."
+    },
+    {
+      "group": "Phân cụm",
+      "basis": "Kết hợp chỉ số hình học, tỷ lệ bao phủ, cấu trúc/ý nghĩa cụm và chi phí.",
+      "avoid": "Xếp hạng tuyệt đối bằng một chỉ số hoặc chỉ nhìn scatter 2D."
+    },
+    {
+      "group": "Luật kết hợp",
+      "basis": "Xác nhận cùng kết quả rồi so hiệu suất; chọn luật theo chất lượng và khả năng sử dụng.",
+      "avoid": "Cho rằng thuật toán có nhiều luật hơn hoặc Lift lớn hơn là thuật toán khai phá tốt hơn."
+    },
+    {
+      "group": "PCA",
+      "basis": "Chọn số chiều nhỏ đáp ứng yêu cầu chất lượng nhiệm vụ và chi phí trên validation.",
+      "avoid": "Coi giữ 95% phương sai là bảo đảm dự đoán tốt."
+    },
+    {
+      "group": "Q-Learning",
+      "basis": "So return đánh giá với baseline, độ bất định, hiệu quả học và tính hợp lệ trong cùng môi trường.",
+      "avoid": "Suy từ reward mô phỏng sang hiệu quả thật mà không kiểm chứng."
+    }
+  ],
+  "references": [
+    "https://files.grouplens.org/datasets/movielens/ml-25m-README.html",
+    "https://scikit-learn.org/stable/modules/model_evaluation.html#regression-metrics",
+    "https://surprise.readthedocs.io/en/stable/matrix_factorization.html",
+    "https://arxiv.org/abs/1708.05031",
+    "https://scikit-learn.org/stable/modules/model_evaluation.html#classification-metrics",
+    "https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation",
+    "https://rasbt.github.io/mlxtend/user_guide/frequent_patterns/fpgrowth/",
+    "https://rasbt.github.io/mlxtend/user_guide/frequent_patterns/association_rules/",
+    "https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html",
+    "https://arxiv.org/abs/2010.11060",
+    "https://stable-baselines3.readthedocs.io/en/master/guide/rl_tips.html",
+    "https://doi.org/10.1145/3545796"
+  ]
+}

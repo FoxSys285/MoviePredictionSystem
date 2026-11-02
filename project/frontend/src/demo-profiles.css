@@ -1,0 +1,43 @@
+.auth-with-demos .auth-layout { display: grid; align-items: center; gap: 24px 48px; padding-block: 48px; }
+.auth-with-demos .auth-panel { grid-column: 2; grid-row: 1 / span 2; min-width: 0; }
+.auth-with-demos .auth-image-caption { grid-column: 1; grid-row: 2; }
+.auth-demo-panel { grid-column: 1; grid-row: 1; min-width: 0; padding: 26px; background: #0d1119ed; border: 1px solid #ffffff24; border-radius: 14px; box-shadow: 0 20px 65px #0005; }
+.auth-demo-panel h2 { font-size: clamp(23px, 2.3vw, 31px); margin: 9px 0; line-height: 1.2; }
+.auth-demo-panel > p { font-size: 12px; line-height: 1.8; color: #b0b8c7; }
+.demo-accounts { display: grid; gap: 10px; margin-top: 20px; }
+.demo-account { display: flex; gap: 12px; padding: 13px; border: 1px solid #ffffff14; border-radius: 10px; background: linear-gradient(120deg, #172235a6, #17223533); transition: border-color .2s, background .2s, transform .2s; }
+.demo-account:hover, .demo-account:focus-within, .demo-account.is-selected { border-color: #f0b76180; background: #26314799; }
+@media (prefers-reduced-motion: no-preference) { .demo-account:hover { transform: translateY(-2px); } }
+.demo-avatar { width: 34px; height: 34px; display: grid; place-items: center; flex-shrink: 0; border-radius: 10px; color: #ffd693; background: linear-gradient(130deg, #8f4b3266, #3e305d); font-size: 12px; font-weight: 700; }
+.demo-account:nth-child(2n) .demo-avatar { color: #a0e4ee; background: linear-gradient(130deg, #26525b, #28364f); }
+.demo-account-content { min-width: 0; flex: 1; }
+.demo-account-heading { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.demo-account h3 { font-size: 14px; margin: 0; }
+.demo-account-heading span { font-size: 10px; color: #aab5c7; }
+.demo-account dl { margin: 9px 0; font-size: 11px; line-height: 1.65; }
+.demo-account dl div { display: flex; gap: 8px; }
+.demo-account dt { width: 54px; color: #9aabc2; flex-shrink: 0; }
+.demo-account dd { margin: 0; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; color: #e8edf6; }
+.demo-account button { color: #f7cb8d; background: #f7cb8d0a; border: 1px solid #f7cb8d40; border-radius: 5px; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; text-align: left; padding: 6px 10px; transition: background .2s; }
+.demo-account button:hover { background: #f7cb8d20; }
+.demo-account button:disabled { opacity: .5; cursor: wait; }
+.demo-account button:focus-visible { outline: 2px solid #f7cb8d; outline-offset: 3px; }
+.auth-demo-panel .demo-disclaimer { font-size: 10px; color: #92a0b4; margin-top: 15px; }
+.demo-new-user { display: flex; gap: 12px; margin-top: 20px; padding-top: 19px; border-top: 1px solid #ffffff20; color: #b8c7dc; }
+.demo-new-user > svg { flex-shrink: 0; color: #f7cb8d; }
+.demo-new-user strong { font-size: 13px; color: #edf2fc; }
+.demo-new-user p { font-size: 11px; line-height: 1.8; margin: 7px 0; }
+.demo-new-user a { font-size: 12px; color: #f7cb8d; }
+@media (max-width: 900px) {
+  .auth-with-demos .auth-layout { grid-template-columns: minmax(0, 1fr); max-width: 600px; gap: 24px; padding-block: 28px; }
+  .auth-with-demos .auth-panel { grid-column: 1; grid-row: 1; justify-self: center; width: 100%; max-width: none; }
+  .auth-with-demos .auth-demo-panel { grid-column: 1; grid-row: 2; }
+  .auth-with-demos .auth-image-caption { display: none; }
+}
+@media (max-width: 460px) {
+  .auth-demo-panel { padding: 20px 16px; }
+  .demo-account { padding: 12px 10px; gap: 9px; }
+  .demo-avatar { width: 28px; height: 30px; }
+  .demo-account dl div { display: block; }
+  .demo-account dt { width: auto; font-size: 10px; }
+}
