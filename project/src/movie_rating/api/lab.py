@@ -44,8 +44,8 @@ def lab_router(settings):
 
     @router.get('/runs/{run_id}/export/{format}')
     def export(run_id: str, format: str):
-        if format not in ('json', 'csv'):
-            raise HTTPException(422, 'Chỉ hỗ trợ JSON và CSV.')
+        if format not in ('json', 'csv', 'xlsx'):
+            raise HTTPException(422, 'Chỉ hỗ trợ JSON, CSV và Excel (XLSX).')
         try:
             job = service.get(run_id)
         except FileNotFoundError as error:
@@ -55,6 +55,10 @@ def lab_router(settings):
         if format == 'csv':
             return Response(service.csv_export(run_id), media_type='text/csv; charset=utf-8',
                             headers={'Content-Disposition': f'attachment; filename="{run_id}.csv"'})
+        if format == 'xlsx':
+            return Response(service.excel_export(run_id),
+                            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            headers={'Content-Disposition': f'attachment; filename="{run_id}.xlsx"'})
         return FileResponse(service.directory / run_id / 'result.json', media_type='application/json', filename=f'{run_id}.json')
 
     @router.get('/document')

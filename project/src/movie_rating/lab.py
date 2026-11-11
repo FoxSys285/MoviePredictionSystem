@@ -5,7 +5,6 @@ import hashlib
 import io
 import json
 import os
-import pickle
 import platform
 import threading
 import time
@@ -14,39 +13,26 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
-from typing import Literal
 from uuid import uuid4
 
 import numpy as np
 import pandas as pd
 import psutil
-from pydantic import BaseModel, Field
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 
-from movie_rating.data.prepare import chronological_split
+from movie_rating.experiment_config import ALGORITHMS, ExperimentRequest
+from movie_rating.experiment_data import ExperimentData
 from movie_rating.models.regression import FeatureRegression
 from movie_rating.windows_dlls import enable_unicode_dll_paths
 
 enable_unicode_dll_paths()
 
-GROUPS = ('rating', 'classification', 'clustering', 'association', 'pca')
+GROUPS = tuple(ALGORITHMS)
 CATALOG = json.loads(Path(__file__).with_name('lab_catalog.json').read_text(encoding='utf-8'))
 
 
-class LabRequest(BaseModel):
-    group: Literal['rating', 'classification', 'clustering', 'association', 'pca']
-    seed: int = Field(default=42, ge=0, le=1_000_000)
-    max_users: int = Field(default=150, ge=10, le=1000)
-    repeats: int = Field(default=1, ge=1, le=3)
-    epochs: int = Field(default=8, ge=2, le=30)
-    positive_threshold: float = Field(default=4, ge=1, le=5, multiple_of=0.5)
-    n_clusters: int = Field(default=4, ge=2, le=12)
-    eps: float = Field(default=1.5, ge=0.1, le=10)
-    min_samples: int = Field(default=5, ge=2, le=30)
-    max_items: int = Field(default=80, ge=10, le=120)
-    min_support: float = Field(default=0.08, ge=0.02, le=0.5)
-    cluster_object: Literal['movies', 'users'] = 'movies'
+LabRequest = ExperimentRequest
 
 
 class Cancelled(Exception):
@@ -82,6 +68,17 @@ def save_json(path, value):
                 time.sleep(.01*(attempt+1))
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def read_json(path):
+    """Windows replacement/antivirus may briefly deny a simultaneous reader."""
+    for attempt in range(8):
+        try:
+            return json.loads(path.read_text(encoding='utf-8'))
+        except PermissionError:
+            if attempt == 7:
+                raise
+            time.sleep(.01 * (attempt + 1))
 
 
 @contextmanager
@@ -218,11 +215,14 @@ class LabService:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='movie-lab')
         self.active = None
         self.cancel_event = threading.Event()
+        self.data = ExperimentData(settings.artifacts_dir / 'data')
 
     def catalog(self):
         data = self.settings.artifacts_dir / 'data'
         manifest = data / 'manifest.json'
-        return {**CATALOG, 'data_ready': all((data / f'{s}.parquet').is_file() for s in ['train', 'validation', 'test', 'movies']),
+        ready = all((data / f'{s}.parquet').is_file() for s in ['train', 'validation', 'test', 'movies'])
+        return {**CATALOG, 'data_ready': ready,
+                'statistics': self.data.catalog_statistics() if ready else None,
                 'dataset': json.loads(manifest.read_text(encoding='utf-8')) if manifest.is_file() else None}
 
     def list_runs(self, group=None):
@@ -231,10 +231,10 @@ class LabService:
         runs = []
         for path in sorted(self.directory.glob('*/job.json'), reverse=True)[:100]:
             try:
-                job = json.loads(path.read_text(encoding='utf-8'))
+                job = read_json(path)
             except (OSError, ValueError):
                 continue
-            if job.get('schema_version') != 2 or job['group'] not in GROUPS:
+            if job.get('schema_version') not in (2, 3) or job['group'] not in GROUPS:
                 continue
             if group is None or job['group'] == group:
                 if job['status'] in ('queued', 'running') and job.get('process_id') != os.getpid():
@@ -248,10 +248,10 @@ class LabService:
         path = self.directory / run_id / 'job.json'
         if not path.is_file():
             raise FileNotFoundError('Không tìm thấy lần chạy.')
-        job = json.loads(path.read_text(encoding='utf-8'))
+        job = read_json(path)
         result = path.with_name('result.json')
         if result.is_file():
-            job['result'] = json.loads(result.read_text(encoding='utf-8'))
+            job['result'] = read_json(result)
         if job['status'] in ('queued', 'running') and job.get('process_id') != os.getpid():
             job.update(status='interrupted', message='Máy chủ đã khởi động lại. Hãy chạy lại thực nghiệm.')
         return job
@@ -265,7 +265,7 @@ class LabService:
             run_id = datetime.now(UTC).strftime('%Y%m%dT%H%M%S') + '-' + uuid4().hex[:8]
             folder = self.directory / run_id
             folder.mkdir(parents=True)
-            job = {'id': run_id, 'group': request.group, 'schema_version': 2, 'status': 'queued', 'progress': 0,
+            job = {'id': run_id, 'group': request.group, 'schema_version': 3, 'status': 'queued', 'progress': 0,
                    'message': 'Đang chuẩn bị dữ liệu', 'created_at': datetime.now(UTC).isoformat(),
                    'request': request.model_dump(), 'process_id': os.getpid(), 'cancel_requested': False}
             save_json(folder / 'job.json', job)
@@ -284,26 +284,7 @@ class LabService:
             return job
 
     def _load(self, request):
-        data = self.settings.artifacts_dir / 'data'
-        frames = [pd.read_parquet(data / f'{s}.parquet') for s in ('train', 'validation', 'test')]
-        all_ratings = pd.concat(frames, ignore_index=True)
-        users = np.sort(all_ratings.userId.unique())
-        rng = np.random.default_rng(request.seed)
-        selected = np.sort(rng.choice(users, min(request.max_users, len(users)), replace=False))
-        sampled = all_ratings.loc[all_ratings.userId.isin(selected)].copy()
-        # Preserve whole sampled histories and recompute strictly global temporal cuts.
-        splits = chronological_split(sampled, 0.7, 0.15)
-        movies = pd.read_parquet(data / 'movies.parquet')
-        manifest = data / 'manifest.json'
-        fingerprint = hashlib.sha256(manifest.read_bytes()).hexdigest() if manifest.exists() else None
-        provenance = {'source': 'Prepared MovieLens sample; complete histories of sampled users',
-                      'prepared_ratings': len(all_ratings), 'sampled_ratings': len(sampled),
-                      'sampled_users': len(selected), 'data_seed': request.seed,
-                      'data_manifest_sha256': fingerprint,
-                      'sample_sha256': hashlib.sha256(pd.util.hash_pandas_object(sampled, index=False).values.tobytes()).hexdigest(),
-                      'splits': {s: {'ratings': len(f), 'users': f.userId.nunique(), 'movies': f.movieId.nunique(),
-                                     'min_timestamp': int(f.timestamp.min()), 'max_timestamp': int(f.timestamp.max())} for s, f in splits.items()}}
-        return splits, movies, native(provenance)
+        return self.data.load(request)
 
     def _run(self, job, request):
         path = self.directory / job['id']
@@ -311,23 +292,28 @@ class LabService:
         def update(progress, message):
             if self.cancel_event.is_set():
                 raise Cancelled()
-            job.update(status='running', progress=int(progress), message=message)
+            job.update(status='running', progress=max(job['progress'], int(progress)), message=message)
             save_json(path / 'job.json', job)
 
         try:
-            update(2, 'Lấy mẫu toàn bộ lịch sử user và chia theo thời gian')
+            update(2, 'Lấy mẫu lịch sử MovieLens, chia 70/15/15 với seed 42')
             splits, movies, provenance = self._load(request)
-            from movie_rating.lab_compact import HANDLERS
+            from movie_rating.experiment_pipeline import execute
 
-            result = HANDLERS[request.group](splits, movies, request, update)
+            result = execute(splits, movies, request, update)
             update(98, 'Lưu bảng tiêu chí, số liệu biểu đồ và dấu vết lần chạy')
             result.update(provenance=provenance, group=request.group, config=request.model_dump(),
                           notes=[*result.get('notes', []),
                                  'Kết quả thuộc mẫu user công bố ở trên; không đại diện tự động cho toàn bộ MovieLens 25M.',
                                  'Chọn cấu hình trên validation; test chỉ báo cáo đánh giá cuối, không dùng để tuning tiếp.'])
             result['runtime'] = {'python': platform.python_version(),
+                                 'config_sha256': hashlib.sha256(json.dumps(request.model_dump(), sort_keys=True).encode()).hexdigest(),
+                                 'platform': platform.platform(), 'processor': platform.processor(),
+                                 'cpu_count': os.cpu_count(), 'ram_bytes': psutil.virtual_memory().total,
+                                 'device': 'CPU', 'time_unit': 'seconds',
+                                 'measurement': 'perf_counter; fit includes preprocessing; RSS process-wide',
                                  'libraries': {name: version(name) for name in ['numpy', 'pandas', 'scikit-learn', 'torch', 'xgboost', 'mlxtend']},
-                                 'code_sha256': hashlib.sha256(b''.join(Path(__file__).with_name(name).read_bytes() for name in ['lab.py', 'lab_compact.py', 'lab_catalog.json'])).hexdigest()}
+                                 'code_sha256': hashlib.sha256(b''.join(p.read_bytes() for p in sorted(Path(__file__).parent.rglob('*.py'))) + Path(__file__).with_name('lab_catalog.json').read_bytes()).hexdigest()}
             save_json(path / 'result.json', result)
             job.update(status='completed', progress=100, message='Đã hoàn tất', finished_at=datetime.now(UTC).isoformat())
         except Cancelled:
@@ -341,11 +327,59 @@ class LabService:
 
     def csv_export(self, run_id):
         job = self.get(run_id)
-        rows = job.get('result', {}).get('rows', [])
-        flattened = [{k: v for k, v in row.items() if not isinstance(v, (list, dict))} for row in rows]
+        flattened = self.export_rows(job)
+        for rule in job.get('result', {}).get('rules', []):
+            flattened.append({'record_type': 'association_rule', **{
+                key: json.dumps(native(value), ensure_ascii=False) if isinstance(value, list) else value
+                for key, value in rule.items()}})
         fields = list(dict.fromkeys(k for row in flattened for k in row))
         buffer = io.StringIO(newline='')
         writer = csv.DictWriter(buffer, fieldnames=fields)
         writer.writeheader()
         writer.writerows(flattened)
         return '\ufeff' + buffer.getvalue()
+
+    @staticmethod
+    def export_rows(job):
+        result = job.get('result', {})
+        rows = []
+        for row in result.get('rows', []):
+            flat = {k: json.dumps(native(v), ensure_ascii=False) if isinstance(v, (list, dict)) else v
+                    for k, v in row.items()}
+            for key, stats in result.get('cv', {}).get(row['algorithm'], {}).get('metrics', {}).items():
+                flat[f'cv_{key}_mean'] = stats['mean']
+                flat[f'cv_{key}_std'] = stats['std']
+            configs = result.get('best_configs', {})
+            config = configs.get(row['algorithm'])
+            if config is None:
+                config = next((v for k, v in configs.items()
+                               if row['algorithm'].startswith(k + '_')), {})
+            flat['best_config'] = json.dumps(config)
+            rows.append(flat)
+        return rows
+
+    def excel_export(self, run_id):
+        job = self.get(run_id)
+        result = job['result']
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            pd.DataFrame(self.export_rows(job)).to_excel(writer, sheet_name='Metrics', index=False)
+            if result.get('rules'):
+                rules = [{k: json.dumps(v, ensure_ascii=False) if isinstance(v, list) else v
+                          for k, v in r.items()} for r in result['rules']]
+                pd.DataFrame(rules).to_excel(writer, sheet_name='Rules', index=False)
+            if result.get('cv'):
+                folds = [{'algorithm': a, **{k: v for k, v in row.items() if not isinstance(v, list)}}
+                         for a, data in result['cv'].items() for row in data['folds']]
+                pd.DataFrame(folds).to_excel(writer, sheet_name='CV folds', index=False)
+            pd.DataFrame({'key': ['request', 'provenance', 'runtime', 'selection'],
+                          'value': [json.dumps(result.get(k, job.get(k)), ensure_ascii=False)
+                                    for k in ['request', 'provenance', 'runtime', 'selection']]}).to_excel(
+                                        writer, sheet_name='Protocol', index=False)
+            # Preserve movie titles literally even if a title starts with '='.
+            for sheet in writer.book:
+                for cells in sheet:
+                    for cell in cells:
+                        if isinstance(cell.value, str):
+                            cell.data_type = 's'
+        return buffer.getvalue()

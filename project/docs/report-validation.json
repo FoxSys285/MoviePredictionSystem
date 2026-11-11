@@ -1,0 +1,24 @@
+﻿{
+    "run_id":  "20261111T125529",
+    "pages":  59,
+    "numbered_figures":  23,
+    "numbered_tables":  35,
+    "automatic_indexes":  3,
+    "covers_preserved":  true,
+    "a4_margins_font_spacing_verified":  true,
+    "active_parts_removed":  true,
+    "files":  [
+                  {
+                      "Path":  "D:\\HUIT\\Học máy\\Movie Rating Prediction\\Nhom05_DoAn.docm",
+                      "Hash":  "69F5E12CB79AA53D31B028415C312369FE7E6B63D0F0CC6AD63F9E6A8119027C"
+                  },
+                  {
+                      "Path":  "D:\\HUIT\\Học máy\\Movie Rating Prediction\\Nhom05_DoAn.pdf",
+                      "Hash":  "CBFD05CFA6BD71832808BDEA037D44DF7A2E881D5A72193AF2BFECDB1D2E9C85"
+                  },
+                  {
+                      "Path":  "D:\\HUIT\\Học máy\\Movie Rating Prediction\\Nhom05_DoAn_HoanThien.zip",
+                      "Hash":  "2A5B356017308F5F39029D17D999E36317E62B12542E2E9499CA45D7961CE11F"
+                  }
+              ]
+}

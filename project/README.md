@@ -1,6 +1,6 @@
 # Ứng dụng học máy dự đoán đánh giá phim — MovieLens 25M
 
-Trang **Thực nghiệm** có sidebar 5 nhóm với 11 thuật toán. Chỉ so sánh các chỉ số đã chốt: hồi quy (4), phân loại (4), phân cụm (3), luật kết hợp (3), PCA (3). Validation và Test hiển thị cùng lúc; mỗi chỉ số có đúng một biểu đồ cột kèm giá trị. Xem [hướng dẫn phòng thực nghiệm](docs/experiment-lab.md).
+Trang **Thực nghiệm** có sidebar sáu nhóm, chạy thuật toán thật trên MovieLens: Regression, Classification, Clustering, Association Rules, Dimensionality Reduction và Reinforcement Learning. Pipeline v3 hỗ trợ 5-Fold CV, chọn cấu hình trên Validation, refit 85%, lịch sử và xuất CSV/Excel/JSON. Xem [hướng dẫn Experiment Studio](docs/experiment-studio.md) và [kết quả xác nhận](docs/experiment-studio-results.md).
 
 Login có 5 tài khoản demo lấy lịch sử từ MovieLens, hiển thị email/mật khẩu và nút
 điền nhanh. [Luồng tài khoản mới và hồ sơ dataset](docs/user-profiles.md) mô tả cách

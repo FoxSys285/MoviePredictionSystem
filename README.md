@@ -1,9 +1,12 @@
 # MoviePredictionSystem
 
 Ứng dụng học máy dự đoán điểm đánh giá phim trên **MovieLens 25M**, gồm backend
-FastAPI, giao diện React/TypeScript và phòng thực nghiệm với 12 phương pháp thuộc
+FastAPI, giao diện React/TypeScript và phòng thực nghiệm với 14 thuật toán/baseline thuộc
 6 nhóm nhiệm vụ. Người dùng có thể tìm phim, xem chi tiết, chấm điểm, quản lý
 Watch History và nhận gợi ý theo lịch sử.
+
+Module thực nghiệm v3 có 5-Fold CV, refit Train + Validation, sáu nhóm thuật toán,
+chạy nền, lịch sử và xuất CSV/Excel. Xem [hướng dẫn sử dụng](project/docs/experiment-studio.md).
 
 ## Chạy trên Windows
 

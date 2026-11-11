@@ -16,6 +16,49 @@ $taskServer = $null
 $taskLaunchLock = $null
 $taskReady = $false
 
+function Find-NodeRuntime {
+    # IDEs and Code Runner may inherit a PATH without Laragon or a recent install.
+    # Look only in known installation locations; do not change the user's PATH.
+    $candidateRoots = @(
+        foreach ($name in @('npm.cmd', 'node.exe')) {
+            foreach ($command in @(Get-Command $name -All -ErrorAction SilentlyContinue)) {
+                Split-Path -Parent $command.Source
+            }
+        }
+        foreach ($directory in @($env:MOVIE_NODE_DIR, $env:NODE_HOME, $env:NVM_SYMLINK)) {
+            if ($directory) { $directory }
+        }
+        foreach ($directory in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA)) {
+            if ($directory) {
+                Join-Path $directory 'nodejs'
+                Join-Path $directory 'Programs\nodejs'
+            }
+        }
+        if ($env:NVM_HOME) {
+            Get-ChildItem -LiteralPath $env:NVM_HOME -Directory -ErrorAction SilentlyContinue |
+                Sort-Object Name -Descending | Select-Object -ExpandProperty FullName
+        }
+        foreach ($drive in @(Get-PSDrive -PSProvider FileSystem)) {
+            $laragonNodeRoot = Join-Path $drive.Root 'laragon\bin\nodejs'
+            Get-ChildItem -LiteralPath $laragonNodeRoot -Directory -ErrorAction SilentlyContinue |
+                Sort-Object Name -Descending | Select-Object -ExpandProperty FullName
+        }
+    )
+    $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+    foreach ($directory in @($candidateRoots | Select-Object -Unique)) {
+        $nodePath = Join-Path $directory 'node.exe'
+        $npmCliPath = Join-Path $directory 'node_modules\npm\bin\npm-cli.js'
+        if (-not (Test-Path -LiteralPath $nodePath -PathType Leaf) -and $nodeCommand) {
+            $nodePath = $nodeCommand.Source
+        }
+        if ((Test-Path -LiteralPath $nodePath -PathType Leaf) -and
+            (Test-Path -LiteralPath $npmCliPath -PathType Leaf)) {
+            return [pscustomobject]@{ Node = $nodePath; NpmCli = $npmCliPath }
+        }
+    }
+    throw 'Cannot find Node.js with npm. Set MOVIE_NODE_DIR to its installation folder (containing node.exe and node_modules\npm), or install Node.js LTS and restart VS Code.'
+}
+
 function Get-PortListener {
     @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty OwningProcess -Unique)
@@ -94,24 +137,53 @@ try {
         throw 'Another launch is building or starting the project. Wait for it to finish.'
     }
     Assert-ProjectPort
-    if (-not (Test-Path -LiteralPath $taskCli)) {
+    $taskPythonWorks = $false
+    if (Test-Path -LiteralPath $taskPython) {
+        try {
+            & $taskPython -c 'import sys; sys.exit(0 if (3, 12) <= sys.version_info[:2] < (3, 14) else 1)' *> $null
+            $taskPythonWorks = $LASTEXITCODE -eq 0
+        } catch { }
+    }
+    if (-not $taskPythonWorks -or -not (Test-Path -LiteralPath $taskCli)) {
         & (Join-Path $PSScriptRoot 'setup.ps1')
         if ($LASTEXITCODE -ne 0) { throw 'Python environment setup failed.' }
     }
-    $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
-    if (-not $npmCommand) { throw 'Node.js/npm is required to build the latest frontend.' }
+    $taskNodeRuntime = Find-NodeRuntime
+    $taskNode = $taskNodeRuntime.Node
+    $taskNpmCli = $taskNodeRuntime.NpmCli
+    Write-Host "Node.js: $taskNode"
+    try {
+        & $taskNode --version | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Node.js version check failed.' }
+    } catch {
+        # A readable executable can still be locked against execution by another
+        # process. Use a project-local copy without stopping unrelated services.
+        Write-Host 'Installed Node.js cannot start. Trying a project-local runtime...'
+        $taskRuntimeRoot = Join-Path $taskArtifacts 'node-runtime'
+        New-Item -ItemType Directory -Path $taskRuntimeRoot -Force | Out-Null
+        $taskLocalNode = Join-Path $taskRuntimeRoot 'node.exe'
+        Copy-Item -LiteralPath $taskNode -Destination $taskLocalNode -Force
+        $taskNode = $taskLocalNode
+        & $taskNode --version
+        if ($LASTEXITCODE -ne 0) { throw 'The project-local Node.js runtime could not start. Repair the Node.js installation.' }
+    }
 
     Write-Host "Project: $taskProjectRoot"
     Write-Host 'Building the latest frontend from this project...'
+    $taskPreviousPath = $env:PATH
     Push-Location -LiteralPath $taskFrontendRoot
     try {
+        $env:PATH = "$(Split-Path -Parent $taskNode);$taskPreviousPath"
         if (-not (Test-Path -LiteralPath 'node_modules')) {
-            & $npmCommand.Source ci
+            & $taskNode $taskNpmCli ci
             if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
         }
-        & $npmCommand.Source run build
+        & $taskNode $taskNpmCli run build
         if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed. The previous server was left running.' }
-    } finally { Pop-Location }
+    } finally {
+        $env:PATH = $taskPreviousPath
+        Pop-Location
+    }
 
     $indexPath = Join-Path $taskFrontendRoot 'dist\index.html'
     $indexHtml = Get-Content -LiteralPath $indexPath -Raw -Encoding UTF8

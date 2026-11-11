@@ -30,6 +30,14 @@ def regression_scores(actual, predicted):
             'r2': float(1-np.sum(error**2)/total) if len(actual) > 1 and total > 0 else None}
 
 
+def classification_scores(actual, predicted):
+    options = dict(labels=[0, 1], average='macro', zero_division=0)
+    return {'accuracy': accuracy_score(actual, predicted),
+            'precision': precision_score(actual, predicted, **options),
+            'recall': recall_score(actual, predicted, **options),
+            'f1': f1_score(actual, predicted, **options)}
+
+
 def comparison_charts(group_id, rows):
     group = next(g for g in CATALOG['groups'] if g['id'] == group_id)
     algorithms = list(dict.fromkeys((r['algorithm'], r['name']) for r in rows))
@@ -82,7 +90,7 @@ def classification(splits, movies, request, update):
     labels = {s: (f.rating.to_numpy() >= request.positive_threshold).astype(int) for s, f in splits.items()}
     if len(np.unique(labels['train'])) < 2:
         raise ValueError('Train chỉ có một lớp. Hãy tăng mẫu hoặc đổi ngưỡng rating thích.')
-    seed_rows = []
+    seed_rows, selected_thresholds = [], []
     for repeat in range(request.repeats):
         estimators = [
             ('logistic', 'Logistic Regression', make_pipeline(StandardScaler(), LogisticRegression(max_iter=500, random_state=request.seed+repeat))),
@@ -93,16 +101,16 @@ def classification(splits, movies, request, update):
             estimator.fit(x_train, labels['train'])
             probabilities = [estimator.predict_proba(x)[:, 1] for x in heldouts]
             thresholds = np.linspace(.1, .9, 33)
-            threshold = max(thresholds, key=lambda t: (f1_score(labels['validation'], probabilities[0] >= t, zero_division=0), -abs(t-.5)))
+            threshold = max(thresholds, key=lambda t: (f1_score(labels['validation'], probabilities[0] >= t, labels=[0, 1], average='macro', zero_division=0), -abs(t-.5)))
+            selected_thresholds.append((aid, repeat, threshold))
             for split, probability in zip(('validation', 'test'), probabilities):
                 predicted, actual = probability >= threshold, labels[split]
                 seed_rows.append({'algorithm': aid, 'name': name, 'split': split,
-                                  'accuracy': accuracy_score(actual, predicted),
-                                  'precision': precision_score(actual, predicted, zero_division=0),
-                                  'recall': recall_score(actual, predicted, zero_division=0),
-                                  'f1': f1_score(actual, predicted, zero_division=0)})
+                                  **classification_scores(actual, predicted)})
     rows = [r for split in ('validation', 'test') for r in summarize([r for r in seed_rows if r['split'] == split])]
-    return report('classification', rows, ['Precision, Recall, F1 tính cho lớp thích. Ngưỡng xác suất được chọn theo F1 validation và giữ nguyên khi đánh giá test.'])
+    result = report('classification', rows, ['Precision, Recall và F1 là trung bình macro của hai lớp (nhãn 0 và 1). Ngưỡng xác suất chọn theo F1 macro validation, khóa trước test.'])
+    result['thresholds'] = [{'algorithm': aid, 'seed': request.seed + repeat, 'threshold': float(threshold)} for aid, repeat, threshold in selected_thresholds]
+    return result
 
 
 def object_matrix(frame, movies, request, genres, eligible_movies=None):

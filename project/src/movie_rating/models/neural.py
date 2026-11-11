@@ -106,6 +106,11 @@ class NeuralCF(BiasBaseline):
                 self.network.eval()
                 row = {"epoch": epoch + 1, "train_mse": total / len(values)}
                 if validation is not None and len(validation):
+                    train_prediction = self.predict(ratings.userId, ratings.movieId)
+                    row["train_rating_mse"] = float(
+                        np.mean((ratings.rating.to_numpy() - train_prediction) ** 2)
+                    )
+                if validation is not None and len(validation):
                     predicted = self.predict(validation.userId, validation.movieId)
                     score = float(np.sqrt(np.mean((validation.rating.to_numpy() - predicted) ** 2)))
                     row["validation_rmse"] = score

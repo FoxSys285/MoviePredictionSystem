@@ -1,0 +1,49 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
+
+const source=await build({entryPoints:[fileURLToPath(new URL('../src/lib/metric-references.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false});
+const {assessMetric,referenceValue}=await import(`data:text/javascript;base64,${Buffer.from(source.outputFiles[0].text).toString('base64')}`);
+const catalog=JSON.parse(await readFile(new URL('../../src/movie_rating/lab_catalog.json',import.meta.url),'utf8'));
+const groups=Object.fromEntries(catalog.groups.map(g=>[g.id,g]));
+const metric=(group,key)=>groups[group].metrics.find(m=>m.key===key);
+const empty={rows:[]};
+for(const group of catalog.groups)for(const m of group.metrics){
+  assert.ok(m.reference,`${group.id}/${m.key} must have a reference`);
+  assert.ok(m.reference.rationale&&m.reference.caution&&m.reference.interpretation);
+  assert.equal(typeof m.reference.value,'number');
+  assert.equal(assessMetric(m,{[m.key]:null},empty).tone,'neutral');
+}
+const accuracy=metric('classification','accuracy');
+assert.equal(assessMetric(accuracy,{accuracy:.8},empty).tone,'good');
+assert.equal(assessMetric(accuracy,{accuracy:.69},empty).tone,'bad');
+assert.equal(assessMetric(accuracy,{accuracy:.7},empty).tone,'good');
+assert.equal(assessMetric(accuracy,{accuracy:.8},empty,{accuracy:.85}).tone,'bad');
+assert.equal(referenceValue(accuracy,{accuracy:NaN}),.7);
+assert.equal(referenceValue(accuracy,{accuracy:2}),.7);
+const imbalance={rows:[],class_balance:{train:{positive:90,negative:10},test:{positive:85,negative:15}}};
+assert.equal(assessMetric(accuracy,{split:'test',accuracy:.8},imbalance).tone,'caution');
+// The majority class is learned from Train, not retrospectively from Test.
+assert.equal(assessMetric(accuracy,{split:'test',accuracy:.8},{rows:[],class_balance:{train:{positive:10,negative:90},test:{positive:85,negative:15}}}).tone,'good');
+assert.equal(assessMetric(metric('rating','rmse'),{rmse:.8},empty).tone,'good');
+assert.equal(assessMetric(metric('rating','rmse'),{rmse:1.2},empty).tone,'bad');
+assert.equal(assessMetric(metric('association','lift'),{lift:1},empty).tone,'neutral');
+assert.equal(assessMetric(metric('association','lift'),{lift:1.2},empty).tone,'good');
+assert.equal(assessMetric(metric('association','lift'),{lift:.8},empty).tone,'bad');
+assert.equal(assessMetric(metric('rating','fit_seconds'),{fit_seconds:61},empty).label,'Vượt ngân sách');
+const components=metric('pca','components');
+assert.equal(assessMetric(components,{components:4,explained_variance_ratio:.5,reconstruction_error:.5},empty,{},groups.pca.metrics).tone,'caution');
+assert.equal(assessMetric(components,{components:8,explained_variance_ratio:.95,reconstruction_error:.05},empty,{},groups.pca.metrics).tone,'good');
+const reward=metric('reinforcement','average_reward');
+const row={algorithm:'q_learning',split:'test',evaluation_episodes:100,average_reward:.2};
+const baseline={rows:[{algorithm:'random',split:'test',evaluation_episodes:100,average_reward:.1},{algorithm:'popular',split:'test',evaluation_episodes:100,average_reward:.15}]};
+assert.equal(assessMetric(reward,row,baseline).tone,'good');
+assert.equal(assessMetric(reward,{...row,average_reward:.15},baseline).tone,'neutral');
+assert.equal(assessMetric(reward,{...row,average_reward:.12},baseline).tone,'bad');
+assert.equal(assessMetric(reward,row,empty).label,'Thiếu baseline');
+assert.equal(assessMetric(reward,{...row,evaluation_episodes:10},baseline).tone,'caution');
+assert.equal(assessMetric(reward,{...row,algorithm:'popular'},baseline).label,'Baseline đối chiếu');
+const negative={rows:baseline.rows.map(r=>({...r,average_reward:r.algorithm==='random'?-.5:-.2}))};
+assert.equal(assessMetric(reward,{...row,average_reward:-.1},negative).tone,'good');
+console.log('PASS metric references: all criteria, boundaries, custom values, majority baseline, Lift neutrality, budgets, PCA quality and matched RL baselines.');

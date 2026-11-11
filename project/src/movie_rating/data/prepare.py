@@ -56,6 +56,27 @@ def chronological_split(ratings: pd.DataFrame, train_fraction: float, validation
     return {"train": train, "validation": validation.copy(), "test": test.copy()}
 
 
+def user_chronological_split(ratings, minimum_ratings=10):
+    """Personalization protocol: strict temporal boundaries within each user.
+
+    Users with short histories or inseparable timestamp groups are excluded.
+    Other users' timelines can overlap; this is not a global future simulation.
+    """
+    parts = {name: [] for name in ('train', 'validation', 'test')}
+    for _, history in ratings.groupby('userId', sort=True):
+        if len(history) < minimum_ratings:
+            continue
+        try:
+            split = chronological_split(history, .7, .15)
+        except ValueError:
+            continue
+        for name, frame in split.items():
+            parts[name].append(frame)
+    if not parts['train']:
+        raise ValueError('Không đủ user có ít nhất 10 rating và ba khoảng thời gian tách biệt.')
+    return {name: pd.concat(frames, ignore_index=True) for name, frames in parts.items()}
+
+
 def prepare(settings: Settings) -> dict:
     destination = settings.artifacts_dir / "data"
     if destination.exists() and any(destination.iterdir()):
