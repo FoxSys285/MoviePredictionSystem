@@ -42,6 +42,15 @@ rating gần nhất, cùng các thống kê và thể loại trước đây. Hà
 đóng góp nhãn của chính hàng đó; thống kê không đọc rating held-out. Genre tĩnh
 của phim mới có thể dùng, nhưng lịch sử rating của phim đó không được dùng.
 
+## Card trạng thái và thời gian chạy
+
+Khi bấm Chạy, card xuất hiện ngay với đồng hồ `00:00`, tăng mỗi giây theo dạng
+`mm:ss` (chuyển sang `hh:mm:ss` từ một giờ). Card vàng khi đang gửi/chờ/chạy;
+chuyển xanh lá khi thành công. Lỗi có card đỏ, dừng/gián đoạn có màu trung tính.
+Đồng hồ dừng theo `finished_at`, giữ nguyên khi tải lại trang hoặc xem lịch sử;
+lượt cũ thiếu mốc kết thúc hiển thị `--:--`. Thời gian tính từ lúc gửi yêu cầu,
+bao gồm chuẩn bị dữ liệu, CV và refit, không chỉ thời gian fit mô hình.
+
 ## Nhật ký hồi quy và phân loại
 
 Khung **Nhật ký thực nghiệm** nằm ngay dưới thanh tiến độ, cao 50% viewport,

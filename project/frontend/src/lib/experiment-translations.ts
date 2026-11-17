@@ -1,4 +1,8 @@
 export const experimentTranslations: Record<string, string> = {
+  "Trạng thái thực nghiệm": "Experiment status",
+  "Thời gian đã chạy": "Elapsed time",
+  "Tổng thời gian": "Total time",
+  "Thời gian thực nghiệm": "Experiment duration",
   "THỰC NGHIỆM": "EXPERIMENTS",
   "Khu vực thực nghiệm đang được làm lại": "The experiments section is being rebuilt",
   "Phần thực nghiệm": "Experiments",

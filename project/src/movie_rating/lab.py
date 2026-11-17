@@ -262,6 +262,7 @@ class LabService:
         return job
 
     def start(self, request):
+        requested_at = datetime.now(UTC).isoformat()
         if not self.catalog()['data_ready']:
             raise FileNotFoundError('Chưa có dữ liệu đã chuẩn bị. Hãy chuẩn bị dữ liệu trước khi thực nghiệm.')
         with self.lock:
@@ -271,7 +272,7 @@ class LabService:
             folder = self.directory / run_id
             folder.mkdir(parents=True)
             job = {'id': run_id, 'group': request.group, 'schema_version': 3, 'status': 'queued', 'progress': 0,
-                   'message': 'Đang chuẩn bị dữ liệu', 'created_at': datetime.now(UTC).isoformat(),
+                   'message': 'Đang chuẩn bị dữ liệu', 'created_at': requested_at,
                    'request': request.model_dump(), 'process_id': os.getpid(), 'cancel_requested': False}
             save_json(folder / 'job.json', job)
             if request.group in ('rating', 'classification'):

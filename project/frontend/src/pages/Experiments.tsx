@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, AlertCircle, CheckCircle2, ChevronRight, Download, FlaskConical, Layers, Loader2, Minimize2, Network, Play, RefreshCw, Square, Target } from "lucide-react";
+import { Activity, AlertCircle, ChevronRight, Download, FlaskConical, Layers, Loader2, Minimize2, Network, Play, RefreshCw, Target } from "lucide-react";
 import { PageHero } from "../components/ui";
 import { LabChartFigure } from "../components/LabChart";
 import { ExperimentResults, DatasetSummary } from "../components/ExperimentResults";
 import { ExperimentConfiguration, experimentDefaults } from "../components/ExperimentConfig";
 import { ExperimentLog } from "../components/ExperimentLog";
+import { ExperimentJobStatus } from "../components/ExperimentJobStatus";
 import { MetricReferenceTable, useMetricReferenceSettings } from "../components/MetricReferences";
 import { api, apiResourceUrl } from "../lib/api";
 import { ExperimentSuccessSound } from "../lib/experiment-sound";
@@ -47,6 +48,7 @@ export function Experiments() {
   const [algorithmChoices,setAlgorithmChoices]=useState<Record<string,string[]>>({});
   const referenceSettings=useMetricReferenceSettings();
   const [submitting,setSubmitting]=useState(false),[error,setError]=useState(""),[reload,setReload]=useState(0);
+  const [submissionStartedAt,setSubmissionStartedAt]=useState<string|null>(null);
   const groupId=params.get("group")||"rating";
   const group=catalog?.groups.find(g=>g.id===groupId)||catalog?.groups[0];
   const groupRuns=runs.filter(r=>r.group===group?.id);
@@ -54,6 +56,10 @@ export function Experiments() {
   const visibleJob=job?.group===group?.id ? job : null;
   const active=runs.find(busy);
   const algorithms=group ? algorithmChoices[group.id]??group.algorithms.map(a=>a.id) : [];
+  const statusJob:LabJob|null=submitting&&group&&submissionStartedAt?{
+    id:"submitting",group:group.id,status:"queued",progress:0,
+    message:"Đang gửi yêu cầu thực nghiệm…",created_at:submissionStartedAt,
+  }:visibleJob;
   useEffect(()=>{
     const arm=()=>successSound.arm();
     window.addEventListener("pointerdown",arm,{capture:true,once:true});
@@ -89,10 +95,10 @@ export function Experiments() {
   },[selectedId,reload,successSound]);
   useEffect(()=>{setError("");},[group?.id]);
   async function start(){
-    if(!group)return;setSubmitting(true);setError("");
+    if(!group)return;setSubmissionStartedAt(new Date().toISOString());setSubmitting(true);setError("");
     successSound.arm();
     try {const response=await api<LabJob>("/experiment-lab/runs",{method:"POST",body:JSON.stringify({...config,group:group.id,algorithms})});successSound.track(response.id);setRuns(v=>[response,...v]);setChosen(v=>({...v,[group.id]:response.id}));setJob(response);}
-    catch(e){setError((e as Error).message);}finally{setSubmitting(false);}
+    catch(e){setError((e as Error).message);}finally{setSubmitting(false);setSubmissionStartedAt(null);}
   }
   async function stop(id:string){try {await api(`/experiment-lab/runs/${id}/cancel`,{method:"POST"});setReload(v=>v+1);}catch(e){setError((e as Error).message);}}
   return <div className="lab-page"><PageHero title={t("THỰC NGHIỆM")} subtitle="MovieLens Research Studio · Huấn luyện thật. Đánh giá minh bạch." variant="experiments"/>
@@ -112,8 +118,8 @@ export function Experiments() {
           {error&&<div className="lab-alert" role="alert"><AlertCircle size={18}/><p>{error}</p><button className="lab-outline" onClick={()=>{setError("");setReload(v=>v+1);}}>{t("Thử lại")}</button></div>}
           {active&&active.id!==visibleJob?.id&&<div className="lab-active-other" role="status"><Loader2 size={16} className="lab-spin"/><p>{t("Đang chạy nhóm")}: {catalog?.groups.find(g=>g.id===active.group)?.title}</p><button className="lab-outline" onClick={()=>void stop(active.id)}>{t("Dừng")}</button></div>}
           {!!groupRuns.length&&<label className="lab-history">{t("Lịch sử thực nghiệm")}<select value={selectedId||""} onChange={e=>setChosen(v=>({...v,[group.id]:e.target.value}))}>{groupRuns.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("vi-VN")} · {t(statuses[r.status])}</option>)}</select></label>}
-          {visibleJob&&<div className={`lab-job lab-job-${visibleJob.status}`} role="status" aria-live="polite"><div>{busy(visibleJob)?<Loader2 size={20} className="lab-spin"/>:visibleJob.status==="completed"?<CheckCircle2 size={20}/>:<AlertCircle size={20}/>}<div><strong>{t(statuses[visibleJob.status])}{busy(visibleJob)?` · ${visibleJob.progress}%`:""}</strong><p>{visibleJob.message}</p></div>{busy(visibleJob)&&<button className="lab-outline" disabled={visibleJob.cancel_requested} onClick={()=>void stop(visibleJob.id)}><Square size={13}/>{t("Dừng")}</button>}</div>{busy(visibleJob)&&<progress aria-label={t("Tiến độ thực nghiệm")} max={100} value={visibleJob.progress}/>}</div>}
-          {visibleJob&&["rating","classification"].includes(visibleJob.group)&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
+          {statusJob&&<ExperimentJobStatus key={`status-${statusJob.id}`} job={statusJob} statusLabel={t(statuses[statusJob.status])} onCancel={!submitting?()=>void stop(statusJob.id):undefined}/>}
+          {!submitting&&visibleJob&&["rating","classification"].includes(visibleJob.group)&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
         </section>
         {visibleJob?.status==="completed"&&visibleJob.result?.schema_version===3?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group} references={referenceSettings.settings[group.id]||{}}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ. Chạy lại để áp dụng pipeline hiện tại và 3-Fold CV.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:!visibleJob&&<section className="lab-empty" role="status"><FlaskConical size={28}/><h2>{t("Chưa có kết quả thực nghiệm")}</h2><p>Chọn thuật toán và chạy để tạo báo cáo từ dữ liệu MovieLens thật.</p></section>}
       </>}

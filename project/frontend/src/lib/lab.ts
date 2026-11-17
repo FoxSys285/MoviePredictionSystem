@@ -20,7 +20,7 @@ export type LabResult = {
   runtime?:{isolated_process?:boolean;memory_budget_mb?:number;worker_peak_private_mb?:number;system_min_available_mb?:number;processor:string;cpu_count:number;ram_bytes:number;device:string;python:string;platform:string};
   provenance: { exclusions?:{excluded_users:number;excluded_ratings:number}; protocol?: string; sampled_ratings: number; sampled_users: number; sample?:DatasetStats; prepared?:DatasetStats; splits: Record<string, { ratings: number }> };
 };
-export type LabJob = { id: string; group: LabGroupId; status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted"; progress: number; message: string; created_at: string; cancel_requested?: boolean; result?: LabResult };
+export type LabJob = { id: string; group: LabGroupId; status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted"; progress: number; message: string; created_at: string; finished_at?: string; cancel_requested?: boolean; result?: LabResult };
 export const busy = (job: LabJob) => ["queued", "running"].includes(job.status);
 export const metricNumber = (value: unknown, language = "vi") => {
   if (typeof value !== "number" || !Number.isFinite(value)) return "N/A";
