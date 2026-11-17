@@ -8,6 +8,7 @@ import os
 import platform
 import threading
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -23,6 +24,7 @@ from sklearn.preprocessing import StandardScaler
 
 from movie_rating.experiment_config import ALGORITHMS, ExperimentRequest
 from movie_rating.experiment_data import ExperimentData
+from movie_rating.experiment_logs import RunLogger, log_page
 from movie_rating.models.regression import FeatureRegression, StreamingLinearRegression
 from movie_rating.windows_dlls import enable_unicode_dll_paths
 
@@ -272,6 +274,10 @@ class LabService:
                    'message': 'Đang chuẩn bị dữ liệu', 'created_at': datetime.now(UTC).isoformat(),
                    'request': request.model_dump(), 'process_id': os.getpid(), 'cancel_requested': False}
             save_json(folder / 'job.json', job)
+            if request.group in ('rating', 'classification'):
+                RunLogger(folder).write(
+                    f"Đã tạo thực nghiệm {request.group} · thuật toán: {', '.join(request.algorithms)}",
+                    progress=0)
             self.active = run_id
             self.cancel_event.clear()
             self.executor.submit(self._run, job, request)
@@ -284,7 +290,20 @@ class LabService:
                 self.cancel_event.set()
                 job.update(cancel_requested=True, message='Đang dừng sau bước tính toán hiện tại…')
                 save_json(self.directory / run_id / 'job.json', job)
+                if job['group'] in ('rating', 'classification'):
+                    RunLogger(self.directory / run_id).write('Đã nhận yêu cầu dừng.', 'warning')
             return job
+
+    def logs_directory(self, run_id):
+        if not run_id or any(c not in '0123456789abcdefT-' for c in run_id):
+            raise FileNotFoundError('Không tìm thấy lần chạy.')
+        directory = self.directory / run_id
+        if not (directory / 'job.json').is_file():
+            raise FileNotFoundError('Không tìm thấy lần chạy.')
+        return directory
+
+    def logs(self, run_id, cursor=0, limit=200):
+        return log_page(self.logs_directory(run_id), cursor, limit)
 
     def _load(self, request):
         return self.data.load(request)
@@ -303,17 +322,32 @@ class LabService:
                 if self.active == job['id']:
                     job.update(status='failed', message=f'{type(error).__name__}: {error}',
                                finished_at=datetime.now(UTC).isoformat())
+                    if request.group in ('rating', 'classification'):
+                        RunLogger(self.directory / job['id']).write(job['message'], 'error')
                     save_json(self.directory / job['id'] / 'job.json', job)
                     self.active = None
 
     def _run_inline(self, job, request):
         path = self.directory / job['id']
+        logger = RunLogger(path) if request.group in ('rating', 'classification') else None
+        last_write = 0.0
+        previous_message = None
 
         def update(progress, message):
+            nonlocal last_write, previous_message
             if self.cancel_event.is_set():
                 raise Cancelled()
-            job.update(status='running', progress=max(job['progress'], int(progress)), message=message)
-            save_json(path / 'job.json', job)
+            previous_progress = job['progress']
+            next_progress = previous_progress if progress is None else max(
+                previous_progress, int(progress))
+            job.update(status='running', progress=next_progress, message=message)
+            if logger and message != previous_message:
+                logger.write(message, progress=next_progress if progress is not None else None)
+                previous_message = message
+            now = time.monotonic()
+            if now - last_write >= 1 or next_progress != previous_progress:
+                save_json(path / 'job.json', job)
+                last_write = now
 
         try:
             message = (
@@ -323,6 +357,8 @@ class LabService:
             )
             update(2, message)
             splits, movies, provenance = self._load(request)
+            update(None, 'Đã nạp dữ liệu · ' + ' · '.join(
+                f'{name}: {len(frame):,} rating' for name, frame in splits.items()))
             from movie_rating.experiment_pipeline import execute
 
             result = execute(splits, movies, request, update)
@@ -352,10 +388,17 @@ class LabService:
                                  'code_sha256': hashlib.sha256(b''.join(p.read_bytes() for p in sorted(Path(__file__).parent.rglob('*.py'))) + Path(__file__).with_name('lab_catalog.json').read_bytes()).hexdigest()}
             save_json(path / 'result.json', result)
             job.update(status='completed', progress=100, message='Đã hoàn tất', finished_at=datetime.now(UTC).isoformat())
+            if logger:
+                logger.write('Đã hoàn tất và lưu kết quả thực nghiệm.', 'success', progress=100)
         except Cancelled:
             job.update(status='cancelled', message='Đã dừng; không công bố kết quả chạy dở.', finished_at=datetime.now(UTC).isoformat())
+            if logger:
+                logger.write(job['message'], 'warning')
         except Exception as error:
             job.update(status='failed', message=f'{type(error).__name__}: {error}', finished_at=datetime.now(UTC).isoformat())
+            if logger:
+                logger.write(job['message'], 'error')
+                logger.write(traceback.format_exc(limit=8), 'error')
         finally:
             if self.data.full_statistics and self.data.full_statistics['ratings'] >= 1_000_000:
                 self.data.sample = self.data.sample_key = None

@@ -1,6 +1,7 @@
 """Three train-only folds, validation selection, frozen refit and final test."""
 
 import gc
+import json
 import time
 
 import numpy as np
@@ -106,15 +107,19 @@ def rating_model(algorithm, config, request, epochs=None):
 
 
 def fit_rating(
-    algorithm, config, request, train, movies, validation=None, epochs=None, progress=None
+    algorithm, config, request, train, movies, validation=None, epochs=None, progress=None, log=None
 ):
     model = rating_model(algorithm, config, request, epochs)
     if hasattr(model, "set_movie_metadata"):
         model.set_movie_metadata(movies)
     if algorithm == "ncf":
-        model.fit(train, validation=validation, progress=progress)
+        model.fit(train, validation=validation, progress=progress, report=log)
     elif algorithm == "svd":
-        model.fit(train, progress=progress)
+        model.fit(train, progress=progress, report=log)
+    elif algorithm == "xgboost":
+        model.fit(train, progress=progress, report=log)
+    elif algorithm == "linear":
+        model.fit(train, progress=progress, report=log)
     else:
         model.fit(train)
     return model
@@ -126,23 +131,46 @@ def classifier(algorithm, config):
     return RandomForestClassifier(**config, n_jobs=1, random_state=42)
 
 
-def feature_fit(train, targets, movies, algorithm, config):
+def feature_fit(train, targets, movies, algorithm, config, report=None):
+    if report:
+        report(f"Tạo thống kê và hồ sơ từ {len(train):,} rating Train.")
     builder = LinearRating()
     builder.set_movie_metadata(movies)
     builder.fit_statistics(train)
+    if report:
+        report(f"Đã tạo {builder.feature_count} đặc trưng, loại nhãn của hàng huấn luyện.")
     estimator = classifier(algorithm, config)
     scaler = None
     if algorithm == "logistic":
+        if report:
+            report("Đang chuẩn hóa đặc trưng theo batch (StandardScaler).")
         scaler = StandardScaler(copy=False)
         for features in builder.iter_features(train, training=True):
             scaler.partial_fit(features)
     with feature_buffer(
         len(train), builder.feature_count, builder.iter_features(train, training=True)
     ) as features:
+        if report:
+            storage = "file memmap trên đĩa" if isinstance(features, np.memmap) else "RAM"
+            report(f"Đã tạo đặc trưng {features.shape[0]:,} × {features.shape[1]} · {storage}.")
         if scaler is not None:
             for start in range(0, len(features), BATCH_ROWS):
                 scaler.transform(features[start : start + BATCH_ROWS], copy=False)
+        if report:
+            report(
+                f"Bắt đầu tối ưu Logistic bằng SAGA · C={config['C']} · "
+                f"tối đa {config['max_iter']} vòng."
+                if algorithm == "logistic"
+                else f"Bắt đầu Random Forest · {config['n_estimators']} cây · "
+                f"depth={config['max_depth']} · min_samples_leaf={config['min_samples_leaf']}."
+            )
         estimator.fit(features, (train.rating >= 3.5).to_numpy(dtype=np.int8))
+        if report:
+            report(
+                f"Đã fit Logistic · {int(estimator.n_iter_.max())} vòng tối ưu."
+                if algorithm == "logistic"
+                else f"Đã fit xong {len(estimator.estimators_)} cây Random Forest."
+            )
     if scaler is not None:
         # Prediction receives freshly built batches, so scaler can transform in place.
         estimator = make_pipeline(scaler, estimator)
@@ -180,11 +208,25 @@ def supervised(splits, movies, request, update):
     total_work = all_candidates + len(request.algorithms) * (CV_FOLDS + 1)
     step = 0
     for algorithm in request.algorithms:
+        unit = "cây" if algorithm == "xgboost" else "rating" if algorithm == "linear" else "epoch"
+        update(None, f"Bắt đầu {NAMES[algorithm]} · {len(train):,} rating Train.")
         options = []
         for config in candidates(algorithm, request):
+            update(
+                None,
+                f"{NAMES[algorithm]} · cấu hình {len(options) + 1}: "
+                f"{json.dumps(config, ensure_ascii=False, sort_keys=True)}",
+            )
             update(8 + 85 * step / total_work, f"{NAMES[algorithm]} · lựa chọn trên Validation")
             if binary:
-                builder, model, xs = feature_fit(train, [validation], movies, algorithm, config)
+                builder, model, xs = feature_fit(
+                    train,
+                    [validation],
+                    movies,
+                    algorithm,
+                    config,
+                    report=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
+                )
                 probability = classification_predict(builder, model, validation)
                 threshold = max(
                     np.linspace(0.1, 0.9, 33),
@@ -206,8 +248,9 @@ def supervised(splits, movies, request, update):
                     progress=lambda epoch, total: update(
                         8 + 85 * (step + epoch / total) / total_work,
                         f"{NAMES[algorithm]} · huấn luyện/chọn trên Validation · "
-                        f"epoch {epoch}/{total}",
+                        f"{unit} {epoch}/{total}",
                     ),
+                    log=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
                 )
                 val_scores = regression_scores(
                     validation.rating, model.predict(validation.userId, validation.movieId)
@@ -224,6 +267,13 @@ def supervised(splits, movies, request, update):
                     "learning_curve": getattr(model, "learning_curve", []),
                 }
             )
+            score_name = "F1" if binary else "RMSE"
+            score_value = val_scores["f1" if binary else "rmse"]
+            update(
+                None,
+                f"{NAMES[algorithm]} · Validation {score_name}={score_value:.6f}"
+                + (f" · ngưỡng={threshold:.3f}" if binary else ""),
+            )
             del model
             if binary:
                 del builder, probability, xs
@@ -233,6 +283,11 @@ def supervised(splits, movies, request, update):
         selected = sorted(
             options, key=lambda o: -o["validation"][key] if binary else o["validation"][key]
         )[0]
+        update(
+            None,
+            f"{NAMES[algorithm]} · đã chọn cấu hình trên Validation; "
+            f"bắt đầu {CV_FOLDS} lượt CV thời gian.",
+        )
         # Select on Validation first; CV is diagnostic, not another candidate search.
         fold_rows = []
         for index, (fit_idx, score_idx) in enumerate(temporal_folds(train, CV_FOLDS)):
@@ -244,7 +299,12 @@ def supervised(splits, movies, request, update):
             with measured() as timing:
                 if binary:
                     builder, model, _ = feature_fit(
-                        fit, [held], movies, algorithm, selected["config"]
+                        fit,
+                        [held],
+                        movies,
+                        algorithm,
+                        selected["config"],
+                        report=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
                     )
                 else:
                     model = fit_rating(
@@ -256,8 +316,9 @@ def supervised(splits, movies, request, update):
                         progress=lambda epoch, total: update(
                             8 + 85 * (step + epoch / total) / total_work,
                             f"{NAMES[algorithm]} · CV {index + 1}/{CV_FOLDS} · "
-                            f"epoch {epoch}/{total}",
+                            f"{unit} {epoch}/{total}",
                         ),
+                        log=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
                     )
             start = time.perf_counter()
             prediction = (
@@ -280,6 +341,12 @@ def supervised(splits, movies, request, update):
                     "fit_ratings": len(fit),
                     "held_ratings": len(held),
                 }
+            )
+            update(
+                None,
+                f"{NAMES[algorithm]} · xong CV {index + 1}/{CV_FOLDS} · "
+                f"{score_name}={scores['f1' if binary else 'rmse']:.6f} · "
+                f"fit {timing['fit_seconds']:.2f}s.",
             )
             del model, fit, held, fit_idx, score_idx, prediction
             if binary:
@@ -307,10 +374,16 @@ def supervised(splits, movies, request, update):
             f"{NAMES[algorithm]} · refit Train + Validation và đánh giá Test",
         )
         combined = pd.concat([train, validation], ignore_index=True)
+        update(None, f"{NAMES[algorithm]} · refit {len(combined):,} rating Train + Validation.")
         with measured() as timing:
             if binary:
                 builder, final_model, xs = feature_fit(
-                    combined, [test], movies, algorithm, selected["config"]
+                    combined,
+                    [test],
+                    movies,
+                    algorithm,
+                    selected["config"],
+                    report=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
                 )
             else:
                 final_model = fit_rating(
@@ -322,8 +395,9 @@ def supervised(splits, movies, request, update):
                     epochs=selected["epochs"],
                     progress=lambda epoch, total: update(
                         8 + 85 * (step + epoch / total) / total_work,
-                        f"{NAMES[algorithm]} · refit Train + Validation · epoch {epoch}/{total}",
+                        f"{NAMES[algorithm]} · refit Train + Validation · {unit} {epoch}/{total}",
                     ),
+                    log=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
                 )
         start = time.perf_counter()
         predicted = (
@@ -353,6 +427,13 @@ def supervised(splits, movies, request, update):
             }
         )
         step += 1
+        update(
+            None,
+            f"{NAMES[algorithm]} · Test {score_name}="
+            f"{scores['f1' if binary else 'rmse']:.6f} · "
+            f"fit cuối {timing['fit_seconds']:.2f}s · "
+            f"RSS đỉnh {timing['peak_rss_mb']:.1f} MiB.",
+        )
         if binary and len(np.unique(test.rating >= 3.5)) == 2:
             fpr, tpr, _ = roc_curve(test.rating >= 3.5, predicted)
             stride = max(1, len(fpr) // 300)

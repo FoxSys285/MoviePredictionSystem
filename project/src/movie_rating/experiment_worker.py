@@ -2,6 +2,7 @@
 
 import multiprocessing as mp
 import shutil
+import time
 from datetime import UTC, datetime
 
 import psutil
@@ -24,10 +25,12 @@ def _execute(settings, job, payload, cancelled, scratch):
 
 
 def run_isolated(service, job, request):
+    from movie_rating.experiment_logs import RunLogger
     from movie_rating.lab import read_json, save_json
     from movie_rating.memory import scratch_root
 
     folder = service.directory / job["id"]
+    logger = RunLogger(folder) if request.group in ("rating", "classification") else None
     scratch_parent = scratch_root(native_ascii=True)
     scratch = scratch_parent / job["id"]
     scratch.mkdir(parents=True, exist_ok=True)
@@ -54,7 +57,10 @@ def run_isolated(service, job, request):
             daemon=False,
         )
         process.start()
+        if logger:
+            logger.write(f"Đã khởi chạy worker · ngân sách RAM {budget / 2**20:.0f} MiB.")
         monitor = psutil.Process(process.pid)
+        started = last_heartbeat = time.monotonic()
         while process.is_alive():
             process.join(timeout=0.25)
             if not process.is_alive():
@@ -75,6 +81,14 @@ def run_isolated(service, job, request):
             except psutil.NoSuchProcess:
                 break
             peak = max(peak, used)
+            now = time.monotonic()
+            if logger and now - last_heartbeat >= 30:
+                logger.write(
+                    f"Worker vẫn hoạt động · đã chạy {now - started:.0f}s · "
+                    f"RAM riêng {used / 2**20:.0f} MiB · "
+                    f"RAM máy khả dụng {memory.available / 2**20:.0f} MiB."
+                )
+                last_heartbeat = now
             if used > budget or memory.available < reserve:
                 failure = (
                     f"Đã dừng để bảo vệ RAM: worker dùng {used / 2**20:.0f} MiB, "
@@ -100,6 +114,8 @@ def run_isolated(service, job, request):
                 ),
                 finished_at=datetime.now(UTC).isoformat(),
             )
+            if logger:
+                logger.write(latest["message"], "warning" if cancelled else "error")
             (folder / "result.json").unlink(missing_ok=True)
         result_path = folder / "result.json"
         if latest["status"] == "completed" and result_path.exists():
@@ -122,6 +138,8 @@ def run_isolated(service, job, request):
             message=f"{type(error).__name__}: {error}",
             finished_at=datetime.now(UTC).isoformat(),
         )
+        if logger:
+            logger.write(latest["message"], "error")
         (folder / "result.json").unlink(missing_ok=True)
         save_json(folder / "job.json", latest)
     finally:

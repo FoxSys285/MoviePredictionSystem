@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from movie_rating.lab import GROUPS, LabRequest, LabService
 from movie_rating.settings import PROJECT_ROOT
@@ -39,6 +39,39 @@ def lab_router(settings):
     def cancel(run_id: str):
         try:
             return service.cancel(run_id)
+        except FileNotFoundError as error:
+            raise HTTPException(404, str(error)) from error
+
+    @router.get('/runs/{run_id}/logs')
+    def logs(run_id: str, cursor: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
+        try:
+            return service.logs(run_id, cursor, limit)
+        except FileNotFoundError as error:
+            raise HTTPException(404, str(error)) from error
+
+    @router.get('/runs/{run_id}/logs/download')
+    def download_logs(run_id: str):
+        try:
+            path = service.logs_directory(run_id) / 'events.jsonl'
+            if not path.is_file():
+                raise FileNotFoundError('Lần chạy cũ chưa có nhật ký.')
+            size = path.stat().st_size
+
+            def chunks():
+                # Download a fixed prefix even if the worker is still appending events.
+                remaining = size
+                with path.open('rb') as stream:
+                    while remaining:
+                        data = stream.read(min(65536, remaining))
+                        if not data:
+                            break
+                        remaining -= len(data)
+                        yield data
+
+            return StreamingResponse(chunks(), media_type='application/x-ndjson', headers={
+                'Content-Disposition': f'attachment; filename="{run_id}.jsonl"',
+                'Content-Length': str(size),
+            })
         except FileNotFoundError as error:
             raise HTTPException(404, str(error)) from error
 

@@ -32,7 +32,9 @@ class MatrixFactorization(BiasBaseline):
             raise ValueError("factors and learning_rate must be positive.")
         self.factors, self.learning_rate, self.seed = factors, learning_rate, seed
 
-    def fit(self, ratings, progress=None):
+    def fit(self, ratings, progress=None, report=None):
+        if report:
+            report("Đang fit bias baseline và khởi tạo nhân tố user/phim.")
         # Train-only bias model also supplies meaningful cold-start predictions.
         super().fit(ratings)
         users, movies, values = self.encode_training(ratings)
@@ -48,6 +50,11 @@ class MatrixFactorization(BiasBaseline):
         else:
             self.p = rng.normal(0, 0.1, (len(self.user_ids), self.factors)).astype(np.float32)
             self.q = rng.normal(0, 0.1, (len(self.movie_ids), self.factors)).astype(np.float32)
+        if report:
+            report(
+                f"Bắt đầu SGD · {self.factors} factors · {self.epochs} epochs · "
+                f"learning_rate={self.learning_rate}."
+            )
         for epoch in range(self.epochs):
             _sgd_epoch(
                 users,

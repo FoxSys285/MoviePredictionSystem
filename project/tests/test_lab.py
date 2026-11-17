@@ -233,12 +233,12 @@ def test_cv_features_never_receive_heldout_rows_and_test_cannot_change_selection
     calls = []
     original = module.feature_fit
 
-    def checked(train, targets, metadata, algorithm, config):
+    def checked(train, targets, metadata, algorithm, config, report=None):
         fit_ids = set(zip(train.userId, train.movieId))
         for frame in targets:
             assert not fit_ids & set(zip(frame.userId, frame.movieId))
         calls.append(len(train))
-        return original(train, targets, metadata, algorithm, config)
+        return original(train, targets, metadata, algorithm, config, report=report)
 
     monkeypatch.setattr(module, "feature_fit", checked)
     request = LabRequest(group="classification", algorithms=["logistic"], tune=True)

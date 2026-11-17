@@ -66,11 +66,18 @@ class NeuralCF(BiasBaseline):
         self.learning_rate, self.dropout, self.patience = learning_rate, dropout, patience
         self.profile_steps, self.seed = profile_steps, seed
 
-    def fit(self, ratings, validation=None, progress=None):
+    def fit(self, ratings, validation=None, progress=None, report=None):
+        if report:
+            report("Đang fit bias baseline trước khi học embedding/MLP.")
         super().fit(ratings)
         users, items, values = self.encode_training(ratings)
         torch.set_num_threads(4)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if report:
+            report(
+                f"Huấn luyện trên {self.device} · batch_size={self.batch_size} · "
+                f"tối đa {self.epochs} epochs · patience={self.patience}."
+            )
         # Keep initialization and dropout reproducible without advancing callers' RNG state.
         devices = [torch.cuda.current_device()] if self.device.type == "cuda" else []
         with torch.random.fork_rng(devices=devices):
@@ -129,9 +136,16 @@ class NeuralCF(BiasBaseline):
                     else:
                         stale += 1
                 self.learning_curve.append(row)
+                if report:
+                    message = f"Epoch {epoch + 1}/{self.epochs} · Train MSE={row['train_mse']:.6f}"
+                    if "validation_rmse" in row:
+                        message += f" · Validation RMSE={row['validation_rmse']:.6f}"
+                    report(message)
                 if progress is not None:
                     progress(epoch + 1, self.epochs)
                 if stale >= self.patience:
+                    if report:
+                        report(f"Early stopping · epoch tốt nhất {self.best_epoch}.")
                     break
             if checkpoint is not None:
                 self.network.load_state_dict(checkpoint)

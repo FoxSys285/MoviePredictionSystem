@@ -5,8 +5,10 @@ import { PageHero } from "../components/ui";
 import { LabChartFigure } from "../components/LabChart";
 import { ExperimentResults, DatasetSummary } from "../components/ExperimentResults";
 import { ExperimentConfiguration, experimentDefaults } from "../components/ExperimentConfig";
+import { ExperimentLog } from "../components/ExperimentLog";
 import { MetricReferenceTable, useMetricReferenceSettings } from "../components/MetricReferences";
 import { api, apiResourceUrl } from "../lib/api";
+import { ExperimentSuccessSound } from "../lib/experiment-sound";
 import { busy, metricNumber, type LabCatalog, type LabGroup, type LabJob } from "../lib/lab";
 import { usePreferences } from "../lib/preferences";
 
@@ -37,6 +39,7 @@ function Results({job,group}:{job:LabJob;group:LabGroup}) {
 
 export function Experiments() {
   const {t}=usePreferences();
+  const [successSound]=useState(()=>new ExperimentSuccessSound());
   const [params,setParams]=useSearchParams();
   const [catalog,setCatalog]=useState<LabCatalog|null>(null),[catalogError,setCatalogError]=useState("");
   const [runs,setRuns]=useState<LabJob[]>([]),[chosen,setChosen]=useState<Record<string,string>>({});
@@ -52,6 +55,16 @@ export function Experiments() {
   const active=runs.find(busy);
   const algorithms=group ? algorithmChoices[group.id]??group.algorithms.map(a=>a.id) : [];
   useEffect(()=>{
+    const arm=()=>successSound.arm();
+    window.addEventListener("pointerdown",arm,{capture:true,once:true});
+    window.addEventListener("keydown",arm,{capture:true,once:true});
+    return ()=>{
+      window.removeEventListener("pointerdown",arm,true);
+      window.removeEventListener("keydown",arm,true);
+      successSound.close();
+    };
+  },[successSound]);
+  useEffect(()=>{
     const c=new AbortController();setCatalogError("");
     api<LabCatalog>("/experiment-lab/catalog",{signal:c.signal}).then(setCatalog).catch(e=>{if(!c.signal.aborted)setCatalogError((e as Error).message);});
     return ()=>c.abort();
@@ -59,25 +72,26 @@ export function Experiments() {
   useEffect(()=>{
     const c=new AbortController();let timer:number;
     const load=async()=>{
-      try {const data=await api<LabJob[]>("/experiment-lab/runs",{signal:c.signal});if(!c.signal.aborted)setRuns(data);}
+      try {const data=await api<LabJob[]>("/experiment-lab/runs",{signal:c.signal});if(!c.signal.aborted){successSound.observe(data);setRuns(data);}}
       catch(e){if(!c.signal.aborted)setError((e as Error).message);}
       if(!c.signal.aborted)timer=window.setTimeout(load,1800);
     };
     void load();return ()=>{c.abort();window.clearTimeout(timer);};
-  },[reload]);
+  },[reload,successSound]);
   useEffect(()=>{
     setJob(null);if(!selectedId)return;
     const c=new AbortController();let timer:number;
     const load=async()=>{
-      try {const data=await api<LabJob>(`/experiment-lab/runs/${selectedId}`,{signal:c.signal});if(c.signal.aborted)return;setJob(data);if(busy(data))timer=window.setTimeout(load,1000);}
+      try {const data=await api<LabJob>(`/experiment-lab/runs/${selectedId}`,{signal:c.signal});if(c.signal.aborted)return;successSound.observe([data]);setJob(data);if(busy(data))timer=window.setTimeout(load,1000);}
       catch(e){if(!c.signal.aborted)setError((e as Error).message);}
     };
     void load();return ()=>{c.abort();window.clearTimeout(timer);};
-  },[selectedId,reload]);
+  },[selectedId,reload,successSound]);
   useEffect(()=>{setError("");},[group?.id]);
   async function start(){
     if(!group)return;setSubmitting(true);setError("");
-    try {const response=await api<LabJob>("/experiment-lab/runs",{method:"POST",body:JSON.stringify({...config,group:group.id,algorithms})});setRuns(v=>[response,...v]);setChosen(v=>({...v,[group.id]:response.id}));setJob(response);}
+    successSound.arm();
+    try {const response=await api<LabJob>("/experiment-lab/runs",{method:"POST",body:JSON.stringify({...config,group:group.id,algorithms})});successSound.track(response.id);setRuns(v=>[response,...v]);setChosen(v=>({...v,[group.id]:response.id}));setJob(response);}
     catch(e){setError((e as Error).message);}finally{setSubmitting(false);}
   }
   async function stop(id:string){try {await api(`/experiment-lab/runs/${id}/cancel`,{method:"POST"});setReload(v=>v+1);}catch(e){setError((e as Error).message);}}
@@ -99,6 +113,7 @@ export function Experiments() {
           {active&&active.id!==visibleJob?.id&&<div className="lab-active-other" role="status"><Loader2 size={16} className="lab-spin"/><p>{t("Đang chạy nhóm")}: {catalog?.groups.find(g=>g.id===active.group)?.title}</p><button className="lab-outline" onClick={()=>void stop(active.id)}>{t("Dừng")}</button></div>}
           {!!groupRuns.length&&<label className="lab-history">{t("Lịch sử thực nghiệm")}<select value={selectedId||""} onChange={e=>setChosen(v=>({...v,[group.id]:e.target.value}))}>{groupRuns.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("vi-VN")} · {t(statuses[r.status])}</option>)}</select></label>}
           {visibleJob&&<div className={`lab-job lab-job-${visibleJob.status}`} role="status" aria-live="polite"><div>{busy(visibleJob)?<Loader2 size={20} className="lab-spin"/>:visibleJob.status==="completed"?<CheckCircle2 size={20}/>:<AlertCircle size={20}/>}<div><strong>{t(statuses[visibleJob.status])}{busy(visibleJob)?` · ${visibleJob.progress}%`:""}</strong><p>{visibleJob.message}</p></div>{busy(visibleJob)&&<button className="lab-outline" disabled={visibleJob.cancel_requested} onClick={()=>void stop(visibleJob.id)}><Square size={13}/>{t("Dừng")}</button>}</div>{busy(visibleJob)&&<progress aria-label={t("Tiến độ thực nghiệm")} max={100} value={visibleJob.progress}/>}</div>}
+          {visibleJob&&["rating","classification"].includes(visibleJob.group)&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
         </section>
         {visibleJob?.status==="completed"&&visibleJob.result?.schema_version===3?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group} references={referenceSettings.settings[group.id]||{}}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ. Chạy lại để áp dụng pipeline hiện tại và 3-Fold CV.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:!visibleJob&&<section className="lab-empty" role="status"><FlaskConical size={28}/><h2>{t("Chưa có kết quả thực nghiệm")}</h2><p>Chọn thuật toán và chạy để tạo báo cáo từ dữ liệu MovieLens thật.</p></section>}
       </>}

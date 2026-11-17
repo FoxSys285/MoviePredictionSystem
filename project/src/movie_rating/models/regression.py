@@ -1,5 +1,6 @@
 """Explicit-rating regressors with bounded feature batches."""
 
+import gc
 import shutil
 
 import numpy as np
@@ -42,8 +43,12 @@ class StreamingLinearRegression:
 
 
 class FeatureRegression(RatingFeatures):
-    def fit(self, ratings):
+    def fit(self, ratings, progress=None, report=None):
+        if report:
+            report(f"Tạo thống kê từ {len(ratings):,} rating Train.")
         self.fit_statistics(ratings)
+        if report:
+            report(f"Đã tạo {self.feature_count} đặc trưng; bắt đầu fit hồi quy.")
         self.estimator = self._estimator()
         if hasattr(self.estimator, "fit_batches"):
 
@@ -53,8 +58,12 @@ class FeatureRegression(RatingFeatures):
                     target = ratings.rating.iloc[offset : offset + len(features)].to_numpy()
                     yield features, target - self.global_mean
                     offset += len(features)
+                    if progress:
+                        progress(offset, len(ratings))
 
             self.estimator.fit_batches(batches())
+            if report:
+                report("Đã tích lũy các batch; hoàn tất giải OLS.")
         elif self.use_identity:
             users, items = self.encode_queries(ratings.userId, ratings.movieId)
             features = self._feature_batch(
@@ -156,20 +165,53 @@ class XGBoostRegression(FeatureRegression):
             reg_lambda=10.0,
         )
 
-    def fit(self, ratings):
-        if len(ratings) < _EXTERNAL_MEMORY_ROWS:
+    def fit(self, ratings, progress=None, report=None):
+        if len(ratings) < _EXTERNAL_MEMORY_ROWS and progress is None and report is None:
             return super().fit(ratings)
         import xgboost as xgb
 
+        def emit(message):
+            if report is not None:
+                report(message)
+
+        class IterationProgress(xgb.callback.TrainingCallback):
+            def after_iteration(callback_self, model, epoch, evals_log):
+                if progress is not None:
+                    progress(epoch + 1, self.n_estimators)
+                return False
+
+        emit(f"Tạo thống kê và hồ sơ từ {len(ratings):,} rating Train.")
         self.fit_statistics(ratings)
+        emit(
+            f"Đã tạo {self.feature_count} đặc trưng · {len(self.user_ids):,} user · "
+            f"{len(self.movie_ids):,} phim."
+        )
+        if len(ratings) < _EXTERNAL_MEMORY_ROWS:
+            emit("Đang xây ma trận đặc trưng theo batch.")
+            with feature_buffer(
+                len(ratings), self.feature_count, self.iter_features(ratings, training=True)
+            ) as features:
+                self.estimator = self._estimator()
+                self.estimator.set_params(callbacks=[IterationProgress()])
+                emit(f"Bắt đầu học {self.n_estimators} cây · depth={self.max_depth}.")
+                try:
+                    self.estimator.fit(features, ratings.rating.to_numpy() - self.global_mean)
+                finally:
+                    # Callbacks close over the UI reporter and must not enter saved models.
+                    self.estimator.set_params(callbacks=None)
+            emit("Đã huấn luyện xong XGBoost.")
+            return self
         builder = self
 
         class Iterator(xgb.DataIter):
             def __init__(self, cache):
+                self.pass_number = 0
                 super().__init__(cache_prefix=str(cache))
                 self.reset()
 
             def reset(self):
+                if not self.pass_number or getattr(self, "offset", 0):
+                    self.pass_number += 1
                 self.batches = builder.iter_features(ratings, training=True, batch_rows=250_000)
                 self.offset = 0
 
@@ -180,20 +222,45 @@ class XGBoostRegression(FeatureRegression):
                 target = ratings.rating.iloc[self.offset : self.offset + len(features)].to_numpy()
                 input_data(data=features, label=target - builder.global_mean)
                 self.offset += len(features)
+                emit(
+                    f"Tạo cache quantile · lượt {self.pass_number} · "
+                    f"{self.offset:,}/{len(ratings):,} rating."
+                )
                 return True
 
+        failure = None
         with workspace("xgboost-", native_ascii=True) as directory:
             required = len(ratings) * self.feature_count * 4 + 512 * 2**20
             if shutil.disk_usage(directory).free < required:
                 raise OSError("Ổ đĩa cache không đủ chỗ cho XGBoost external-memory.")
-            iterator = Iterator(directory / "cache")
-            matrix_type = getattr(xgb, "ExtMemQuantileDMatrix", xgb.QuantileDMatrix)
-            if matrix_type is xgb.QuantileDMatrix:
-                iterator.cache_prefix = None
-            data = matrix_type(iterator, nthread=self.n_jobs)
-            booster = xgb.train(
-                self._estimator().get_xgb_params(), data, num_boost_round=self.n_estimators
-            )
-            self.estimator = _BoosterPredictor(booster)
-            del data, iterator
+            data = iterator = None
+            try:
+                iterator = Iterator(directory / "cache")
+                matrix_type = getattr(xgb, "ExtMemQuantileDMatrix", xgb.QuantileDMatrix)
+                if matrix_type is xgb.QuantileDMatrix:
+                    iterator.cache_prefix = None
+                emit("Đang tạo cache XGBoost trên đĩa; chưa bắt đầu học cây.")
+                data = matrix_type(iterator, nthread=self.n_jobs)
+                emit(
+                    f"Cache đã sẵn sàng · bắt đầu học {self.n_estimators} cây · "
+                    f"depth={self.max_depth} · {self.n_jobs} luồng CPU."
+                )
+                booster = xgb.train(
+                    self._estimator().get_xgb_params(),
+                    data,
+                    num_boost_round=self.n_estimators,
+                    callbacks=[IterationProgress()] if progress is not None else None,
+                )
+                self.estimator = _BoosterPredictor(booster)
+            except Exception as error:
+                # Tracebacks retain dtrain; release it before Windows removes cache pages.
+                failure = error.with_traceback(None)
+            finally:
+                if iterator is not None:
+                    iterator._exception = None
+                data = iterator = None
+                gc.collect()
+        if failure is not None:
+            raise failure
+        emit("Đã huấn luyện xong XGBoost, đã dọn cache tạm.")
         return self

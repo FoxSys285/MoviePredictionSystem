@@ -42,6 +42,33 @@ rating gần nhất, cùng các thống kê và thể loại trước đây. Hà
 đóng góp nhãn của chính hàng đó; thống kê không đọc rating held-out. Genre tĩnh
 của phim mới có thể dùng, nhưng lịch sử rating của phim đó không được dùng.
 
+## Nhật ký hồi quy và phân loại
+
+Khung **Nhật ký thực nghiệm** nằm ngay dưới thanh tiến độ, cao 50% viewport,
+có thanh cuộn. Tự cuộn theo dòng mới khi đang ở cuối; cuộn lên để đọc lịch sử
+thì giữ vị trí. Nút **Về log mới nhất** bật theo dõi lại. Hoạt động cả desktop,
+mobile và giao diện sáng/tối. Chỉ hai nhóm hồi quy/phân loại có khung này.
+
+Log ghi thời gian, cấu hình, tạo đặc trưng, Validation, từng lượt CV, refit và
+Test. Linear ghi số rating đã tích lũy theo batch; SVD/NCF ghi epoch (NCF có
+loss, Validation RMSE và early stopping). XGBoost ghi từng lượt tạo cache
+quantile, số rating xử lý và từng cây đang học. Logistic ghi bước scale/SAGA
+và số vòng tối ưu sau fit; Forest ghi cấu hình và số cây sau fit. Worker lớn
+có thông báo còn chạy/RAM mỗi 30 giây. Lỗi và yêu cầu dừng được ghi riêng.
+
+Mỗi run lưu `artifacts/experiment-lab/<run_id>/events.jsonl`; mở lại lịch sử
+hoặc tải bằng nút **Tải log**. Backend đọc theo byte cursor, tối đa 500 dòng
+mỗi request; UI chỉ giữ 5.000 dòng gần nhất để giới hạn RAM. File tải giữ toàn
+bộ nhật ký. Khóa file bảo vệ các lần ghi đồng thời từ worker và supervisor.
+
+Áp dụng từ các lượt chạy mới sau khi khởi động lại backend. Không tái tạo log
+cho lượt chạy đã bắt đầu trước cập nhật. Nếu đang có thực nghiệm dài, chờ xong
+rồi mở lại `run_project.bat` để tránh làm gián đoạn lượt đó.
+
+Kiểm tra giao diện: `npm run test:experiment-logs` trong `frontend/`; chạy thật
+hai nhóm và kiểm tra chiều cao, scroll/follow, reload lịch sử, tải log, kết nối
+lại và việc các nhóm khác chưa hiển thị log.
+
 ## Bộ nhớ
 
 - Linear giải OLS từ các tổng và tích ma trận nhỏ theo batch, không tạo ma trận
@@ -95,7 +122,7 @@ depth 2: fit 3,71 giây, RSS đỉnh 691,52 MiB. Đã sửa lỗi cache với đ
 Windows có dấu và xác nhận file tạm được dọn. Đây là kiểm tra đường chạy,
 không phải kết quả benchmark XGBoost toàn bộ dữ liệu.
 
-Kiểm thử backend: 119 passed, 1 skipped (phụ thuộc báo cáo tùy chọn chưa cài).
+Kiểm thử backend: 128 passed, 1 skipped (phụ thuộc báo cáo tùy chọn chưa cài).
 Kiểm tra bổ sung bao gồm timestamp trùng nhau, held-out không đổi cấu hình,
 OLS theo batch so với OLS dense, memmap được dọn, XGBoost external-memory và
 tiến trình thật bị dừng khi vượt giới hạn RAM giả lập. Frontend đã build và kiểm tra UI sáu nhóm thành công. XGBoost external-memory được chạy thêm trên 300.000 rating thật: fit 3,71 giây, peak RSS khoảng 692 MiB; đã kiểm tra đường dẫn chứa tiếng Việt trên Windows.

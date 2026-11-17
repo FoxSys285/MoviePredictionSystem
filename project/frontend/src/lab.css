@@ -77,6 +77,34 @@
 .lab-job strong { font-size:12px; font-weight:500; }.lab-job p { color:var(--lab-muted); font-size:10px; line-height:1.9; margin-top:5px; overflow-wrap:anywhere; }.lab-job small { display:block; font-size:9px; color:var(--lab-muted); margin-top:5px; overflow-wrap:anywhere; }
 .lab-job-completed { border-color:#5d9f7955; }.lab-job-completed > div > svg { color:#7ac19f; }.lab-job-failed { border-color:#c07b6b88; }
 .lab-job progress { width:100%; height:5px; accent-color:#d592b9; margin-top:16px; }
+
+.lab-log { margin-top:16px; overflow:hidden; border:1px solid var(--lab-line); border-radius:8px; background:var(--lab-card); }
+.lab-log-heading,.lab-log-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 15px; }
+.lab-log-heading { border-bottom:1px solid var(--lab-line); }
+.lab-log-heading > div,.lab-log-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; min-width:0; }
+.lab-log-heading h3 { margin:0; font-size:12px; font-weight:500; color:var(--lab-text); }
+.lab-log-heading > div > svg { color:var(--lab-soft); flex-shrink:0; }
+.lab-log-state { display:inline-flex; align-items:center; gap:5px; color:var(--lab-muted); font-size:10px; }
+.lab-log-state i { width:5px; height:5px; border-radius:50%; background:var(--lab-muted); }
+.lab-log-state.is-live i { background:#55bb98; box-shadow:0 0 7px #55bb9833; }
+.lab-log-actions a,.lab-log-actions button { display:inline-flex; align-items:center; gap:5px; background:transparent; border:1px solid var(--lab-line); border-radius:5px; padding:5px 8px; color:var(--lab-text); text-decoration:none; font:inherit; font-size:10px; cursor:pointer; }
+.lab-log-actions a:hover,.lab-log-actions button:hover { border-color:var(--lab-soft); }
+.lab-log-viewport { height:50vh; height:50dvh; box-sizing:border-box; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:var(--lab-soft) transparent; padding:14px 15px; background:color-mix(in srgb,var(--lab-card) 92%,#000 8%); color:var(--lab-text); font:11px/1.9 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace; }
+.lab-log-viewport::-webkit-scrollbar { width:7px; height:7px; }.lab-log-viewport::-webkit-scrollbar-thumb { background:var(--lab-soft); border-radius:8px; }
+.lab-log-line { display:grid; grid-template-columns:62px 55px minmax(0,1fr); align-items:baseline; gap:8px; padding:3px 0; }
+.lab-log-line time { color:var(--lab-muted); font-size:10px; font-variant-numeric:tabular-nums; }
+.lab-log-level { color:var(--lab-soft); font-size:9px; letter-spacing:.05em; }
+.lab-log-message { white-space:pre-wrap; overflow-wrap:anywhere; }
+.lab-log-success .lab-log-level,.lab-log-success .lab-log-message { color:#58ad8a; }
+.lab-log-warning .lab-log-level { color:#bd9151; }.lab-log-error .lab-log-level,.lab-log-error .lab-log-message { color:#d47c77; }
+.lab-log-placeholder { margin:0; color:var(--lab-muted); }
+.lab-log-notice { margin:0; padding:10px 15px; color:var(--lab-muted); font-size:11px; border-bottom:1px solid var(--lab-line); }
+.lab-log-footer { border-top:1px solid var(--lab-line); color:var(--lab-muted); font-size:10px; flex-wrap:wrap; }
+[data-theme="light"] .lab-log-success .lab-log-level,[data-theme="light"] .lab-log-success .lab-log-message { color:#23734f; }
+[data-theme="light"] .lab-log-error .lab-log-level,[data-theme="light"] .lab-log-error .lab-log-message { color:#b13532; }
+[data-theme="light"] .lab-log-warning .lab-log-level { color:#8f641b; }
+[data-theme="light"] .lab-log-info .lab-log-level { color:#8a416c; }
+@media(max-width:600px) { .lab-log-heading { flex-wrap:wrap; }.lab-log-line { grid-template-columns:55px 46px minmax(0,1fr); gap:5px; }.lab-log-viewport { padding:10px; font-size:10px; } }
 .lab-simulation-notice { display:flex; gap:10px; align-items:start; color:#d5b183; font-size:11px; line-height:1.9; padding:13px; border:1px solid #b08e6255; border-radius:6px; margin-top:18px; }.lab-simulation-notice svg { flex-shrink:0; }
 .lab-empty,.lab-loading { text-align:center; padding:48px 20px; border:1px dashed var(--lab-line); border-radius:10px; color:var(--lab-muted); margin-top:28px; }
 .lab-empty > svg { color:var(--lab-soft); margin-bottom:12px; }.lab-empty h2 { font-size:17px; font-weight:500; }.lab-empty p { font-size:11px; line-height:1.9; margin-top:10px; }
