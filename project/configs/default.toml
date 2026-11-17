@@ -6,6 +6,8 @@ user_sample_fraction = 1.0
 chunksize = 500000
 train_fraction = 0.7
 validation_fraction = 0.15
+split_strategy = "per_user_temporal"
+minimum_user_ratings = 10
 
 [experiment]
 seed = 42

@@ -12,12 +12,13 @@ export type LabRule = { antecedents:string[]; consequents:string[]; support:numb
 export type LabResult = {
   schema_version: number; group: LabGroupId; rows: LabRow[]; charts: LabChart[]; notes: string[]; selection?:string;
   best_configs?:Record<string,unknown>;
+  cv_protocol?:string; cv_folds?:number;
   cv?:Record<string,{metrics:Record<string,{mean:number;std:number;n:number}>;folds:unknown[]}>;
   class_balance?:Record<string,{positive:number;negative:number;positive_fraction:number}>;
   rules?:LabRule[]; search?:Record<string,unknown>[];
   clusters?:{algorithm:string;profiles:{cluster:number;users:number;genre_means:Record<string,number>}[]}[];
-  runtime?:{processor:string;cpu_count:number;ram_bytes:number;device:string;python:string;platform:string};
-  provenance: { protocol?: string; sampled_ratings: number; sampled_users: number; sample?:DatasetStats; prepared?:DatasetStats; splits: Record<string, { ratings: number }> };
+  runtime?:{isolated_process?:boolean;memory_budget_mb?:number;worker_peak_private_mb?:number;system_min_available_mb?:number;processor:string;cpu_count:number;ram_bytes:number;device:string;python:string;platform:string};
+  provenance: { exclusions?:{excluded_users:number;excluded_ratings:number}; protocol?: string; sampled_ratings: number; sampled_users: number; sample?:DatasetStats; prepared?:DatasetStats; splits: Record<string, { ratings: number }> };
 };
 export type LabJob = { id: string; group: LabGroupId; status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted"; progress: number; message: string; created_at: string; cancel_requested?: boolean; result?: LabResult };
 export const busy = (job: LabJob) => ["queued", "running"].includes(job.status);

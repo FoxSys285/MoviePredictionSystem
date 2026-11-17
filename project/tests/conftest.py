@@ -27,7 +27,12 @@ def configured(tmp_path, ratings):
     ).to_csv(dataset / "movies.csv", index=False)
     return Settings.model_validate(
         {
-            "data": {"directory": str(dataset), "user_sample_fraction": 1, "chunksize": 17},
+            "data": {
+                "directory": str(dataset),
+                "user_sample_fraction": 1,
+                "chunksize": 17,
+                "split_strategy": "global_temporal",
+            },
             "experiment": {"artifacts_directory": str(tmp_path / "artifacts")},
             "models": {
                 "svd": {"epochs": 2, "factors": 3},

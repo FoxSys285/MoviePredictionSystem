@@ -17,6 +17,8 @@ class DataSettings(BaseModel):
     chunksize: int = Field(default=500_000, gt=0)
     train_fraction: float = Field(default=0.8, gt=0, lt=1)
     validation_fraction: float = Field(default=0.1, gt=0, lt=1)
+    split_strategy: Literal["per_user_temporal", "global_temporal"] = "per_user_temporal"
+    minimum_user_ratings: int = Field(default=10, ge=3)
 
     @model_validator(mode="after")
     def validate_split(self):

@@ -9,8 +9,8 @@ Q-Learning hoặc đầy đủ thông tin hiệu năng. Các handler cũ vẫn �
 ảnh hưởng mã tham chiếu, nhưng API chạy mới chuyển sang pipeline v3.
 
 Giữ nguyên tài khoản, hồ sơ demo, danh mục phim, lịch sử đánh giá, gợi ý,
-pipeline `prepare/train/evaluate` và các model production đã lưu. Lab chỉ ghi vào
-`artifacts/experiment-lab/<run_id>/`, không ghi đè model phục vụ ứng dụng.
+các model production đã lưu. Cấu hình chuẩn bị mới dùng chia thời gian trong từng user; dữ liệu cũ được giữ lại. Lab lưu báo cáo vào `artifacts/experiment-lab/<run_id>/` và cache split riêng,
+không ghi đè model phục vụ ứng dụng.
 
 | Thành phần | Trách nhiệm |
 |---|---|
@@ -67,25 +67,34 @@ Lịch sử v2 được giữ và có nhãn giao thức cũ; không so trực ti
 
 ## Dữ liệu và khả năng tái lập
 
-Đầu vào lấy từ `artifacts/data/{train,validation,test,movies}.parquet` đã chuẩn bị.
-Mặc định Lab dùng trực tiếp toàn bộ ba split 70/15/15 theo thời gian, không lấy
-mẫu user. Có thể bỏ chọn "Dùng toàn bộ dữ liệu đã chuẩn bị" để lấy mẫu user seed 42
-và chia lại IID 70/15/15 khi chạy thử. Kết quả ghi rõ giao thức và số ratings.
+Đầu vào lấy từ `artifacts/data/{train,validation,test,movies}.parquet`. Hồi quy và
+phân loại dùng `per_user_temporal_70_15_15_v2`: mỗi user lấy lịch sử đầu để Train,
+đoạn tiếp theo Validation, đoạn cuối Test, khoảng 70/15/15. Rating cùng timestamp
+không tách qua hai tập. User dưới 10 rating hoặc không có ba khoảng thời gian
+hợp lệ được loại và ghi số lượng trong `provenance.exclusions`.
 
-Chế độ toàn bộ dùng split thời gian toàn cục đã tạo ở bước `prepare`. Một
-user/phim có thể xuất hiện trong nhiều phần; kết quả không phải đánh giá
-cold-start. Chế độ giới hạn user dùng split IID riêng và phải được ghi rõ khi
-so sánh. Pipeline production giữ cách chia thời gian riêng của nó.
+Toàn bộ user đủ điều kiện được dùng khi bật toàn bộ dữ liệu. Nếu giới hạn user,
+chọn user bằng seed 42 và áp dụng cùng giao thức thời gian, không chia IID lại.
+Timeline giữa các user có thể chồng lấn; đây là đánh giá cá nhân hóa cho user có
+lịch sử, không mô phỏng tương lai toàn cục hoặc user mới hoàn toàn.
 
-`configs/default.toml` đặt `data.user_sample_fraction=1.0`, nên `prepare` tạo dữ
-liệu từ toàn bộ 25.000.095 ratings. Bản chuẩn bị cũ không bị ghi đè; nếu đã tồn
-tại, hãy dùng thư mục artifacts mới để chạy `prepare`.
-Trên máy 16 GB RAM, chạy từng thuật toán rating riêng. RTX 3050 chỉ được dùng khi
-PyTorch cài bản CUDA tương thích; nếu không, NCF chạy CPU.
-Các đặc trưng số được tạo theo block 250.000 hàng và lưu float32; các chỉ số
-cross-validation được tạo theo từng fold để tránh giữ đồng thời cả ba fold trong
-RAM. Linear Regression cũng tránh bản sao feature matrix khi center dữ liệu.
-Các thay đổi này giảm bộ nhớ đỉnh nhưng không làm nhẹ phép fit trên toàn bộ ratings.
+Dữ liệu cũ chia toàn cục được chuyển một lần sang cache riêng
+`artifacts/data-personalized-v2-<signature>/`, không ghi đè dữ liệu hoặc kết quả
+lịch sử. Chạy mới tự dùng cache này; không cần xóa thư mục data cũ. `prepare`
+cho thư mục artifacts mới dùng cấu hình `split_strategy="per_user_temporal"`;
+`global_temporal` vẫn có thể chọn cho nghiên cứu tương lai toàn cục.
+
+[Chi tiết vận hành và RAM](personalized-experiments.md). Thực nghiệm lớn chạy
+trong tiến trình riêng. Ngân sách mặc định 4096 MiB cho bộ nhớ riêng của worker,
+đồng thời hạ theo RAM khả dụng; để lại ít nhất 12% RAM máy (tối thiểu 1 GiB).
+Khi worker vượt ngân sách hoặc RAM khả dụng dưới mức dự phòng, dừng tiến trình,
+không công bố kết quả dở. Đây là giám sát mỗi 0,25 giây, không phải hard limit
+của hệ điều hành. File cache có thể làm RSS cao nhưng được hệ điều hành thu hồi.
+
+Đặc trưng float32 tạo theo batch 65.536 hàng. Linear tích lũy thống kê OLS nhỏ;
+Logistic/Forest dùng file memmap khi ma trận trên 64 MiB; XGBoost lớn dùng trang
+quantile lưu đĩa. Phân loại không fit một hồi quy phụ để lấy đặc trưng. NCF chỉ
+chuyển minibatch lên GPU. Cache và tiến trình được giải phóng sau mỗi lần chạy.
 
 Các thống kê gồm ratings, users, phim có rating, catalog phim, genres, rating
 min/max/mean, sparsity `1 − ratings/(users × movies)` và số bản ghi mỗi tập.
@@ -98,19 +107,21 @@ genres; silhouette lấy mẫu tối đa 2.000 điểm để chặn ma trận kh
 
 Linear Regression, XGBoost, Funk SVD có bias và NCF dự đoán rating trong [0,5;5].
 Linear/XGBoost dùng thống kê user/phim và metadata thể loại; SVD/NCF học từ rating.
-Mặc định cho dữ liệu đầy đủ: XGBoost 50 cây, depth 4, learning rate 0,05;
-SVD/NCF 4 epochs, 16 factors; tune tắt để tránh nhân số lần fit. Có thể tăng
-các giá trị và bật tuning sau khi chạy baseline.
+Mặc định: XGBoost 150 cây, depth 6, learning rate 0,05; SVD/NCF tối đa 15 epochs,
+32 factors, SVD learning rate 0,005, NCF 0,003. NCF dùng patience 3.
+Đặc trưng gồm thống kê user/phim, tỷ lệ thích, độ phân tán rating, thể loại và
+sở thích từ 20 rating gần nhất trong phần fit. Khi tạo hàng huấn luyện, loại
+đóng góp của nhãn chính hàng đó khỏi thống kê và hồ sơ gần đây.
 
-Mỗi cấu hình chạy KFold(3, shuffle=True, random_state=42) chỉ trên Train 70%.
-Mỗi fold xây lại mô hình và đặc trưng; không tái sử dụng thống kê được fit từ
-toàn bộ Train. Báo cáo Mean và sample Std (ddof=1) của ba fold.
+Tuning tắt mặc định để giới hạn thời gian. Khi bật, thử cấu hình nhẹ, mặc định
+và mạnh hơn. Chọn RMSE Validation thấp nhất rồi chỉ chạy ba lượt CV cho cấu hình
+được chọn. CV mở rộng lịch sử theo thời gian trong từng user trên Train; mỗi
+lượt fit lại đặc trưng/mô hình, học quá khứ và chấm đoạn kế tiếp. Báo cáo Mean
+và sample Std (ddof=1); đây là CV chẩn đoán sau lựa chọn, không phải nested CV.
 
-Khi bật tuning, XGBoost thử độ sâu đã nhập và độ sâu nhỏ hơn; SVD/NCF thử số
-factors đã nhập và số factors nhỏ hơn. Linear dùng cấu hình mặc định của phép
-bình phương tối thiểu. Validation chọn RMSE thấp nhất. NCF dùng Validation cho
-Early Stopping; đường Train/Validation Loss đo MSE rating thực sau mỗi epoch.
-Trong CV, NCF dùng ngân sách epoch cố định, không dùng Validation ngoài fold.
+NCF dùng Validation cho early stopping; train-rating MSE đo trên tối đa 50.000
+hàng cố định để tránh suy luận toàn bộ Train sau mỗi epoch. Validation RMSE vẫn
+đo trên toàn bộ Validation theo batch. Trong CV dùng epoch cố định.
 
 Sau lựa chọn, mỗi thuật toán fit mới trên Train + Validation 85%. NCF dùng số
 epoch tốt nhất đã khóa, không dùng Test cho Early Stopping. Báo cáo Test cuối
@@ -119,12 +130,12 @@ bằng Validation, đối chiếu CV ± std và chi phí thực đo, không mặ
 
 ### Classification
 
-Không thích = rating <3,5; Thích = rating ≥3,5. Logistic Regression và Random
-Forest dùng StratifiedKFold 3 phần trên Train. Mỗi lớp cần ít nhất ba ratings.
-Mặc định Logistic dùng C=1, max_iter=200; Random Forest dùng 50 cây, depth 4,
-min_samples_leaf=5. Các thông số này có thể chỉnh trong phần cấu hình.
-Tuning thử C nhỏ hơn hoặc độ sâu cây nhỏ hơn; Validation chọn F1 lớp Thích và
-ngưỡng xác suất (0,1–0,9), sau đó khóa cả hai trước refit/Test.
+Không thích = rating <3,5; Thích = rating ≥3,5. Logistic và Forest dùng cùng
+ba lượt CV thời gian như hồi quy, không dùng StratifiedKFold ngẫu nhiên.
+Logistic mặc định C=1, max_iter=600, solver SAGA với dữ liệu float32 đã scale.
+Forest mặc định 100 cây, depth 8, min_samples_leaf=5, fit từng cây lần lượt.
+Tuning thử C nhỏ hơn/lớn hơn hoặc cây nông hơn/sâu hơn. Validation chọn F1 lớp
+Thích và ngưỡng xác suất (0,1–0,9), khóa cấu hình/ngưỡng trước refit và Test.
 
 F1, Precision và Recall trong v3 là của **lớp Thích**, khác macro của lab v2.
 AUC-ROC dùng xác suất dự đoán, không dùng nhãn cứng. AUC không xác định khi tập

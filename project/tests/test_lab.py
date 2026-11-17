@@ -35,7 +35,7 @@ def lab_data():
             "genres": ["Action|Comedy" if m % 2 else "Drama|Romance" for m in range(1, 33)],
         }
     )
-    return split_ratings(frame), movies
+    return user_chronological_split(frame), movies
 
 
 def test_catalog_covers_six_groups_and_required_algorithms():
@@ -117,16 +117,16 @@ def test_full_data_rating_and_classification_defaults_are_bounded():
 
     rating = LabRequest(group="rating")
     classification = LabRequest(group="classification")
-    assert rating.use_all_data and rating.epochs == 4
+    assert rating.use_all_data and rating.epochs == 15
     assert candidates("xgboost", rating)[0] == {
-        "n_estimators": 50,
-        "max_depth": 4,
+        "n_estimators": 150,
+        "max_depth": 6,
         "learning_rate": 0.05,
     }
-    assert candidates("logistic", classification)[0] == {"C": 1.0, "max_iter": 200}
+    assert candidates("logistic", classification)[0] == {"C": 1.0, "max_iter": 600}
     assert candidates("random_forest", classification)[0] == {
-        "n_estimators": 50,
-        "max_depth": 4,
+        "n_estimators": 100,
+        "max_depth": 8,
         "min_samples_leaf": 5,
     }
 
@@ -167,27 +167,25 @@ def test_full_data_mode_uses_prepared_temporal_splits(configured):
         LabRequest(group="rating", max_users=10, use_all_data=True)
     )
     manifest = json.loads((configured.artifacts_dir / "data" / "manifest.json").read_text())
-    assert provenance["protocol"] == "global_temporal_70_15_15_v1"
+    assert provenance["protocol"] == "per_user_temporal_70_15_15_v2"
     assert provenance["sampled_ratings"] == sum(
         part["ratings"] for part in manifest["splits"].values()
     )
     assert provenance["sampled_users"] == len(
         set().union(*(set(frame.userId) for frame in splits.values()))
     )
-    assert {
-        name: len(frame) for name, frame in splits.items()
-    } == {
-        name: part["ratings"] for name, part in manifest["splits"].items()
-    }
+    assert set(splits["train"].userId) == set(splits["test"].userId)
+    for user in splits["train"].userId.unique():
+        assert splits["train"].query("userId == @user").timestamp.max() < (
+            splits["validation"].query("userId == @user").timestamp.min()
+        )
 
 
 def test_sampled_data_mode_respects_user_limit(configured):
     prepare(configured)
     service = LabService(configured)
-    _, _, provenance = service._load(
-        LabRequest(group="rating", max_users=10, use_all_data=False)
-    )
-    assert provenance["protocol"] == "iid_rating_70_15_15_v3"
+    _, _, provenance = service._load(LabRequest(group="rating", max_users=10, use_all_data=False))
+    assert provenance["protocol"] == "per_user_temporal_70_15_15_v2"
     assert provenance["sampled_users"] == 10
 
 
@@ -233,21 +231,22 @@ def test_cv_features_never_receive_heldout_rows_and_test_cannot_change_selection
 
     splits, movies = lab_data
     calls = []
-    original = module.pair_features
+    original = module.feature_fit
 
-    def checked(train, targets, metadata):
+    def checked(train, targets, metadata, algorithm, config):
         fit_ids = set(zip(train.userId, train.movieId))
         for frame in targets:
             assert not fit_ids & set(zip(frame.userId, frame.movieId))
         calls.append(len(train))
-        return original(train, targets, metadata)
+        return original(train, targets, metadata, algorithm, config)
 
-    monkeypatch.setattr(module, "pair_features", checked)
+    monkeypatch.setattr(module, "feature_fit", checked)
     request = LabRequest(group="classification", algorithms=["logistic"], tune=True)
     first = supervised(splits, movies, request, lambda *_: None)
     changed = {s: f.copy() for s, f in splits.items()}
     changed["test"]["rating"] = 0.5
     second = supervised(changed, movies, request, lambda *_: None)
+    assert len(calls) == 2 * (3 + 3 + 1)  # 3 candidates, selected-config CV, final refit
     assert first["best_configs"] == second["best_configs"]
     assert first["cv"]["logistic"]["metrics"]["f1"] == second["cv"]["logistic"]["metrics"]["f1"]
     assert any(n == len(splits["train"]) + len(splits["validation"]) for n in calls)
@@ -299,7 +298,7 @@ def test_async_api_history_provenance_csv_and_excel(configured):
         run_id = response.json()["id"]
         job = wait_for_job(LabService(configured), run_id)
         assert job["status"] == "completed", job
-        assert job["result"]["provenance"]["protocol"] == "global_temporal_70_15_15_v1"
+        assert job["result"]["provenance"]["protocol"] == "per_user_temporal_70_15_15_v2"
         assert job["result"]["runtime"]["code_sha256"]
         csv = client.get(root + f"/runs/{run_id}/export/csv")
         assert csv.status_code == 200 and "cv_f1_std" in csv.text

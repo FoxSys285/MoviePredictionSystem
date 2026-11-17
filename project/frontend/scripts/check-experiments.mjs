@@ -48,7 +48,7 @@ try{
     await page.getByLabel("Số user tối đa",{exact:true}).fill("40");
     if(group.id==="rating")await page.getByLabel("Epochs SVD / NCF",{exact:true}).fill("2");
     if(["rating","classification"].includes(group.id)){
-      const tuning=page.getByLabel("Thử thêm cấu hình đơn giản hơn",{exact:true});
+      const tuning=page.getByLabel("Tuning cấu hình nhẹ / mặc định / mạnh hơn",{exact:true});
       assert.equal(await tuning.isChecked(),false);
       await tuning.uncheck();
     }
@@ -128,7 +128,7 @@ try{
   await page.locator('.lab-primary').click();
   assert.notEqual(await page.locator('.lab-parameter-details').getAttribute('open'),null,'Invalid hidden parameters must expand for correction');
   await page.getByLabel("Số user tối đa",{exact:true}).fill("20");
-  await page.getByLabel("Thử thêm cấu hình đơn giản hơn",{exact:true}).uncheck();
+  await page.getByLabel("Tuning cấu hình nhẹ / mặc định / mạnh hơn",{exact:true}).uncheck();
   const singleResponse=page.waitForResponse(r=>r.url().endsWith("/experiment-lab/runs")&&r.request().method()==="POST");
   await page.locator(".lab-primary").click();const single=await(await singleResponse).json();
   assert.deepEqual(single.request.algorithms,["logistic"]);

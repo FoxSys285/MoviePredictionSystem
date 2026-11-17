@@ -1,6 +1,6 @@
 # Ứng dụng học máy dự đoán đánh giá phim — MovieLens 25M
 
-Trang **Thực nghiệm** có sidebar sáu nhóm, chạy thuật toán thật trên MovieLens: Regression, Classification, Clustering, Association Rules, Dimensionality Reduction và Reinforcement Learning. Pipeline v3 hỗ trợ 3-Fold CV cho Regression/Classification, chọn cấu hình trên Validation, refit 85%, lịch sử và xuất CSV/Excel/JSON. Xem [hướng dẫn Experiment Studio](docs/experiment-studio.md) và [kết quả xác nhận](docs/experiment-studio-results.md).
+Trang **Thực nghiệm** có sidebar sáu nhóm, chạy thuật toán thật trên MovieLens: Regression, Classification, Clustering, Association Rules, Dimensionality Reduction và Reinforcement Learning. Pipeline v3 dùng chia thời gian trong từng user và 3 lượt CV thời gian cho Regression/Classification, chọn cấu hình trên Validation, refit Train + Validation, lịch sử và xuất CSV/Excel/JSON. Thực nghiệm lớn có giới hạn RAM và đặc trưng theo batch; xem [vận hành và bộ nhớ](docs/personalized-experiments.md). Xem [hướng dẫn Experiment Studio](docs/experiment-studio.md) và [kết quả xác nhận](docs/experiment-studio-results.md).
 
 Login có 5 tài khoản demo lấy lịch sử từ MovieLens, hiển thị email/mật khẩu và nút
 điền nhanh. [Luồng tài khoản mới và hồ sơ dataset](docs/user-profiles.md) mô tả cách

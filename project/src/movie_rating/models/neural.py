@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from movie_rating.memory import BATCH_ROWS, check_memory
 from movie_rating.models.baseline import BiasBaseline
 
 
@@ -71,7 +72,8 @@ class NeuralCF(BiasBaseline):
         torch.set_num_threads(4)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Keep initialization and dropout reproducible without advancing callers' RNG state.
-        with torch.random.fork_rng(devices=[]):
+        devices = [torch.cuda.current_device()] if self.device.type == "cuda" else []
+        with torch.random.fork_rng(devices=devices):
             torch.manual_seed(self.seed)
             self.network = RatingNetwork(
                 len(self.user_ids),
@@ -83,25 +85,31 @@ class NeuralCF(BiasBaseline):
             optimizer = torch.optim.AdamW(
                 self.network.parameters(), lr=self.learning_rate, weight_decay=self.regularization
             )
-            user_tensor = torch.from_numpy(users).to(self.device)
-            item_tensor = torch.from_numpy(items).to(self.device)
-            residual = torch.tensor(
-                values - self.global_mean - self.user_bias[users] - self.movie_bias[items],
-                dtype=torch.float32,
-                device=self.device,
+            # Training arrays stay on CPU; transfer only one minibatch to CUDA.
+            user_tensor, item_tensor = torch.from_numpy(users), torch.from_numpy(items)
+            residual = torch.from_numpy(
+                values
+                - np.float32(self.global_mean)
+                - self.user_bias[users].astype(np.float32)
+                - self.movie_bias[items].astype(np.float32)
             )
             rng = np.random.default_rng(self.seed)
             best, stale, checkpoint = float("inf"), 0, None
             self.learning_curve = []
             self.best_epoch = self.epochs
+            metric_rows = np.linspace(0, len(ratings) - 1, min(50_000, len(ratings)), dtype=int)
+            metric_sample = ratings.iloc[metric_rows]
             for epoch in range(self.epochs):
+                check_memory()
                 self.network.train()
                 total = 0.0
                 order = rng.permutation(len(values))
                 for start in range(0, len(values), self.batch_size):
                     rows = order[start : start + self.batch_size]
                     optimizer.zero_grad(set_to_none=True)
-                    error = self.network(user_tensor[rows], item_tensor[rows]) - residual[rows]
+                    error = self.network(
+                        user_tensor[rows].to(self.device), item_tensor[rows].to(self.device)
+                    ) - residual[rows].to(self.device)
                     loss = error.square().mean()
                     loss.backward()
                     optimizer.step()
@@ -109,13 +117,10 @@ class NeuralCF(BiasBaseline):
                 self.network.eval()
                 row = {"epoch": epoch + 1, "train_mse": total / len(values)}
                 if validation is not None and len(validation):
-                    train_prediction = self.predict(ratings.userId, ratings.movieId)
-                    row["train_rating_mse"] = float(
-                        np.mean((ratings.rating.to_numpy() - train_prediction) ** 2)
-                    )
+                    row["train_rating_mse"] = self._rating_mse(metric_sample)
+                    row["train_metric_rows"] = len(metric_sample)
                 if validation is not None and len(validation):
-                    predicted = self.predict(validation.userId, validation.movieId)
-                    score = float(np.sqrt(np.mean((validation.rating.to_numpy() - predicted) ** 2)))
+                    score = float(np.sqrt(self._rating_mse(validation)))
                     row["validation_rmse"] = score
                     if score < best - 1e-5:
                         best, stale = score, 0
@@ -133,6 +138,14 @@ class NeuralCF(BiasBaseline):
             self.network.eval()
         return self
 
+    def _rating_mse(self, ratings):
+        total = 0.0
+        for start in range(0, len(ratings), BATCH_ROWS):
+            batch = ratings.iloc[start : start + BATCH_ROWS]
+            error = batch.rating.to_numpy() - self.predict(batch.userId, batch.movieId)
+            total += float(np.dot(error.astype(np.float64), error.astype(np.float64)))
+        return total / len(ratings)
+
     def predict(self, user_ids, movie_ids):
         users, items = self.encode_queries(user_ids, movie_ids)
         output = np.full(len(users), self.global_mean, dtype=np.float32)
@@ -143,10 +156,14 @@ class NeuralCF(BiasBaseline):
         with torch.no_grad():
             for start in range(0, len(indices), self.batch_size):
                 rows = indices[start : start + self.batch_size]
-                output[rows] += self.network(
-                    torch.from_numpy(users[rows]).to(self.device),
-                    torch.from_numpy(items[rows]).to(self.device),
-                ).cpu().numpy()
+                output[rows] += (
+                    self.network(
+                        torch.from_numpy(users[rows]).to(self.device),
+                        torch.from_numpy(items[rows]).to(self.device),
+                    )
+                    .cpu()
+                    .numpy()
+                )
         return self.clip(output)
 
     def predict_profile(self, history):
@@ -181,10 +198,14 @@ class NeuralCF(BiasBaseline):
         with torch.no_grad():
             for start in range(0, len(output), self.batch_size):
                 end = min(start + self.batch_size, len(output))
-                correction = self.network.score(
-                    embedding.expand(end - start, -1),
-                    torch.arange(start, end, device=self.device),
-                ).cpu().numpy()
+                correction = (
+                    self.network.score(
+                        embedding.expand(end - start, -1),
+                        torch.arange(start, end, device=self.device),
+                    )
+                    .cpu()
+                    .numpy()
+                )
                 output[start:end] = (
                     self.global_mean + self.movie_bias[start:end] + float(bias) + correction
                 )

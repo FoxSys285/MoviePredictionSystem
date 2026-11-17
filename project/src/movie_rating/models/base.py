@@ -13,7 +13,9 @@ class RatingModel(ABC):
 
     def encode_training(self, ratings: pd.DataFrame):
         self.user_ids, users = np.unique(ratings.userId.to_numpy(), return_inverse=True)
+        users = users.astype(np.int32, copy=False)
         self.movie_ids, movies = np.unique(ratings.movieId.to_numpy(), return_inverse=True)
+        movies = movies.astype(np.int32, copy=False)
         values = ratings.rating.to_numpy(dtype=np.float32)
         self.global_mean = float(values.mean())
         return users, movies, values

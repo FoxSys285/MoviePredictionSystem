@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import numpy as np
 import pandas as pd
 
+from movie_rating.data.temporal import PERSONALIZED_PROTOCOL, user_temporal_split
 from movie_rating.settings import Settings
 
 RATING_DTYPES = {"userId": "int32", "movieId": "int32", "rating": "float32", "timestamp": "int64"}
@@ -62,19 +63,7 @@ def user_chronological_split(ratings, minimum_ratings=10):
     Users with short histories or inseparable timestamp groups are excluded.
     Other users' timelines can overlap; this is not a global future simulation.
     """
-    parts = {name: [] for name in ('train', 'validation', 'test')}
-    for _, history in ratings.groupby('userId', sort=True):
-        if len(history) < minimum_ratings:
-            continue
-        try:
-            split = chronological_split(history, .7, .15)
-        except ValueError:
-            continue
-        for name, frame in split.items():
-            parts[name].append(frame)
-    if not parts['train']:
-        raise ValueError('Không đủ user có ít nhất 10 rating và ba khoảng thời gian tách biệt.')
-    return {name: pd.concat(frames, ignore_index=True) for name, frames in parts.items()}
+    return user_temporal_split(ratings, minimum_ratings=minimum_ratings)[0]
 
 
 def prepare(settings: Settings) -> dict:
@@ -84,9 +73,24 @@ def prepare(settings: Settings) -> dict:
             "Prepared data already exists. Use a new artifacts_directory for another experiment."
         )
     ratings = load_ratings(settings)
-    splits = chronological_split(
-        ratings, settings.data.train_fraction, settings.data.validation_fraction
-    )
+    exclusion = None
+    if settings.data.split_strategy == "per_user_temporal":
+        splits, exclusion = user_temporal_split(
+            ratings,
+            settings.data.train_fraction,
+            settings.data.validation_fraction,
+            settings.data.minimum_user_ratings,
+        )
+        protocol = (
+            PERSONALIZED_PROTOCOL
+            if settings.data.train_fraction == 0.7 and settings.data.validation_fraction == 0.15
+            else "per_user_temporal_custom_v2"
+        )
+    else:
+        splits = chronological_split(
+            ratings, settings.data.train_fraction, settings.data.validation_fraction
+        )
+        protocol = "global_temporal_70_15_15_v1"
     movies_path = settings.dataset_dir / "movies.csv"
     if not movies_path.is_file():
         raise FileNotFoundError(f"Missing {movies_path}.")
@@ -99,6 +103,8 @@ def prepare(settings: Settings) -> dict:
         raise ValueError("Some ratings refer to IDs missing from movies.csv.")
     source = settings.dataset_dir / "ratings.csv"
     manifest = {
+        "protocol": protocol,
+        "exclusions": exclusion,
         "created_at": datetime.now(UTC).isoformat(),
         "source": str(source),
         "source_bytes": source.stat().st_size,

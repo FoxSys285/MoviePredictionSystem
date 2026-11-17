@@ -19,12 +19,11 @@ import numpy as np
 import pandas as pd
 import psutil
 import torch
-from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 
 from movie_rating.experiment_config import ALGORITHMS, ExperimentRequest
 from movie_rating.experiment_data import ExperimentData
-from movie_rating.models.regression import FeatureRegression
+from movie_rating.models.regression import FeatureRegression, StreamingLinearRegression
 from movie_rating.windows_dlls import enable_unicode_dll_paths
 
 enable_unicode_dll_paths()
@@ -117,15 +116,18 @@ def latency(call, repetitions=12):
 
 class LinearRating(FeatureRegression):
     def _estimator(self):
-        return LinearRegression(n_jobs=1, copy_X=False)
+        return StreamingLinearRegression()
 
 
 def pair_features(train, frames, movies):
     builder = LinearRating()
     builder.set_movie_metadata(movies)
-    builder.fit(train)
+    builder.fit_statistics(train)
     u, i = builder.encode_queries(train.userId, train.movieId)
-    x_train = builder._features(u, i, exclude=train.rating.to_numpy())
+    x_train = builder._feature_batch(
+        u, i, exclude=train.rating.to_numpy(),
+        timestamps=train.timestamp.to_numpy() if 'timestamp' in train else None,
+        movie_ids=train.movieId.to_numpy())
     matrices = []
     for frame in frames:
         u, i = builder.encode_queries(frame.userId, frame.movieId)
@@ -288,6 +290,23 @@ class LabService:
         return self.data.load(request)
 
     def _run(self, job, request):
+        try:
+            if self.data.catalog_statistics()['ratings'] >= 1_000_000:
+                from movie_rating.experiment_worker import run_isolated
+
+                run_isolated(self, job, request)
+            else:
+                self._run_inline(job, request)
+        except Exception as error:
+            # Includes failures creating a scratch directory or starting a Windows worker.
+            with self.lock:
+                if self.active == job['id']:
+                    job.update(status='failed', message=f'{type(error).__name__}: {error}',
+                               finished_at=datetime.now(UTC).isoformat())
+                    save_json(self.directory / job['id'] / 'job.json', job)
+                    self.active = None
+
+    def _run_inline(self, job, request):
         path = self.directory / job['id']
 
         def update(progress, message):
@@ -298,7 +317,7 @@ class LabService:
 
         try:
             message = (
-                'Đọc toàn bộ split thời gian MovieLens 70/15/15'
+                'Đọc dữ liệu; chuẩn bị lịch sử theo user cho hồi quy/phân loại'
                 if request.use_all_data
                 else 'Lấy mẫu lịch sử MovieLens, chia 70/15/15 với seed 42'
             )
@@ -338,6 +357,8 @@ class LabService:
         except Exception as error:
             job.update(status='failed', message=f'{type(error).__name__}: {error}', finished_at=datetime.now(UTC).isoformat())
         finally:
+            if self.data.full_statistics and self.data.full_statistics['ratings'] >= 1_000_000:
+                self.data.sample = self.data.sample_key = None
             with self.lock:
                 save_json(path / 'job.json', job)
                 self.active = None
