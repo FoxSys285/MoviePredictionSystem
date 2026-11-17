@@ -1,4 +1,4 @@
-// Real regression/classification jobs, plus controlled log transport for scroll/reconnect behavior.
+// Real regression/classification/clustering jobs, plus controlled log transport for scroll/reconnect behavior.
 import assert from "node:assert/strict";
 import {access,mkdir,writeFile} from "node:fs/promises";
 import path from "node:path";
@@ -34,7 +34,7 @@ try{
   const page=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:"reduce"});
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   let latestJob,actualEvents;
-  for(const group of ["rating","classification"]){
+  for(const group of ["rating","classification","clustering"]){
     await page.goto(`${base}/experiments?group=${group}`);
     await page.locator(".lab-algorithm-select input").last().waitFor();
     await page.locator(".lab-parameter-details summary").click();
@@ -43,7 +43,7 @@ try{
     if(group==="rating"){
       await page.getByLabel("Epochs SVD / NCF",{exact:true}).fill("2");
       await page.getByLabel("XGBoost · Trees",{exact:true}).fill("10");
-    }else{
+    }else if(group==="classification"){
       await page.getByLabel("Forest · Trees",{exact:true}).fill("10");
     }
     await page.locator(".lab-parameter-details summary").click();
@@ -56,8 +56,9 @@ try{
     assert.equal(finished.status,"completed",finished.message);
     await page.locator(".lab-log-success").last().waitFor();
     const text=await page.locator(".lab-log-viewport").innerText();
-    for(const step of ["Validation","CV","refit","Test"])assert.ok(text.includes(step),step);
-    assert.ok(text.includes(group==="rating"?"cây 1/10":"SAGA"));
+    const stages=group==="clustering"?["K-Means","DBSCAN","Hồ sơ","bao phủ","noise","ổn định","Recall@10","NDCG@10","Validation","Test"]:["Validation","CV","refit","Test"];
+    for(const step of stages)assert.ok(text.includes(step),step);
+    if(group!=="clustering")assert.ok(text.includes(group==="rating"?"cây 1/10":"SAGA"));
     const desktop=await page.locator(".lab-log-viewport").boundingBox();
     assert.ok(Math.abs(desktop.height-500)<2);
     assert.equal(await page.locator(".lab-log-viewport").evaluate(e=>getComputedStyle(e).overflowY),"auto");
@@ -113,12 +114,12 @@ try{
   await page.locator(".lab-log-notice").waitFor({state:"hidden",timeout:10000});
   assert.equal(await page.locator(".lab-log-line").count(),available.length);
   await page.unrouteAll({behavior:"wait"});
-  await page.goto(`${base}/experiments?group=clustering`);
+  await page.goto(`${base}/experiments?group=pca`);
   await page.locator(".lab-algorithms article").last().waitFor();
   assert.equal(await page.locator(".lab-log").count(),0);
   assert.deepEqual(errors,[]);
   await writeFile(path.join(output,"experiment-logs-check.json"),JSON.stringify({summary,scroll:"pass",reconnect:"pass",other_groups:"unchanged"},null,2));
-  console.log("PASS real regression/classification logs, half-screen desktop/mobile, history, download, pause/follow, reconnect and group scope.");
+  console.log("PASS real regression/classification/clustering logs, half-screen desktop/mobile, history, download, pause/follow, reconnect and group scope.");
 }finally{
   await browser?.close();
   server.kill();

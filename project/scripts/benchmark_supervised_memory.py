@@ -1,4 +1,4 @@
-"""Run a supervised job through the same isolation/RAM guard as the web UI."""
+"""Run a supervised or clustering job through the web UI's isolation/RAM guard."""
 
 import argparse
 import json
@@ -12,7 +12,9 @@ from movie_rating.settings import load_settings
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--group", choices=["rating", "classification"], default="rating")
+    parser.add_argument(
+        "--group", choices=["rating", "classification", "clustering"], default="rating"
+    )
     parser.add_argument("--algorithms", nargs="+")
     parser.add_argument("--full-data", action="store_true")
     parser.add_argument("--max-users", type=int, default=150)
@@ -61,6 +63,8 @@ def main():
                 "provenance": result.get("provenance"),
                 "runtime": result.get("runtime"),
                 "rows": result.get("rows"),
+                "recommendation": result.get("recommendation"),
+                "selection": result.get("selection"),
             },
             ensure_ascii=False,
             indent=2,

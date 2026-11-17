@@ -93,8 +93,10 @@ def test_six_groups_fit_real_models_and_serialize_finite_results(group, lab_data
         assert all(-1 <= r["average_reward"] <= 1 for r in result["rows"])
         assert all(0 <= r["observed_feedback_fraction"] <= 1 for r in result["rows"])
     if group == "clustering":
-        assert len(result["search"]) == 9
-        assert all("noise_fraction" in r for r in result["rows"])
+        assert {r["algorithm"] for r in result["search"]} == {"kmeans", "dbscan"}
+        assert all("coverage" in r and "qualified" in r for r in result["rows"])
+        assert all(r["split"] == "train_history" for r in result["rows"])
+        assert result["recommendation"]["rows"]
 
 
 def test_auc_uses_probability_and_classification_boundary():

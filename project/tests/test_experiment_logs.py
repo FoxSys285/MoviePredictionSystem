@@ -4,13 +4,14 @@ import threading
 import time
 
 import numpy as np
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 from movie_rating.api.app import create_app
 from movie_rating.data.prepare import prepare
 from movie_rating.experiment_logs import RunLogger, log_page
-from movie_rating.lab import LabRequest, LabService, save_json
+from movie_rating.lab import Cancelled, LabRequest, LabService, save_json
 from movie_rating.models.regression import XGBoostRegression
 
 
@@ -107,9 +108,15 @@ def test_external_xgboost_cancellation_preserves_error_and_removes_cache(
     [
         ("rating", ["linear", "xgboost", "svd", "ncf"]),
         ("classification", ["logistic", "random_forest"]),
+        ("clustering", ["kmeans", "dbscan"]),
     ],
 )
 def test_real_job_logs_stages_metrics_and_survives_reopening(configured, group, algorithms):
+    if group == "clustering":
+        path = configured.dataset_dir / "movies.csv"
+        movies = pd.read_csv(path)
+        movies["genres"] = ["Drama" if i % 2 else "Action" for i in range(len(movies))]
+        movies.to_csv(path, index=False)
     prepare(configured)
     service = LabService(configured)
     job = service.start(
@@ -131,16 +138,63 @@ def test_real_job_logs_stages_metrics_and_survives_reopening(configured, group, 
     page = reopened.logs(job["id"], limit=500)
     assert not page["has_more"]
     messages = "\n".join(row["message"] for row in page["entries"])
-    for word in ("Validation", "CV", "refit", "Test"):
+    words = (
+        (
+            "Hồ sơ",
+            "K-Means",
+            "DBSCAN",
+            "bao phủ",
+            "noise",
+            "ổn định",
+            "Recall@10",
+            "NDCG@10",
+            "Validation",
+            "Test",
+        )
+        if group == "clustering"
+        else ("Validation", "CV", "refit", "Test")
+    )
+    for word in words:
         assert word in messages
     if group == "rating":
         assert "cây 1/10" in messages and "epoch 1/2" in messages
         assert "Neural Collaborative Filtering" in messages
-    else:
+    elif group == "classification":
         assert "StandardScaler" in messages and "SAGA" in messages
         assert "Random Forest" in messages
     assert page["entries"][-1]["level"] == "success"
     assert page["entries"][-1]["progress"] == 100
+    service.executor.shutdown(wait=True)
+    reopened.executor.shutdown(wait=True)
+
+
+@pytest.mark.parametrize(
+    "error,status,level",
+    [(RuntimeError("clustering failed"), "failed", "error"), (Cancelled(), "cancelled", "warning")],
+)
+def test_clustering_failure_and_cancellation_persist_logs(
+    configured, monkeypatch, error, status, level
+):
+    from movie_rating import experiment_pipeline
+
+    prepare(configured)
+
+    def stop(*args):
+        raise error
+
+    monkeypatch.setattr(experiment_pipeline, "execute", stop)
+    service = LabService(configured)
+    try:
+        job = service.start(LabRequest(group="clustering"))
+        service.executor.shutdown(wait=True)
+        finished = service.get(job["id"])
+        assert finished["status"] == status
+        assert "result" not in finished
+        entries = service.logs(job["id"], limit=500)["entries"]
+        assert any(e["level"] == level for e in entries)
+        assert not any(e["level"] == "success" for e in entries)
+    finally:
+        service.executor.shutdown(wait=True)
 
 
 def test_log_api_is_paged_validated_and_supports_old_runs(configured):

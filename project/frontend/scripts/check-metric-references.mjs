@@ -28,6 +28,10 @@ assert.equal(assessMetric(accuracy,{split:'test',accuracy:.8},imbalance).tone,'c
 assert.equal(assessMetric(accuracy,{split:'test',accuracy:.8},{rows:[],class_balance:{train:{positive:10,negative:90},test:{positive:85,negative:15}}}).tone,'good');
 assert.equal(assessMetric(metric('rating','rmse'),{rmse:.8},empty).tone,'good');
 assert.equal(assessMetric(metric('rating','rmse'),{rmse:1.2},empty).tone,'bad');
+assert.equal(assessMetric(metric('clustering','silhouette'),{silhouette:.64,noise_fraction:.96},empty).tone,'caution');
+assert.equal(assessMetric(metric('clustering','dbi'),{dbi:.3,noise_fraction:.96},empty).tone,'caution');
+assert.equal(assessMetric(metric('clustering','silhouette'),{silhouette:.64,noise_fraction:0,coverage:1,qualified:true},empty).tone,'good');
+assert.equal(assessMetric(metric('clustering','silhouette'),{silhouette:.64,noise_fraction:.1,coverage:.9,qualified:false},empty).tone,'caution');
 assert.equal(assessMetric(metric('association','lift'),{lift:1},empty).tone,'neutral');
 assert.equal(assessMetric(metric('association','lift'),{lift:1.2},empty).tone,'good');
 assert.equal(assessMetric(metric('association','lift'),{lift:.8},empty).tone,'bad');

@@ -270,7 +270,7 @@
     {
       "id": "clustering",
       "title": "Clustering · Người dùng",
-      "question": "Người dùng có những nhóm sở thích thể loại nào?",
+      "question": "Những user có lịch sử nào có sở thích tương tự, và gợi ý theo cụm có tốt hơn Popularity trên rating tương lai không?",
       "algorithms": [
         {
           "id": "kmeans",
@@ -289,7 +289,7 @@
         {
           "key": "silhouette",
           "name": "Silhouette ↑",
-          "definition": "Độ tách biệt cụm, loại noise, lấy mẫu tối đa 2.000 user.",
+          "definition": "Độ tách biệt cụm, loại noise, lấy mẫu tối đa 2.000 user. Đo trên hồ sơ lịch sử Train; không phải độ chính xác dự đoán tương lai.",
           "interpretation": "Cao hơn tốt hơn.",
           "question": "Độ tách biệt cụm, loại noise, lấy mẫu tối đa 2.000 user.",
           "reference": {
@@ -301,13 +301,13 @@
             "maximum": 1,
             "rationale": "Chọn 0,50 làm mục tiêu khám phá ban đầu: điểm trong cụm cần gần nhau hơn so với cụm lân cận.",
             "interpretation": "≥0,50: đạt mốc tách biệt; 0–<0,50: cụm chồng lấn hoặc yếu; <0: có thể gán cụm không phù hợp.",
-            "caution": "Đây là heuristic, không có mốc tốt phổ quát. DBSCAN loại noise khi tính, nên phải đọc cùng tỷ lệ noise và số cụm."
+            "caution": "Đây là heuristic, không có mốc tốt phổ quát. DBSCAN loại noise khi tính, nên phải đọc cùng tỷ lệ noise và số cụm. Không kết luận tốt nếu chưa đạt điều kiện bao phủ/cấu hình; lịch sử cũ dùng cách tạo hồ sơ khác."
           }
         },
         {
           "key": "dbi",
           "name": "Davies-Bouldin ↓",
-          "definition": "Tỷ số độ phân tán trong cụm trên khoảng cách cụm.",
+          "definition": "Tỷ số độ phân tán trong cụm trên khoảng cách cụm. Đo trên hồ sơ lịch sử Train; không phải độ chính xác dự đoán tương lai.",
           "interpretation": "Thấp hơn tốt hơn.",
           "question": "Tỷ số độ phân tán trong cụm trên khoảng cách cụm.",
           "reference": {
@@ -319,7 +319,25 @@
             "maximum": null,
             "rationale": "Mốc khám phá 1,00 ưu tiên độ phân tán trong cụm nhỏ tương đối so với khoảng cách giữa cụm.",
             "interpretation": "≤1,00: đạt mục tiêu ban đầu; >1,00: cụm còn phân tán/gần nhau theo tiêu chí này.",
-            "caution": "DBI không có ngưỡng tốt chung và phụ thuộc scaler, khoảng cách, số cụm. Chỉ so cùng đặc trưng; đọc cùng noise."
+            "caution": "DBI không có ngưỡng tốt chung và phụ thuộc scaler, khoảng cách, số cụm. Chỉ so cùng đặc trưng; đọc cùng noise. Không kết luận tốt nếu chưa đạt điều kiện bao phủ/cấu hình; lịch sử cũ dùng cách tạo hồ sơ khác."
+          }
+        },
+        {
+          "key": "coverage",
+          "name": "Bao phủ ↑",
+          "definition": "Tỷ lệ user đủ lịch sử được gán cụm; 0–1. Đọc trước Silhouette/DBI.",
+          "interpretation": "Cao hơn phục vụ được nhiều user hơn; một cụm duy nhất vẫn không đạt yêu cầu phân cụm.",
+          "question": "Mô hình thực sự phục vụ được bao nhiêu user?",
+          "reference": {
+            "value": 0.8,
+            "operator": "gte",
+            "kind": "quality",
+            "unit": "tỷ lệ",
+            "minimum": 0,
+            "maximum": 1,
+            "rationale": "Mục tiêu ban đầu: gán cụm được ít nhất 80% user đủ lịch sử.",
+            "interpretation": "Bao phủ đạt mốc vẫn cần ít nhất hai cụm và đánh giá chất lượng gợi ý.",
+            "caution": "Ngưỡng chọn mô hình nằm trong cấu hình thực nghiệm; thay mốc hiển thị không thay cấu hình đã chọn."
           }
         },
         {

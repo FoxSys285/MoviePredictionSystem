@@ -45,13 +45,19 @@ class ExperimentRequest(BaseModel):
     tune: bool = False
     memory_budget_mb: int = Field(4096, ge=1024, le=32768)
     parameters: ModelParameters = Field(default_factory=ModelParameters)
-    k_values: list[int] = Field(default_factory=lambda: [3, 4, 6], min_length=1, max_length=10)
+    k_values: list[int] = Field(
+        default_factory=lambda: [2, 3, 4, 6, 8, 10], min_length=1, max_length=10
+    )
     eps_values: list[float] = Field(
         default_factory=lambda: [1.0, 1.5, 2.0], min_length=1, max_length=10
     )
     min_samples_values: list[int] = Field(
-        default_factory=lambda: [3, 5], min_length=1, max_length=5
+        default_factory=lambda: [5, 10], min_length=1, max_length=5
     )
+    cluster_auto_eps: bool = True
+    cluster_min_coverage: float = Field(0.8, ge=0.1, le=1)
+    cluster_shrinkage: float = Field(10.0, ge=1, le=100)
+    cluster_eval_users: int = Field(2000, ge=10, le=5000)
     min_user_ratings: int = Field(5, ge=2, le=100)
     max_items: int = Field(80, ge=10, le=500)
     min_support: float = Field(0.08, ge=0.001, le=1)
@@ -65,6 +71,9 @@ class ExperimentRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_options(self):
+        if self.group == "association":
+            # Association mining always reads the complete prepared Train split.
+            self.use_all_data = True
         allowed = ALGORITHMS[self.group]
         if self.algorithms is None:
             self.algorithms = list(allowed)

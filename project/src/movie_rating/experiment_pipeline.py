@@ -4,9 +4,10 @@ from movie_rating.lab import CATALOG, chart, series
 
 
 def execute(splits, movies, request, update):
+    from movie_rating.experiment_clustering import clustering
     from movie_rating.experiment_reinforcement import reinforcement
     from movie_rating.experiment_supervised import supervised
-    from movie_rating.experiment_unsupervised import association, clustering, reduction
+    from movie_rating.experiment_unsupervised import association, reduction
 
     handler = {
         "rating": supervised,

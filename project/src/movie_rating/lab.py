@@ -24,7 +24,7 @@ from sklearn.preprocessing import StandardScaler
 
 from movie_rating.experiment_config import ALGORITHMS, ExperimentRequest
 from movie_rating.experiment_data import ExperimentData
-from movie_rating.experiment_logs import RunLogger, log_page
+from movie_rating.experiment_logs import LOGGED_GROUPS, RunLogger, log_page
 from movie_rating.models.regression import FeatureRegression, StreamingLinearRegression
 from movie_rating.windows_dlls import enable_unicode_dll_paths
 
@@ -275,7 +275,7 @@ class LabService:
                    'message': 'Đang chuẩn bị dữ liệu', 'created_at': requested_at,
                    'request': request.model_dump(), 'process_id': os.getpid(), 'cancel_requested': False}
             save_json(folder / 'job.json', job)
-            if request.group in ('rating', 'classification'):
+            if request.group in LOGGED_GROUPS:
                 RunLogger(folder).write(
                     f"Đã tạo thực nghiệm {request.group} · thuật toán: {', '.join(request.algorithms)}",
                     progress=0)
@@ -291,7 +291,7 @@ class LabService:
                 self.cancel_event.set()
                 job.update(cancel_requested=True, message='Đang dừng sau bước tính toán hiện tại…')
                 save_json(self.directory / run_id / 'job.json', job)
-                if job['group'] in ('rating', 'classification'):
+                if job['group'] in LOGGED_GROUPS:
                     RunLogger(self.directory / run_id).write('Đã nhận yêu cầu dừng.', 'warning')
             return job
 
@@ -323,14 +323,14 @@ class LabService:
                 if self.active == job['id']:
                     job.update(status='failed', message=f'{type(error).__name__}: {error}',
                                finished_at=datetime.now(UTC).isoformat())
-                    if request.group in ('rating', 'classification'):
+                    if request.group in LOGGED_GROUPS:
                         RunLogger(self.directory / job['id']).write(job['message'], 'error')
                     save_json(self.directory / job['id'] / 'job.json', job)
                     self.active = None
 
     def _run_inline(self, job, request):
         path = self.directory / job['id']
-        logger = RunLogger(path) if request.group in ('rating', 'classification') else None
+        logger = RunLogger(path) if request.group in LOGGED_GROUPS else None
         last_write = 0.0
         previous_message = None
 
@@ -352,14 +352,31 @@ class LabService:
 
         try:
             message = (
-                'Đọc dữ liệu; chuẩn bị lịch sử theo user cho hồi quy/phân loại'
+                'Đọc dữ liệu; chuẩn bị lịch sử theo user cho hồi quy/phân loại/phân cụm'
                 if request.use_all_data
                 else 'Lấy mẫu lịch sử MovieLens, chia 70/15/15 với seed 42'
             )
+            if request.group == 'association':
+                message = ('Association Rules · đọc toàn bộ data/train.parquet; '
+                           'movies.parquet cung cấp metadata; Validation/Test không dùng khai phá luật.')
             update(2, message)
             splits, movies, provenance = self._load(request)
             update(None, 'Đã nạp dữ liệu · ' + ' · '.join(
                 f'{name}: {len(frame):,} rating' for name, frame in splits.items()))
+            if request.group == 'clustering':
+                source = provenance.get('split_files') or {}
+                update(None, f"Phân cụm · nguồn Train: {source.get('train', 'lịch sử user lấy mẫu, chia lại theo thời gian')} · "
+                       f"metadata: {provenance.get('metadata_file', 'movies.parquet')}")
+                update(None, 'Hồ sơ sở thích và fit mô hình chỉ đọc Train; '
+                       'Validation/Test đánh giá gợi ý tương lai. Fit cuối dùng hết user Train đủ lịch sử.')
+            if request.group == 'association':
+                source = provenance['association_source']
+                update(8, f"Nguồn Train: {source['train_file']} · "
+                       f"{len(splits['train']):,} ratings · "
+                       f"{provenance['splits']['train']['users']:,} users · không lấy mẫu user.")
+                if source['prepared_user_sample_fraction'] not in (None, 1, 1.0):
+                    update(None, 'Lưu ý: dùng hết Train đã chuẩn bị, nhưng dữ liệu nguồn '
+                           'đã được lấy mẫu ở bước chuẩn bị; xem tỷ lệ nguồn trong báo cáo.')
             from movie_rating.experiment_pipeline import execute
 
             result = execute(splits, movies, request, update)
@@ -369,9 +386,13 @@ class LabService:
                 if request.use_all_data
                 else 'Kết quả thuộc mẫu user công bố ở trên; không đại diện tự động cho toàn bộ MovieLens 25M.'
             )
+            protocol_note = 'Chọn cấu hình trên validation; test chỉ báo cáo đánh giá cuối, không dùng để tuning tiếp.'
+            if request.group == 'association':
+                data_note = 'Kết quả dùng toàn bộ tập Train đã chuẩn bị; không lấy mẫu user.'
+                protocol_note = ('Ngưỡng khai phá áp dụng trên Train. Validation/Test không tham gia '
+                                 'sinh luật; các chỉ số Train chưa xác nhận chất lượng gợi ý tương lai.')
             result.update(provenance=provenance, group=request.group, config=request.model_dump(),
-                          notes=[*result.get('notes', []), data_note,
-                                 'Chọn cấu hình trên validation; test chỉ báo cáo đánh giá cuối, không dùng để tuning tiếp.'])
+                          notes=[*result.get('notes', []), data_note, protocol_note])
             device = 'CPU'
             if (
                 request.group == 'rating'
@@ -414,6 +435,8 @@ class LabService:
             flattened.append({'record_type': 'association_rule', **{
                 key: json.dumps(native(value), ensure_ascii=False) if isinstance(value, list) else value
                 for key, value in rule.items()}})
+        for row in job.get('result', {}).get('recommendation', {}).get('rows', []):
+            flattened.append({'record_type': 'future_recommendation', **row})
         fields = list(dict.fromkeys(k for row in flattened for k in row))
         buffer = io.StringIO(newline='')
         writer = csv.DictWriter(buffer, fieldnames=fields)
@@ -454,6 +477,14 @@ class LabService:
                 folds = [{'algorithm': a, **{k: v for k, v in row.items() if not isinstance(v, list)}}
                          for a, data in result['cv'].items() for row in data['folds']]
                 pd.DataFrame(folds).to_excel(writer, sheet_name='CV folds', index=False)
+            if result.get('recommendation'):
+                pd.DataFrame(result['recommendation']['rows']).to_excel(
+                    writer, sheet_name='Future ranking', index=False)
+            if result.get('clustering_protocol'):
+                search = [{k: json.dumps(native(v), ensure_ascii=False)
+                           if isinstance(v, (list, dict)) else v for k, v in row.items()}
+                          for row in result.get('search', [])]
+                pd.DataFrame(search).to_excel(writer, sheet_name='Cluster search', index=False)
             pd.DataFrame({'key': ['request', 'provenance', 'runtime', 'selection'],
                           'value': [json.dumps(result.get(k, job.get(k)), ensure_ascii=False)
                                     for k in ['request', 'provenance', 'runtime', 'selection']]}).to_excel(

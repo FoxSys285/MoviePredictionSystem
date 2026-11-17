@@ -3,9 +3,9 @@
 ## Chạy trên dữ liệu hiện tại
 
 Mở lại `run_project.bat`, vào Thực nghiệm và giữ **Dùng toàn bộ dữ liệu đã chuẩn bị**.
-Hồi quy/phân loại tự chuyển dữ liệu chia thời gian toàn cục cũ sang cache riêng,
+Hồi quy/phân loại/phân cụm tự chuyển dữ liệu chia thời gian toàn cục cũ sang cache riêng,
 không xóa data cũ hoặc lịch sử. Không cần chạy lại `prepare` để dùng Lab mới.
-Các nhóm còn lại tiếp tục đọc dữ liệu chuẩn bị của chúng.
+Luật kết hợp, giảm chiều và học tăng cường tiếp tục đọc dữ liệu chuẩn bị của chúng.
 
 Giao thức mới: chia lịch sử trong từng user, khoảng 70/15/15, không tách rating
 cùng timestamp. Có thể có chồng lấn timeline giữa các user; không diễn giải kết
@@ -56,7 +56,7 @@ bao gồm chuẩn bị dữ liệu, CV và refit, không chỉ thời gian fit m
 Khung **Nhật ký thực nghiệm** nằm ngay dưới thanh tiến độ, cao 50% viewport,
 có thanh cuộn. Tự cuộn theo dòng mới khi đang ở cuối; cuộn lên để đọc lịch sử
 thì giữ vị trí. Nút **Về log mới nhất** bật theo dõi lại. Hoạt động cả desktop,
-mobile và giao diện sáng/tối. Chỉ hai nhóm hồi quy/phân loại có khung này.
+mobile và giao diện sáng/tối. Hồi quy, phân loại, phân cụm và luật kết hợp dùng chung khung này.
 
 Log ghi thời gian, cấu hình, tạo đặc trưng, Validation, từng lượt CV, refit và
 Test. Linear ghi số rating đã tích lũy theo batch; SVD/NCF ghi epoch (NCF có

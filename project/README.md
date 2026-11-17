@@ -195,7 +195,8 @@ Phân tích toàn bộ dataset đã hoàn tất; kết quả RMSE/MAE chỉ xu�
 chạy `prepare`, `train` và `evaluate`. Thống kê hiển thị trên website không thay
 đổi thống kê train hoặc dùng làm đầu vào cho mô hình.
 
-Đọc thêm: [kiến trúc](docs/architecture.md), [phương pháp đánh giá](docs/methodology.md),
+Đọc thêm: [phân cụm user có lịch sử](docs/clustering-experiments.md),
+[kiến trúc](docs/architecture.md), [phương pháp đánh giá](docs/methodology.md),
 [hợp đồng API](docs/api.md), [giao diện và cách chạy](frontend/README.md).
 
 Nguồn dữ liệu và cách trích dẫn:

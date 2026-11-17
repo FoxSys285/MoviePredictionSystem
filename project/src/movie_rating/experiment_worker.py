@@ -25,12 +25,12 @@ def _execute(settings, job, payload, cancelled, scratch):
 
 
 def run_isolated(service, job, request):
-    from movie_rating.experiment_logs import RunLogger
+    from movie_rating.experiment_logs import LOGGED_GROUPS, RunLogger
     from movie_rating.lab import read_json, save_json
     from movie_rating.memory import scratch_root
 
     folder = service.directory / job["id"]
-    logger = RunLogger(folder) if request.group in ("rating", "classification") else None
+    logger = RunLogger(folder) if request.group in LOGGED_GROUPS else None
     scratch_parent = scratch_root(native_ascii=True)
     scratch = scratch_parent / job["id"]
     scratch.mkdir(parents=True, exist_ok=True)

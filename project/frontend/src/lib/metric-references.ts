@@ -35,6 +35,11 @@ export function assessMetric(metric:Criterion,row:LabRow,result:LabResult,values
   }
   const passed=ref.operator==="lte"?raw<=target:ref.operator==="gte"?raw>=target:raw>target;
   const reference=referenceLabel(metric,values);
+  if(["silhouette","dbi"].includes(metric.key)&&typeof row.noise_fraction==="number") {
+    const coverage=typeof row.coverage==="number"?row.coverage:1-row.noise_fraction;
+    const minimum=result.cluster_min_coverage??.8;
+    if(coverage<minimum||row.qualified===false)return {tone:"caution",label:coverage<minimum?"Bao phủ chưa đạt":"Cấu hình chưa đạt",explanation:`Chỉ số chỉ tính trên user không noise. Bao phủ ${(coverage*100).toFixed(1)}%; yêu cầu ≥${(minimum*100).toFixed(1)}% và ít nhất hai cụm hợp lệ khi chọn cấu hình.`,reference};
+  }
   if(metric.key==="lift"&&ref.operator==="gt"&&Math.abs(raw-target)<=1e-12)return {tone:"neutral",label:"Bằng mốc Lift",explanation:target===1?"Lift =1: không tăng đồng xuất hiện so với độc lập.":"Lift bằng mốc đã chọn; chưa vượt mốc.",reference};
   if(metric.key==="accuracy"&&passed&&result.class_balance) {
     const train=result.class_balance.train,balance=result.class_balance[row.split];

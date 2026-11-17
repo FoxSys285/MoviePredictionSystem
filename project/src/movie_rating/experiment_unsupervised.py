@@ -5,10 +5,8 @@ import time
 
 import numpy as np
 import pandas as pd
-from sklearn.cluster import DBSCAN, KMeans
 from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.metrics import davies_bouldin_score, silhouette_score
-from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 
 from movie_rating.lab import chart, measured, series
@@ -78,174 +76,38 @@ def projected_chart(title, x, labels, split="train"):
 
 
 def clustering(splits, movies, request, update):
-    raw, users, genres = genre_profiles(splits["train"], movies, request.min_user_ratings)
-    if len(raw) < 4:
-        raise ValueError("Cần ít nhất 4 user hợp lệ cho phân cụm.")
-    scaler = StandardScaler().fit(raw)
-    x = scaler.transform(raw)
-    projection = PCA(2, random_state=42).fit_transform(x)
-    held = {}
-    for s in ("validation", "test"):
-        try:
-            a, _, _ = genre_profiles(splits[s], movies, 1)
-            held[s] = scaler.transform(a)
-        except ValueError:
-            held[s] = np.empty((0, x.shape[1]))
-    configs = []
-    if "kmeans" in request.algorithms:
-        configs.extend(
-            ("kmeans", {"n_clusters": k}) for k in sorted(set(request.k_values)) if k < len(x)
-        )
-    if "dbscan" in request.algorithms:
-        configs.extend(
-            ("dbscan", {"eps": eps, "min_samples": m})
-            for eps in sorted(set(request.eps_values))
-            for m in sorted(set(request.min_samples_values))
-        )
-    rows, details, charts, winners = [], [], [], []
-    for algorithm in request.algorithms:
-        options = []
-        for aid, config in configs:
-            if aid != algorithm:
-                continue
-            update(12 + 65 * len(details) / max(1, len(configs)), f"{aid} · {config}")
-            model = (
-                KMeans(**config, n_init=10, random_state=42)
-                if aid == "kmeans"
-                else DBSCAN(**config)
-            )
-            with measured() as timing:
-                model.fit(x)
-            # Build the explicit DBSCAN extension once; index construction belongs to fit.
-            start = time.perf_counter()
-            nearest = (
-                NearestNeighbors(n_neighbors=1).fit(model.components_)
-                if aid == "dbscan" and len(model.components_)
-                else None
-            )
-            timing["fit_seconds"] += time.perf_counter() - start
+    # Keep the historical import path; the active implementation has its own module.
+    from movie_rating.experiment_clustering import clustering as run_clustering
 
-            def predict(new_x):
-                if not len(new_x):
-                    return np.array([], dtype=int)
-                if aid == "kmeans":
-                    return model.predict(new_x)
-                if nearest is None:
-                    return np.full(len(new_x), -1)
-                distance, index = nearest.kneighbors(new_x)
-                assigned = model.labels_[model.core_sample_indices_[index[:, 0]]].copy()
-                assigned[distance[:, 0] > model.eps] = -1
-                return assigned
-
-            score = cluster_scores(x, model.labels_, 42)
-            detail = {"algorithm": aid, "config": config, **score, **timing}
-            details.append(detail)
-            val_labels = predict(held["validation"])
-            val = cluster_scores(held["validation"], val_labels, 42)
-            detail["validation_silhouette"] = val["silhouette"]
-            options.append((val, score, config, model, nearest, timing))
-        if not options:
-            raise ValueError("Không có cấu hình phân cụm hợp lệ với số user hiện tại.")
-        # Prefer validation quality; deterministic train fallback if validation is degenerate.
-        selected = max(
-            options,
-            key=lambda o: (
-                o[0]["silhouette"] is not None,
-                o[0]["silhouette"]
-                if o[0]["silhouette"] is not None
-                else o[1]["silhouette"]
-                if o[1]["silhouette"] is not None
-                else -2,
-                -(o[1]["noise_fraction"] or 0),
-            ),
-        )
-        val, score, config, model, nearest, timing = selected
-        winners.append(
-            {"algorithm": algorithm, "config": config, "validation": val, "train": score}
-        )
-        for split, new_x in held.items():
-            start = time.perf_counter()
-            # The closure refers to the last candidate; assign explicitly to the selected model.
-            if algorithm == "kmeans":
-                labels = model.predict(new_x) if len(new_x) else np.array([], dtype=int)
-            elif nearest is not None and len(new_x):
-                distance, index = nearest.kneighbors(new_x)
-                labels = model.labels_[model.core_sample_indices_[index[:, 0]]].copy()
-                labels[distance[:, 0] > model.eps] = -1
-            else:
-                labels = np.full(len(new_x), -1)
-            seconds = time.perf_counter() - start
-            rows.append(
-                {
-                    "algorithm": algorithm,
-                    "name": "K-Means" if algorithm == "kmeans" else "DBSCAN",
-                    "split": split,
-                    **cluster_scores(new_x, labels, 42),
-                    **timing,
-                    "inference_seconds": seconds,
-                    "inference_rows": len(new_x),
-                    "model_bytes": len(pickle.dumps((scaler, model, nearest))),
-                }
-            )
-        charts.append(projected_chart(f"{algorithm} · PCA 2D / Train", projection, model.labels_))
-        profiles = []
-        for cluster in np.unique(model.labels_):
-            subset = raw[model.labels_ == cluster]
-            top = np.argsort(subset.mean(axis=0))[::-1][:5]
-            profiles.append(
-                {
-                    "cluster": int(cluster),
-                    "users": len(subset),
-                    "genre_means": {genres[i]: float(subset[:, i].mean()) for i in top},
-                }
-            )
-        winners[-1]["profiles"] = profiles
-    eligible = [w for w in winners if w["validation"]["silhouette"] is not None]
-    selected = max(eligible, key=lambda w: w["validation"]["silhouette"]) if eligible else None
-    return {
-        "rows": rows,
-        "charts": charts,
-        "search": details,
-        "clusters": winners,
-        "best_configs": {w["algorithm"]: w["config"] for w in winners},
-        "selection": f"Silhouette Validation cao nhất: {selected['algorithm']}."
-        if selected
-        else "Validation không đủ cụm hợp lệ; chưa có cơ sở chọn mô hình triển khai.",
-        "notes": [
-            f"Vector user = rating trung bình từng genre ({len(genres)} chiều). "
-            f"Train loại user dưới {request.min_user_ratings} ratings; "
-            "genre thiếu điền bằng rating trung bình user. Scaler chỉ fit trên Train.",
-            "Silhouette loại noise và lấy mẫu tối đa 2.000 user với seed 42. "
-            "Noise vẫn được báo cáo riêng; chỉ số đẹp với noise cao cần thận trọng.",
-            "DBSCAN inference là phép mở rộng: gán core Train gần nhất trong eps, "
-            "ngoài eps là noise. Thời gian gồm truy vấn nearest-neighbor, "
-            "index được tính trong fit.",
-            "Validation/Test là profile từ ratings giữ lại của user; "
-            "không đại diện toàn bộ user mới. PCA 2D chỉ dùng để hiển thị.",
-        ],
-    }
+    return run_clustering(splits, movies, request, update)
 
 
 def association(splits, movies, request, update):
     from mlxtend.frequent_patterns import apriori, association_rules
 
     frame = splits["train"]
-    positive = frame.loc[frame.rating >= 4.0]
-    items = (
-        positive.groupby("movieId")
-        .size()
-        .sort_values(ascending=False, kind="stable")
-        .head(request.max_items)
-        .index
-    )
-    transactions = (
-        pd.crosstab(positive.userId, positive.movieId)
-        .reindex(index=np.sort(frame.userId.unique()), columns=items, fill_value=0)
-        .fillna(0)
-        .astype(bool)
-    )
-    update(20, "Apriori · rating ≥ 4,0 · transactions gồm cả user không có phim thích")
+    update(12, f"Apriori · quét toàn bộ {len(frame):,} ratings Train; lọc phim rating ≥ 4,0.")
     with measured() as timing:
+        positive = frame.loc[frame.rating >= 4.0, ["userId", "movieId"]]
+        counts = positive.groupby("movieId").size().sort_values(ascending=False, kind="stable")
+        items = counts.head(request.max_items).index
+        users = np.sort(frame.userId.unique())
+        update(20, f"Có {len(positive):,} lượt thích / {len(counts):,} phim; "
+               f"chọn {len(items):,} phim ứng viên từ toàn bộ Train "
+               f"(max_items={request.max_items}).")
+        selected = positive.loc[positive.movieId.isin(items)]
+        # Allocate only the bounded candidate catalog, never users × every observed movie.
+        values = np.zeros((len(users), len(items)), dtype=bool)
+        if len(selected):
+            values[np.searchsorted(users, selected.userId.to_numpy()),
+                   items.get_indexer(selected.movieId)] = True
+        transactions = pd.DataFrame(values, index=users, columns=items)
+        empty_transactions = int((~values.any(axis=1)).sum())
+        update(32, f"Transactions: {len(users):,} users × {len(items):,} phim; "
+               f"giữ {empty_transactions:,} transaction rỗng trong mẫu số support; "
+               f"ma trận boolean {values.nbytes / 2**20:.2f} MiB.")
+        update(40, f"Bắt đầu Apriori · min_support={request.min_support:g} · "
+               f"độ dài itemset tối đa={request.max_rule_length}.")
         patterns = (
             apriori(
                 transactions,
@@ -257,6 +119,12 @@ def association(splits, movies, request, update):
             if len(items)
             else pd.DataFrame()
         )
+        update(65, f"Apriori tìm được {len(patterns):,} tập phim phổ biến.")
+        if len(patterns):
+            for length, count in patterns.itemsets.map(len).value_counts().sort_index().items():
+                update(None, f"Itemset {length} phim: {count:,} tập đạt support.")
+        update(72, f"Sinh luật · min_confidence={request.min_confidence:g}; "
+               "Support/Confidence/Lift chỉ đo trên Train.")
         rules = (
             association_rules(
                 patterns,
@@ -267,6 +135,7 @@ def association(splits, movies, request, update):
             if len(patterns)
             else pd.DataFrame()
         )
+    update(85, f"Đã sinh {len(rules):,} luật; sắp xếp theo Lift, Confidence và Support.")
     metadata = movies.set_index("movieId").title.to_dict()
     records = []
     if len(rules):
@@ -297,6 +166,25 @@ def association(splits, movies, request, update):
             for key in ("support", "confidence", "lift")
         },
     }
+    data_summary = {
+        "mode": "full_prepared_train",
+        "train_ratings": len(frame),
+        "train_users": len(users),
+        "train_movies": int(frame.movieId.nunique()),
+        "positive_ratings": len(positive),
+        "positive_movies": len(counts),
+        "candidate_movies": len(items),
+        "retained_positive_ratings": len(selected),
+        "empty_transactions": empty_transactions,
+        "transaction_bytes": values.nbytes,
+    }
+    if len(records):
+        update(92, f"Trung bình {len(records):,} luật Train · Support={row['support']:.6f} · "
+               f"Confidence={row['confidence']:.6f} · Lift={row['lift']:.6f}.")
+    else:
+        update(92, "Không có luật đạt ngưỡng; kết quả rỗng được lưu cùng số liệu Train.")
+    update(95, f"Hoàn tất khai phá trong {timing['fit_seconds']:.3f}s; "
+           "Validation/Test được giữ riêng, không gộp vào Train.")
     charts = [
         chart(
             -1,
@@ -319,6 +207,7 @@ def association(splits, movies, request, update):
         "rows": [row],
         "charts": charts,
         "rules": records,
+        "association_data": data_summary,
         "best_configs": {
             "apriori": {
                 "min_support": request.min_support,
@@ -343,6 +232,9 @@ def association(splits, movies, request, update):
         if best
         else "Không có luật đạt ngưỡng; có thể giảm support/confidence hoặc tăng số user.",
         "notes": [
+            f"Đọc toàn bộ {len(frame):,} ratings / {len(users):,} users của Train đã chuẩn bị; "
+            "không lấy mẫu user. movies.parquet chỉ cung cấp tên phim; "
+            "không gộp Validation/Test vào khai phá luật.",
             "Chỉ phim rating ≥4,0 tạo mục trong transaction. "
             "Giữ cả transaction rỗng của user Train trong mẫu số support.",
             "Chỉ khai phá trên Train; Support/Confidence/Lift mô tả đồng xuất hiện, "

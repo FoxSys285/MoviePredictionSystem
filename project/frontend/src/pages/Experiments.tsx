@@ -7,6 +7,7 @@ import { ExperimentResults, DatasetSummary } from "../components/ExperimentResul
 import { ExperimentConfiguration, experimentDefaults } from "../components/ExperimentConfig";
 import { ExperimentLog } from "../components/ExperimentLog";
 import { ExperimentJobStatus } from "../components/ExperimentJobStatus";
+import { AssociationDataSource } from "../components/AssociationDataSource";
 import { MetricReferenceTable, useMetricReferenceSettings } from "../components/MetricReferences";
 import { api, apiResourceUrl } from "../lib/api";
 import { ExperimentSuccessSound } from "../lib/experiment-sound";
@@ -97,7 +98,7 @@ export function Experiments() {
   async function start(){
     if(!group)return;setSubmissionStartedAt(new Date().toISOString());setSubmitting(true);setError("");
     successSound.arm();
-    try {const response=await api<LabJob>("/experiment-lab/runs",{method:"POST",body:JSON.stringify({...config,group:group.id,algorithms})});successSound.track(response.id);setRuns(v=>[response,...v]);setChosen(v=>({...v,[group.id]:response.id}));setJob(response);}
+    try {const response=await api<LabJob>("/experiment-lab/runs",{method:"POST",body:JSON.stringify({...config,...(group.id==="association"?{use_all_data:true}:{}),group:group.id,algorithms})});successSound.track(response.id);setRuns(v=>[response,...v]);setChosen(v=>({...v,[group.id]:response.id}));setJob(response);}
     catch(e){setError((e as Error).message);}finally{setSubmitting(false);setSubmissionStartedAt(null);}
   }
   async function stop(id:string){try {await api(`/experiment-lab/runs/${id}/cancel`,{method:"POST"});setReload(v=>v+1);}catch(e){setError((e as Error).message);}}
@@ -110,6 +111,7 @@ export function Experiments() {
         <header className="lab-group-header"><span className="lab-kicker">RESEARCH WORKSPACE / {String(catalog!.groups.indexOf(group)+1).padStart(2,"0")}</span><div><h1>{t(group.title)}</h1><span className="lab-badge">{group.algorithms.length} thuật toán</span></div><p className="lab-objective">{group.question}</p></header>
         <div className="lab-protocol-strip"><span><b>42</b> Random Seed</span><span><b>70 / 15 / 15</b> Train / Validation / Test</span><span><b>{["rating","classification"].includes(group.id)?"3 lượt CV thời gian":"Train only"}</b> {["rating","classification"].includes(group.id)?"Đặc trưng riêng từng fold":"Fit đặc trưng"}</span></div>
         <DatasetSummary stats={catalog?.statistics} label="Dataset đã chuẩn bị"/>
+        {group.id==="association"&&<AssociationDataSource catalog={catalog!}/>}
         <nav className="lab-jump-links" aria-label={t("Điều hướng trong nhóm")}><a href="#lab-run"><Play size={12}/>{t("Chạy thực nghiệm")}</a>{visibleJob?.status==="completed"&&<a href="#lab-results">{t("Kết quả thực nghiệm")}</a>}</nav>
         <div className="lab-algorithms">{group.algorithms.map(a=><article key={a.id}><h2>{a.name}</h2><p>{a.description}</p></article>)}</div>
         <MetricReferenceTable group={group} values={referenceSettings.settings[group.id]||{}} onChange={(key,value)=>referenceSettings.setValue(group.id,key,value)} onReset={()=>referenceSettings.reset(group.id)}/>
@@ -119,7 +121,7 @@ export function Experiments() {
           {active&&active.id!==visibleJob?.id&&<div className="lab-active-other" role="status"><Loader2 size={16} className="lab-spin"/><p>{t("Đang chạy nhóm")}: {catalog?.groups.find(g=>g.id===active.group)?.title}</p><button className="lab-outline" onClick={()=>void stop(active.id)}>{t("Dừng")}</button></div>}
           {!!groupRuns.length&&<label className="lab-history">{t("Lịch sử thực nghiệm")}<select value={selectedId||""} onChange={e=>setChosen(v=>({...v,[group.id]:e.target.value}))}>{groupRuns.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("vi-VN")} · {t(statuses[r.status])}</option>)}</select></label>}
           {statusJob&&<ExperimentJobStatus key={`status-${statusJob.id}`} job={statusJob} statusLabel={t(statuses[statusJob.status])} onCancel={!submitting?()=>void stop(statusJob.id):undefined}/>}
-          {!submitting&&visibleJob&&["rating","classification"].includes(visibleJob.group)&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
+          {!submitting&&visibleJob&&["rating","classification","association","clustering"].includes(visibleJob.group)&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
         </section>
         {visibleJob?.status==="completed"&&visibleJob.result?.schema_version===3?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group} references={referenceSettings.settings[group.id]||{}}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ. Chạy lại để áp dụng pipeline hiện tại và 3-Fold CV.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:!visibleJob&&<section className="lab-empty" role="status"><FlaskConical size={28}/><h2>{t("Chưa có kết quả thực nghiệm")}</h2><p>Chọn thuật toán và chạy để tạo báo cáo từ dữ liệu MovieLens thật.</p></section>}
       </>}

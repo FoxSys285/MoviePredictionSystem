@@ -17,7 +17,8 @@ không ghi đè model phục vụ ứng dụng.
 | `experiment_config.py` | Kiểm tra cấu hình, thuật toán hợp lệ và giới hạn tài nguyên |
 | `experiment_data.py` | Dùng split đầy đủ hoặc lấy mẫu user, cache thống kê/Parquet, fingerprint |
 | `experiment_supervised.py` | 3-Fold, chọn cấu hình trên Validation, refit và đánh giá Test |
-| `experiment_unsupervised.py` | Vector user–genre, clustering, Apriori, PCA và TruncatedSVD |
+| `experiment_clustering.py` | Sở thích tương đối, bao phủ cụm, độ ổn định và ranking tương lai |
+| `experiment_unsupervised.py` | Apriori, vector giảm chiều, PCA và TruncatedSVD |
 | `experiment_reinforcement.py` | Q-Learning và hai baseline trên môi trường phản hồi lịch sử |
 | `experiment_pipeline.py` | Điều phối nhóm, bảng số liệu và biểu đồ |
 | `lab.py` / `api/lab.py` | Worker nền, tiến độ, hủy, lịch sử, xuất dữ liệu |
@@ -60,6 +61,8 @@ chỉ diễn giải chỉ số, không thay đổi training hoặc lựa chọn 
 CSV gồm metric, Mean/Std CV, cấu hình và các luật Apriori nếu có. Excel gồm
 Metrics, CV folds, Rules (nếu có) và Protocol. JSON giữ toàn bộ số liệu biểu đồ,
 các cấu hình đã thử, phân bố nhãn, fingerprint và thông tin môi trường.
+Phân cụm bổ sung bản ghi `future_recommendation` trong CSV và các sheet
+`Future ranking`, `Cluster search` trong Excel.
 
 Không tự khởi chạy huấn luyện khi chuyển nhóm. Thống kê dataset được cache theo
 size/mtime của Parquet; mẫu chia được dùng lại giữa các nhóm có cùng số user.
@@ -67,8 +70,8 @@ Lịch sử v2 được giữ và có nhãn giao thức cũ; không so trực ti
 
 ## Dữ liệu và khả năng tái lập
 
-Đầu vào lấy từ `artifacts/data/{train,validation,test,movies}.parquet`. Hồi quy và
-phân loại dùng `per_user_temporal_70_15_15_v2`: mỗi user lấy lịch sử đầu để Train,
+Đầu vào lấy từ `artifacts/data/{train,validation,test,movies}.parquet`. Hồi quy,
+phân loại và phân cụm dùng `per_user_temporal_70_15_15_v2`: mỗi user lấy lịch sử đầu để Train,
 đoạn tiếp theo Validation, đoạn cuối Test, khoảng 70/15/15. Rating cùng timestamp
 không tách qua hai tập. User dưới 10 rating hoặc không có ba khoảng thời gian
 hợp lệ được loại và ghi số lượng trong `provenance.exclusions`.
@@ -98,8 +101,9 @@ chuyển minibatch lên GPU. Cache và tiến trình được giải phóng sau 
 
 Các thống kê gồm ratings, users, phim có rating, catalog phim, genres, rating
 min/max/mean, sparsity `1 − ratings/(users × movies)` và số bản ghi mỗi tập.
-Cache không tạo ma trận user–item dense. Vector user–genre chỉ có số cột bằng số
-genres; silhouette lấy mẫu tối đa 2.000 điểm để chặn ma trận khoảng cách bậc hai.
+Cache không tạo ma trận user–item dense. Phân cụm có hai khối sở thích/tần suất
+theo genre; giảm chiều vẫn dùng một khối rating trung bình theo genre.
+Silhouette lấy mẫu tối đa 2.000 điểm để chặn ma trận khoảng cách bậc hai.
 
 ## Giao thức từng nhóm
 
@@ -144,20 +148,30 @@ AUC-ROC dùng xác suất dự đoán, không dùng nhãn cứng. AUC không xá
 
 ### Clustering
 
-Đặc trưng = rating trung bình của từng user theo từng genre. Train loại user
-dưới số ratings tối thiểu đã chọn. Genre thiếu được điền bằng rating trung bình
-của user; scaler chỉ fit Train. Validation/Test dựng profile riêng từ ratings
-giữ lại, không tuyên bố là đánh giá user mới hoàn toàn.
+Phân cụm dùng chia lịch sử trong từng user, chung cache với hồi quy/phân loại.
+Hồ sơ chỉ đọc Train: rating thể loại trừ mức chấm chung của user, làm trơn theo
+số lượt đánh giá và ghép tần suất xem thể loại. Thể loại chưa xem có sở thích
+tương đối 0. Không dựng lại hồ sơ từ mẩu rating Validation/Test.
 
-Thử danh sách K và tích eps × min_samples. Ưu tiên silhouette Validation;
-nếu Validation không hợp lệ, cấu hình trong mỗi thuật toán dùng Train làm
-fallback và báo cáo rõ không đủ cơ sở chọn thuật toán triển khai.
-Silhouette/DBI loại noise; số cụm và tỷ lệ noise luôn được báo cáo riêng.
-PCA 2D và bảng genre trung bình giúp diễn giải cụm Train.
+Thử K=2/3/4/6/8/10; eps DBSCAN tự lấy theo khoảng cách láng giềng Train hoặc
+nhập thủ công. Giữ lại user từ hồ sơ Train để chọn cấu hình: ít nhất hai cụm
+hợp lệ và mặc định bao phủ ≥80%, sau đó mới so Silhouette. Kiểm tra lại điều
+kiện sau fit cuối; không đạt thì chỉ báo kết quả chẩn đoán. Silhouette/DBI loại
+noise nên luôn đọc cùng bao phủ, số user được gán và kích thước cụm. Có kiểm tra
+ARI/bao phủ chung khi fit lại với seed 43/44. PCA 2D chỉ minh họa.
 
-DBSCAN không có predict chuẩn. Lab sử dụng phép mở rộng: core Train gần nhất
-trong eps quyết định nhãn; ngoài eps là noise. Index nearest-neighbor được tính
-vào training time, truy vấn gán nhãn mới tính vào inference time.
+K-Means và DBSCAN fit cuối trên toàn bộ hồ sơ Train đủ lịch sử. DBSCAN truy vấn
+láng giềng theo batch và duyệt core chưa gán để không giữ đồ thị khoảng cách bậc
+hai trong RAM. K-Means lớn dùng partial_fit đi qua từng batch của toàn bộ Train.
+Tuning cũng dùng toàn bộ phần Train ngoài user giữ lại, không cắt ở 20.000 user.
+Tạo hồ sơ theo batch, không explode toàn bộ bảng rating.
+
+Gợi ý từ lượt thích từng phim trong cụm trên Train, làm trơn về Popularity.
+So Recall@10/NDCG@10 trên cùng cohort tối đa 2.000 user có phản hồi tương lai,
+toàn bộ catalog Train và bỏ phim đã xem. DBSCAN noise dùng Popularity dự phòng,
+đồng thời báo điểm riêng user có cụm. Chọn thuật toán bằng NDCG Validation sau
+điều kiện phân cụm/bao phủ; Test chỉ báo cáo cuối. [Giao thức, giới hạn RAM và
+kết quả chạy toàn bộ dữ liệu](clustering-experiments.md).
 
 ### Association Rules
 
