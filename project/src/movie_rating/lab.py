@@ -18,6 +18,7 @@ from uuid import uuid4
 import numpy as np
 import pandas as pd
 import psutil
+import torch
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 
@@ -116,7 +117,7 @@ def latency(call, repetitions=12):
 
 class LinearRating(FeatureRegression):
     def _estimator(self):
-        return LinearRegression(n_jobs=1)
+        return LinearRegression(n_jobs=1, copy_X=False)
 
 
 def pair_features(train, frames, movies):
@@ -296,21 +297,37 @@ class LabService:
             save_json(path / 'job.json', job)
 
         try:
-            update(2, 'Lấy mẫu lịch sử MovieLens, chia 70/15/15 với seed 42')
+            message = (
+                'Đọc toàn bộ split thời gian MovieLens 70/15/15'
+                if request.use_all_data
+                else 'Lấy mẫu lịch sử MovieLens, chia 70/15/15 với seed 42'
+            )
+            update(2, message)
             splits, movies, provenance = self._load(request)
             from movie_rating.experiment_pipeline import execute
 
             result = execute(splits, movies, request, update)
             update(98, 'Lưu bảng tiêu chí, số liệu biểu đồ và dấu vết lần chạy')
+            data_note = (
+                'Kết quả dùng toàn bộ dữ liệu đã chuẩn bị.'
+                if request.use_all_data
+                else 'Kết quả thuộc mẫu user công bố ở trên; không đại diện tự động cho toàn bộ MovieLens 25M.'
+            )
             result.update(provenance=provenance, group=request.group, config=request.model_dump(),
-                          notes=[*result.get('notes', []),
-                                 'Kết quả thuộc mẫu user công bố ở trên; không đại diện tự động cho toàn bộ MovieLens 25M.',
+                          notes=[*result.get('notes', []), data_note,
                                  'Chọn cấu hình trên validation; test chỉ báo cáo đánh giá cuối, không dùng để tuning tiếp.'])
+            device = 'CPU'
+            if (
+                request.group == 'rating'
+                and 'ncf' in request.algorithms
+                and torch.cuda.is_available()
+            ):
+                device = f'CUDA · {torch.cuda.get_device_name(0)}'
             result['runtime'] = {'python': platform.python_version(),
                                  'config_sha256': hashlib.sha256(json.dumps(request.model_dump(), sort_keys=True).encode()).hexdigest(),
                                  'platform': platform.platform(), 'processor': platform.processor(),
                                  'cpu_count': os.cpu_count(), 'ram_bytes': psutil.virtual_memory().total,
-                                 'device': 'CPU', 'time_unit': 'seconds',
+                                 'device': device, 'time_unit': 'seconds',
                                  'measurement': 'perf_counter; fit includes preprocessing; RSS process-wide',
                                  'libraries': {name: version(name) for name in ['numpy', 'pandas', 'scikit-learn', 'torch', 'xgboost', 'mlxtend']},
                                  'code_sha256': hashlib.sha256(b''.join(p.read_bytes() for p in sorted(Path(__file__).parent.rglob('*.py'))) + Path(__file__).with_name('lab_catalog.json').read_bytes()).hexdigest()}

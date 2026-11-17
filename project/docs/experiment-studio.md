@@ -4,7 +4,7 @@
 
 Kiểm tra ban đầu: backend FastAPI, frontend React/TypeScript/Vite, dữ liệu chuẩn bị
 Parquet từ MovieLens 25M, mô hình NumPy/Numba, scikit-learn, XGBoost và PyTorch.
-Lab cũ chạy năm nhóm qua `lab_compact.py`, chưa có 5-Fold, refit 85%, AUC,
+Lab cũ chạy năm nhóm qua `lab_compact.py`, chưa có 3-Fold, refit 85%, AUC,
 Q-Learning hoặc đầy đủ thông tin hiệu năng. Các handler cũ vẫn được giữ để tránh
 ảnh hưởng mã tham chiếu, nhưng API chạy mới chuyển sang pipeline v3.
 
@@ -15,8 +15,8 @@ pipeline `prepare/train/evaluate` và các model production đã lưu. Lab chỉ
 | Thành phần | Trách nhiệm |
 |---|---|
 | `experiment_config.py` | Kiểm tra cấu hình, thuật toán hợp lệ và giới hạn tài nguyên |
-| `experiment_data.py` | Lấy mẫu user, cache thống kê/Parquet, chia dữ liệu, fingerprint |
-| `experiment_supervised.py` | 5-Fold, chọn cấu hình trên Validation, refit và đánh giá Test |
+| `experiment_data.py` | Dùng split đầy đủ hoặc lấy mẫu user, cache thống kê/Parquet, fingerprint |
+| `experiment_supervised.py` | 3-Fold, chọn cấu hình trên Validation, refit và đánh giá Test |
 | `experiment_unsupervised.py` | Vector user–genre, clustering, Apriori, PCA và TruncatedSVD |
 | `experiment_reinforcement.py` | Q-Learning và hai baseline trên môi trường phản hồi lịch sử |
 | `experiment_pipeline.py` | Điều phối nhóm, bảng số liệu và biểu đồ |
@@ -46,7 +46,8 @@ và `node_modules/npm`. Python yêu cầu 3.12 hoặc 3.13.
 1. Chọn một trong sáu nhóm ở sidebar.
 2. Xem mục tiêu, dataset đã chuẩn bị và định nghĩa các tiêu chí.
 3. Chọn một thuật toán để chạy riêng hoặc nhiều thuật toán để so sánh.
-4. Điều chỉnh hyperparameters và ngân sách mẫu. Seed cố định 42.
+4. Mặc định dùng toàn bộ ratings đã chuẩn bị; có thể bỏ chọn để giới hạn user.
+   Seed cố định 42.
 5. Chạy, theo dõi trạng thái/tiến độ; có thể dừng sau bước tính toán hiện tại.
 6. Xem bảng đánh giá, nhận xét, biểu đồ và cấu hình được chọn.
 7. Dùng lịch sử để mở lại báo cáo; tải CSV, Excel hoặc JSON.
@@ -67,24 +68,24 @@ Lịch sử v2 được giữ và có nhãn giao thức cũ; không so trực ti
 ## Dữ liệu và khả năng tái lập
 
 Đầu vào lấy từ `artifacts/data/{train,validation,test,movies}.parquet` đã chuẩn bị.
-Lab hợp nhất ba phần gốc, lấy toàn bộ lịch sử của một mẫu user bằng seed 42 và
-chia lại **IID theo rating 70/15/15** bằng số lượng nguyên. Cùng mẫu, cùng seed,
-cùng fingerprint cho mọi nhóm; nhãn/phân phối Test không tham gia tuning.
+Mặc định Lab dùng trực tiếp toàn bộ ba split 70/15/15 theo thời gian, không lấy
+mẫu user. Có thể bỏ chọn "Dùng toàn bộ dữ liệu đã chuẩn bị" để lấy mẫu user seed 42
+và chia lại IID 70/15/15 khi chạy thử. Kết quả ghi rõ giao thức và số ratings.
 
-Đây là giao thức nội suy rating, không phải chia thời gian và không chứng minh
-khả năng dự đoán tương lai. Một user/phim có thể xuất hiện trong nhiều phần.
-Pipeline production vẫn giữ cách chia thời gian riêng của nó.
+Chế độ toàn bộ dùng split thời gian toàn cục đã tạo ở bước `prepare`. Một
+user/phim có thể xuất hiện trong nhiều phần; kết quả không phải đánh giá
+cold-start. Chế độ giới hạn user dùng split IID riêng và phải được ghi rõ khi
+so sánh. Pipeline production giữ cách chia thời gian riêng của nó.
 
-Dataset đã chuẩn bị trên máy hiện có **486.335 ratings / 3.252 users** (mẫu user
-2% từ dữ liệu sạch), không phải toàn bộ 25 triệu ratings. Giao diện ghi rõ dataset
-đã chuẩn bị và mẫu thực nghiệm riêng. Các lần xác nhận mặc định dùng **150 users /
-24.319 ratings thật**, chia 17.023 Train, 3.648 Validation, 3.648 Test.
-Không suy rộng kết quả này thành benchmark toàn bộ MovieLens 25M.
-
-Để nghiên cứu mẫu lớn hơn, tăng số user trong UI. Muốn chuẩn bị toàn bộ nguồn,
-đặt `data.user_sample_fraction=1.0` và một `experiment.artifacts_directory` mới
-trong một bản config riêng, chạy prepare rồi trỏ API tới thư mục artifact đó.
-Không xóa hoặc ghi đè dữ liệu đã chuẩn bị để thay đổi mẫu.
+`configs/default.toml` đặt `data.user_sample_fraction=1.0`, nên `prepare` tạo dữ
+liệu từ toàn bộ 25.000.095 ratings. Bản chuẩn bị cũ không bị ghi đè; nếu đã tồn
+tại, hãy dùng thư mục artifacts mới để chạy `prepare`.
+Trên máy 16 GB RAM, chạy từng thuật toán rating riêng. RTX 3050 chỉ được dùng khi
+PyTorch cài bản CUDA tương thích; nếu không, NCF chạy CPU.
+Các đặc trưng số được tạo theo block 250.000 hàng và lưu float32; các chỉ số
+cross-validation được tạo theo từng fold để tránh giữ đồng thời cả ba fold trong
+RAM. Linear Regression cũng tránh bản sao feature matrix khi center dữ liệu.
+Các thay đổi này giảm bộ nhớ đỉnh nhưng không làm nhẹ phép fit trên toàn bộ ratings.
 
 Các thống kê gồm ratings, users, phim có rating, catalog phim, genres, rating
 min/max/mean, sparsity `1 − ratings/(users × movies)` và số bản ghi mỗi tập.
@@ -97,10 +98,13 @@ genres; silhouette lấy mẫu tối đa 2.000 điểm để chặn ma trận kh
 
 Linear Regression, XGBoost, Funk SVD có bias và NCF dự đoán rating trong [0,5;5].
 Linear/XGBoost dùng thống kê user/phim và metadata thể loại; SVD/NCF học từ rating.
+Mặc định cho dữ liệu đầy đủ: XGBoost 50 cây, depth 4, learning rate 0,05;
+SVD/NCF 4 epochs, 16 factors; tune tắt để tránh nhân số lần fit. Có thể tăng
+các giá trị và bật tuning sau khi chạy baseline.
 
-Mỗi cấu hình chạy KFold(5, shuffle=True, random_state=42) chỉ trên Train 70%.
+Mỗi cấu hình chạy KFold(3, shuffle=True, random_state=42) chỉ trên Train 70%.
 Mỗi fold xây lại mô hình và đặc trưng; không tái sử dụng thống kê được fit từ
-toàn bộ Train. Báo cáo Mean và sample Std (ddof=1) của năm fold.
+toàn bộ Train. Báo cáo Mean và sample Std (ddof=1) của ba fold.
 
 Khi bật tuning, XGBoost thử độ sâu đã nhập và độ sâu nhỏ hơn; SVD/NCF thử số
 factors đã nhập và số factors nhỏ hơn. Linear dùng cấu hình mặc định của phép
@@ -116,7 +120,9 @@ bằng Validation, đối chiếu CV ± std và chi phí thực đo, không mặ
 ### Classification
 
 Không thích = rating <3,5; Thích = rating ≥3,5. Logistic Regression và Random
-Forest dùng StratifiedKFold 5 phần trên Train. Mỗi lớp cần ít nhất năm ratings.
+Forest dùng StratifiedKFold 3 phần trên Train. Mỗi lớp cần ít nhất ba ratings.
+Mặc định Logistic dùng C=1, max_iter=200; Random Forest dùng 50 cây, depth 4,
+min_samples_leaf=5. Các thông số này có thể chỉnh trong phần cấu hình.
 Tuning thử C nhỏ hơn hoặc độ sâu cây nhỏ hơn; Validation chọn F1 lớp Thích và
 ngưỡng xác suất (0,1–0,9), sau đó khóa cả hai trước refit/Test.
 

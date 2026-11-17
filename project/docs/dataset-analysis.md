@@ -39,7 +39,7 @@ movies.csv không trùng, mọi điểm thuộc thang hợp lệ và không có 
 chiếu đến phim ngoài danh mục. Có 412 phim chưa trích được năm, 5.062 phim mang
 `(no genres listed)` và 25 nhãn rỗng/thiếu. Các nhãn rỗng được bỏ qua khi hiển thị.
 Chưa kiểm tra toàn bộ cặp userId/movieId có trùng lặp trong báo cáo danh mục;
-pipeline huấn luyện kiểm tra trùng cặp trên dữ liệu được lấy mẫu.
+pipeline huấn luyện kiểm tra trùng cặp trên dữ liệu được chuẩn bị.
 
 Dataset không chứa ảnh poster, cốt truyện, diễn viên, đạo diễn hay thời lượng.
 Website dùng thông tin thật có trong CSV và cung cấp liên kết IMDb/TMDB để
@@ -91,5 +91,5 @@ IMDb/TMDB. Phim liên quan được chọn bằng số thể loại chung, sau �
 Cache danh mục khoảng 5 MB, tách khỏi `artifacts/data/` dành cho học máy. Điểm
 cộng đồng dùng toàn bộ `ratings.csv`; các mô hình, bias và thống kê đầu vào học
 máy vẫn chỉ dùng train. Các thống kê website không được dùng để tính RMSE/MAE.
-Mặc định pipeline huấn luyện vẫn lấy mẫu khoảng 2% người dùng và chia theo thời
-gian 80/10/10; phân tích dataset không tự chạy huấn luyện hoặc tạo kết quả giả.
+Mặc định pipeline huấn luyện dùng toàn bộ ratings và chia theo thời gian
+70/15/15; phân tích dataset không tự chạy huấn luyện hoặc tạo kết quả giả.

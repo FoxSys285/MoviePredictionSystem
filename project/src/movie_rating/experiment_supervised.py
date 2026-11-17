@@ -1,4 +1,4 @@
-"""Five train-only folds, validation selection, frozen refit and final test."""
+"""Three train-only folds, validation selection, frozen refit and final test."""
 
 import pickle
 import time
@@ -34,6 +34,7 @@ NAMES = {
     "logistic": "Logistic Regression",
     "random_forest": "Random Forest Classifier",
 }
+CV_FOLDS = 3
 
 
 def classification_scores(actual, probability, threshold=0.5):
@@ -53,7 +54,9 @@ def candidates(algorithm, request):
     base = {
         "linear": {},
         "xgboost": dict(
-            n_estimators=p.n_estimators, max_depth=p.max_depth, learning_rate=p.learning_rate
+            n_estimators=p.n_estimators,
+            max_depth=p.max_depth,
+            learning_rate=p.xgb_learning_rate,
         ),
         "svd": dict(
             factors=p.factors, learning_rate=p.learning_rate, regularization=p.regularization
@@ -66,7 +69,7 @@ def candidates(algorithm, request):
             dropout=p.dropout,
             batch_size=p.batch_size,
         ),
-        "logistic": dict(C=p.c),
+        "logistic": dict(C=p.c, max_iter=p.max_iter),
         "random_forest": dict(
             n_estimators=p.n_estimators, max_depth=p.max_depth, min_samples_leaf=p.min_samples_leaf
         ),
@@ -95,12 +98,16 @@ def rating_model(algorithm, config, request, epochs=None):
     return NeuralCF(**config, epochs=epochs or request.epochs, patience=request.patience, seed=42)
 
 
-def fit_rating(algorithm, config, request, train, movies, validation=None, epochs=None):
+def fit_rating(
+    algorithm, config, request, train, movies, validation=None, epochs=None, progress=None
+):
     model = rating_model(algorithm, config, request, epochs)
     if hasattr(model, "set_movie_metadata"):
         model.set_movie_metadata(movies)
     if algorithm == "ncf":
-        model.fit(train, validation=validation)
+        model.fit(train, validation=validation, progress=progress)
+    elif algorithm == "svd":
+        model.fit(train, progress=progress)
     else:
         model.fit(train)
     return model
@@ -108,9 +115,7 @@ def fit_rating(algorithm, config, request, train, movies, validation=None, epoch
 
 def classifier(algorithm, config):
     if algorithm == "logistic":
-        return make_pipeline(
-            StandardScaler(), LogisticRegression(**config, max_iter=600, random_state=42)
-        )
+        return make_pipeline(StandardScaler(), LogisticRegression(**config, random_state=42))
     return RandomForestClassifier(**config, n_jobs=2, random_state=42)
 
 
@@ -137,34 +142,50 @@ def numeric_summary(folds):
 def supervised(splits, movies, request, update):
     train, validation, test = [splits[s] for s in ("train", "validation", "test")]
     binary = request.group == "classification"
-    y = (train.rating >= 3.5).astype(int).to_numpy()
-    if binary and np.bincount(y, minlength=2).min() < 5:
-        raise ValueError("Mỗi lớp trong Train cần ít nhất 5 ratings cho Stratified 5-Fold.")
+    y = (train.rating >= 3.5).to_numpy(dtype=np.int8) if binary else None
+    if binary and np.bincount(y, minlength=2).min() < CV_FOLDS:
+        raise ValueError(
+            f"Mỗi lớp trong Train cần ít nhất {CV_FOLDS} ratings "
+            f"cho Stratified {CV_FOLDS}-Fold."
+        )
     splitter = (
-        StratifiedKFold(5, shuffle=True, random_state=42)
+        StratifiedKFold(CV_FOLDS, shuffle=True, random_state=42)
         if binary
-        else KFold(5, shuffle=True, random_state=42)
+        else KFold(CV_FOLDS, shuffle=True, random_state=42)
     )
-    folds = list(splitter.split(train, y if binary else None))
+
     rows, charts, cv, best_configs, tuning = [], [], {}, {}, []
     all_candidates = sum(len(candidates(a, request)) for a in request.algorithms)
-    total_work = all_candidates * 6 + len(request.algorithms)
+    total_work = all_candidates * (CV_FOLDS + 1) + len(request.algorithms)
     step = 0
     for algorithm in request.algorithms:
         options = []
         for config in candidates(algorithm, request):
             fold_rows = []
-            for index, (fit_idx, score_idx) in enumerate(folds):
+            for index, (fit_idx, score_idx) in enumerate(splitter.split(train, y)):
                 update(
                     8 + 85 * step / total_work,
-                    f"{NAMES[algorithm]} · 5-Fold {index + 1}/5 · cấu hình {len(options) + 1}",
+                    f"{NAMES[algorithm]} · {CV_FOLDS}-Fold "
+                    f"{index + 1}/{CV_FOLDS} · cấu hình {len(options) + 1}",
                 )
                 fit, held = train.iloc[fit_idx], train.iloc[score_idx]
                 with measured() as timing:
                     if binary:
                         _, model, xs = feature_fit(fit, [held], movies, algorithm, config)
                     else:
-                        model = fit_rating(algorithm, config, request, fit, movies)
+                        model = fit_rating(
+                            algorithm,
+                            config,
+                            request,
+                            fit,
+                            movies,
+                            progress=lambda epoch, total: update(
+                                8 + 85 * (step + epoch / total) / total_work,
+                                f"{NAMES[algorithm]} · {CV_FOLDS}-Fold "
+                                f"{index + 1}/{CV_FOLDS} · "
+                                f"epoch {epoch}/{total}",
+                            ),
+                        )
                 start = time.perf_counter()
                 prediction = (
                     model.predict_proba(xs[0])[:, 1]
@@ -195,7 +216,19 @@ def supervised(splits, movies, request, update):
                 val_scores = classification_scores(validation.rating >= 3.5, probability, threshold)
                 epoch = None
             else:
-                model = fit_rating(algorithm, config, request, train, movies, validation)
+                model = fit_rating(
+                    algorithm,
+                    config,
+                    request,
+                    train,
+                    movies,
+                    validation,
+                    progress=lambda epoch, total: update(
+                        8 + 85 * (step + epoch / total) / total_work,
+                        f"{NAMES[algorithm]} · huấn luyện/chọn trên Validation · "
+                        f"epoch {epoch}/{total}",
+                    ),
+                )
                 val_scores = regression_scores(
                     validation.rating, model.predict(validation.userId, validation.movieId)
                 )
@@ -249,6 +282,11 @@ def supervised(splits, movies, request, update):
                     combined,
                     movies,
                     epochs=selected["epochs"],
+                    progress=lambda epoch, total: update(
+                        8 + 85 * (step + epoch / total) / total_work,
+                        f"{NAMES[algorithm]} · refit Train + Validation · "
+                        f"epoch {epoch}/{total}",
+                    ),
                 )
         start = time.perf_counter()
         predicted = (
@@ -324,15 +362,23 @@ def supervised(splits, movies, request, update):
     chosen_final = next(r for r in final if r["algorithm"] == winner["algorithm"])
     chosen_cv = cv[winner["algorithm"]]["metrics"][key]
     smallest = min(final, key=lambda r: r["model_bytes"])
+    holdout_note = (
+        "Train/Validation/Test chia theo thời gian toàn cục; Validation và Test nằm "
+        "sau Train. User/phim có thể xuất hiện ở nhiều split nên đây không phải "
+        "đánh giá cold-start."
+        if request.use_all_data
+        else "Split mẫu dùng IID theo rating để đo nội suy sở thích; user/phim có thể "
+        "xuất hiện ở nhiều split nên đây không phải đánh giá cold-start."
+    )
     notes = [
-        "5-Fold chỉ trên Train 70%; mỗi fold tạo lại thống kê rating, "
+        f"{CV_FOLDS}-Fold chỉ trên Train 70%; mỗi fold tạo lại thống kê rating, "
         "đặc trưng và scaler từ phần fit của fold.",
         "CV dùng ngưỡng xác suất 0,5 và ngân sách epoch cố định. "
         "Validation chọn cấu hình/ngưỡng/epoch; refit 85% không early-stop trên Test.",
         "Thời gian fit cuối gồm xây đặc trưng; inference đo cả batch Test "
         "(không gồm xây đặc trưng phân loại). Model size là số byte pickle trong RAM.",
-        "IID ratings đo nội suy sở thích, không chứng minh dự đoán tương lai hoặc cold-start. "
-        "Các fold có thể chứa cùng user/phim.",
+        holdout_note,
+        "CV chia ngẫu nhiên theo rating trong Train; các fold có thể chứa cùng user/phim.",
     ]
     result = {
         "rows": rows,

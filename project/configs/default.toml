@@ -1,8 +1,8 @@
 # Paths are relative to project/, regardless of the current working directory.
 [data]
 directory = "../dataset_cleaned"
-# Retain complete histories of a reproducible sample of users; 1.0 uses all users.
-user_sample_fraction = 0.02
+# Use the complete MovieLens 25M dataset by default.
+user_sample_fraction = 1.0
 chunksize = 500000
 train_fraction = 0.7
 validation_fraction = 0.15

@@ -32,7 +32,7 @@ class MatrixFactorization(BiasBaseline):
             raise ValueError("factors and learning_rate must be positive.")
         self.factors, self.learning_rate, self.seed = factors, learning_rate, seed
 
-    def fit(self, ratings):
+    def fit(self, ratings, progress=None):
         # Train-only bias model also supplies meaningful cold-start predictions.
         super().fit(ratings)
         users, movies, values = self.encode_training(ratings)
@@ -48,7 +48,7 @@ class MatrixFactorization(BiasBaseline):
         else:
             self.p = rng.normal(0, 0.1, (len(self.user_ids), self.factors)).astype(np.float32)
             self.q = rng.normal(0, 0.1, (len(self.movie_ids), self.factors)).astype(np.float32)
-        for _ in range(self.epochs):
+        for epoch in range(self.epochs):
             _sgd_epoch(
                 users,
                 movies,
@@ -63,6 +63,8 @@ class MatrixFactorization(BiasBaseline):
                 self.regularization,
                 self.nonnegative,
             )
+            if progress is not None:
+                progress(epoch + 1, self.epochs)
         if not (np.isfinite(self.p).all() and np.isfinite(self.q).all()):
             raise ValueError("Factorization diverged; lower learning_rate.")
         return self

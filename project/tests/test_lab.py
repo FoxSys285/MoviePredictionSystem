@@ -74,9 +74,9 @@ def test_six_groups_fit_real_models_and_serialize_finite_results(group, lab_data
     if group in ("rating", "classification"):
         assert set(result["cv"]) == set(request.algorithms)
         for data in result["cv"].values():
-            assert len(data["folds"]) == 5
+            assert len(data["folds"]) == 3
             for key, stats in data["metrics"].items():
-                assert stats["n"] == 5
+                assert stats["n"] == 3
                 assert stats["mean"] == pytest.approx(np.mean([r[key] for r in data["folds"]]))
                 assert stats["std"] == pytest.approx(
                     np.std([r[key] for r in data["folds"]], ddof=1)
@@ -105,6 +105,101 @@ def test_auc_uses_probability_and_classification_boundary():
     assert scores["confusion_matrix"] == [[1, 1], [1, 1]]
     assert scores["f1"] == 0.5
     assert classification_scores([1, 1], np.array([0.8, 0.9]))["auc_roc"] is None
+
+
+def test_tuning_is_opt_in_for_new_experiments():
+    assert LabRequest(group="rating").tune is False
+    assert LabRequest(group="classification", tune=True).tune is True
+
+
+def test_full_data_rating_and_classification_defaults_are_bounded():
+    from movie_rating.experiment_supervised import candidates
+
+    rating = LabRequest(group="rating")
+    classification = LabRequest(group="classification")
+    assert rating.use_all_data and rating.epochs == 4
+    assert candidates("xgboost", rating)[0] == {
+        "n_estimators": 50,
+        "max_depth": 4,
+        "learning_rate": 0.05,
+    }
+    assert candidates("logistic", classification)[0] == {"C": 1.0, "max_iter": 200}
+    assert candidates("random_forest", classification)[0] == {
+        "n_estimators": 50,
+        "max_depth": 4,
+        "min_samples_leaf": 5,
+    }
+
+
+def test_linear_feature_statistics_stay_float32_and_build_in_batches(lab_data, monkeypatch):
+    from movie_rating.lab import LinearRating
+    from movie_rating.models import regression
+
+    monkeypatch.setattr(regression, "_FEATURE_BATCH_ROWS", 64)
+    splits, movies = lab_data
+    model = LinearRating()
+    model.set_movie_metadata(movies)
+    model.fit(splits["train"])
+
+    assert model.user_count.dtype == np.float32
+    assert model.item_count.dtype == np.float32
+    assert model.user_sum.dtype == np.float32
+    assert model.item_sum.dtype == np.float32
+    assert model.preference_sum.dtype == np.float32
+    users, items = model.encode_queries(
+        splits["validation"].userId.to_numpy(),
+        splits["validation"].movieId.to_numpy(),
+    )
+    features = model._features(users, items)
+    assert features.dtype == np.float32
+    np.testing.assert_allclose(features, model._feature_batch(users, items))
+    predictions = model.predict(
+        splits["validation"].userId.to_numpy(),
+        splits["validation"].movieId.to_numpy(),
+    )
+    assert np.isfinite(predictions).all()
+
+
+def test_full_data_mode_uses_prepared_temporal_splits(configured):
+    prepare(configured)
+    service = LabService(configured)
+    splits, _, provenance = service._load(
+        LabRequest(group="rating", max_users=10, use_all_data=True)
+    )
+    manifest = json.loads((configured.artifacts_dir / "data" / "manifest.json").read_text())
+    assert provenance["protocol"] == "global_temporal_70_15_15_v1"
+    assert provenance["sampled_ratings"] == sum(
+        part["ratings"] for part in manifest["splits"].values()
+    )
+    assert provenance["sampled_users"] == len(
+        set().union(*(set(frame.userId) for frame in splits.values()))
+    )
+    assert {
+        name: len(frame) for name, frame in splits.items()
+    } == {
+        name: part["ratings"] for name, part in manifest["splits"].items()
+    }
+
+
+def test_sampled_data_mode_respects_user_limit(configured):
+    prepare(configured)
+    service = LabService(configured)
+    _, _, provenance = service._load(
+        LabRequest(group="rating", max_users=10, use_all_data=False)
+    )
+    assert provenance["protocol"] == "iid_rating_70_15_15_v3"
+    assert provenance["sampled_users"] == 10
+
+
+def test_svd_reports_epoch_progress(lab_data):
+    from movie_rating.models.factorization import SVD
+
+    splits, _ = lab_data
+    progress = []
+    SVD(factors=2, epochs=2).fit(
+        splits["train"], progress=lambda epoch, total: progress.append((epoch, total))
+    )
+    assert progress == [(1, 2), (2, 2)]
 
 
 def test_user_genre_features_use_rating_mean_not_genre_frequency():
@@ -204,7 +299,7 @@ def test_async_api_history_provenance_csv_and_excel(configured):
         run_id = response.json()["id"]
         job = wait_for_job(LabService(configured), run_id)
         assert job["status"] == "completed", job
-        assert job["result"]["provenance"]["protocol"] == "iid_rating_70_15_15_v3"
+        assert job["result"]["provenance"]["protocol"] == "global_temporal_70_15_15_v1"
         assert job["result"]["runtime"]["code_sha256"]
         csv = client.get(root + f"/runs/{run_id}/export/csv")
         assert csv.status_code == 200 and "cv_f1_std" in csv.text
@@ -346,10 +441,16 @@ def test_ncf_stops_when_validation_does_not_improve(lab_data, monkeypatch):
     splits, _ = lab_data
     model = NeuralCF(epochs=8, patience=1, factors=2, hidden_size=4, seed=42)
     monkeypatch.setattr(model, "predict", lambda users, movies: np.full(len(users), 3.0))
-    model.fit(splits["train"], validation=splits["validation"])
+    progress = []
+    model.fit(
+        splits["train"],
+        validation=splits["validation"],
+        progress=lambda epoch, total: progress.append((epoch, total)),
+    )
     assert model.best_epoch == 1
     assert len(model.learning_curve) == 2
     assert all("train_rating_mse" in row for row in model.learning_curve)
+    assert progress == [(1, 8), (2, 8)]
 
 
 def test_status_reader_retries_transient_windows_sharing_lock(tmp_path, monkeypatch):

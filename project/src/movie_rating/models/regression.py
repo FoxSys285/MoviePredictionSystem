@@ -5,6 +5,8 @@ from scipy import sparse
 
 from movie_rating.models.base import RatingModel
 
+_FEATURE_BATCH_ROWS = 250_000
+
 
 class FeatureRegression(RatingModel):
     use_identity = False
@@ -33,16 +35,23 @@ class FeatureRegression(RatingModel):
 
     def fit(self, ratings):
         users, items, values = self.encode_training(ratings)
-        self.user_count = np.bincount(users, minlength=len(self.user_ids)).astype(float)
-        self.item_count = np.bincount(items, minlength=len(self.movie_ids)).astype(float)
-        self.user_sum = np.bincount(users, weights=values, minlength=len(self.user_ids))
-        self.item_sum = np.bincount(items, weights=values, minlength=len(self.movie_ids))
+        self.user_count = np.bincount(users, minlength=len(self.user_ids)).astype(np.float32)
+        self.item_count = np.bincount(items, minlength=len(self.movie_ids)).astype(np.float32)
+        self.user_sum = np.bincount(
+            users, weights=values, minlength=len(self.user_ids)
+        ).astype(np.float32)
+        self.item_sum = np.bincount(
+            items, weights=values, minlength=len(self.movie_ids)
+        ).astype(np.float32)
         self.genres = self._genre_matrix()
-        self.preference_sum = np.zeros((len(self.user_ids), self.genres.shape[1]))
+        self.preference_sum = np.zeros(
+            (len(self.user_ids), self.genres.shape[1]), dtype=np.float32
+        )
+        centered_values = values - np.float32(self.global_mean)
         for column in range(self.genres.shape[1]):
             self.preference_sum[:, column] = np.bincount(
                 users,
-                weights=(values - self.global_mean) * self.genres[items, column],
+                weights=centered_values * self.genres[items, column],
                 minlength=len(self.user_ids),
             )
         # Exclude each row's target from its aggregate features during fitting.
@@ -52,24 +61,47 @@ class FeatureRegression(RatingModel):
         return self
 
     def _features(self, users, items, exclude=None, profile=None):
+        if self.use_identity or len(users) <= _FEATURE_BATCH_ROWS:
+            return self._feature_batch(users, items, exclude, profile)
+        features = np.empty(
+            (len(users), 6 + 2 * self.genres.shape[1]), dtype=np.float32
+        )
+        exclude_values = None if exclude is None else np.asarray(exclude, dtype=np.float32)
+        for start in range(0, len(users), _FEATURE_BATCH_ROWS):
+            stop = min(start + _FEATURE_BATCH_ROWS, len(users))
+            features[start:stop] = self._feature_batch(
+                users[start:stop],
+                items[start:stop],
+                None if exclude_values is None else exclude_values[start:stop],
+                profile,
+            )
+        return features
+
+    def _feature_batch(self, users, items, exclude=None, profile=None):
         known_u, known_i = users >= 0, items >= 0
         u, i = np.maximum(users, 0), np.maximum(items, 0)
-        uc = np.where(known_u, self.user_count[u], 0)
-        us = np.where(known_u, self.user_sum[u], 0)
-        ic = np.where(known_i, self.item_count[i], 0)
-        its = np.where(known_i, self.item_sum[i], 0)
+        uc = np.where(known_u, self.user_count[u], np.float32(0))
+        us = np.where(known_u, self.user_sum[u], np.float32(0))
+        ic = np.where(known_i, self.item_count[i], np.float32(0))
+        its = np.where(known_i, self.item_sum[i], np.float32(0))
         preferences = self.preference_sum[u] * known_u[:, None]
         if profile is not None:
-            uc = np.full(len(items), profile[0], dtype=float)
-            us = np.full(len(items), profile[1], dtype=float)
-            preferences = np.broadcast_to(profile[2], preferences.shape).copy()
+            uc = np.full(len(items), profile[0], dtype=np.float32)
+            us = np.full(len(items), profile[1], dtype=np.float32)
+            preferences = np.broadcast_to(
+                np.asarray(profile[2], dtype=np.float32), preferences.shape
+            ).copy()
         item_genres = self.genres[i] * known_i[:, None]
         if exclude is not None:
+            exclude = np.asarray(exclude, dtype=np.float32)
+            mean = np.float32(self.global_mean)
             uc, ic = uc - 1, ic - 1
             us, its = us - exclude, its - exclude
-            preferences = preferences - (exclude - self.global_mean)[:, None] * item_genres
-        user_mean = (us + 5 * self.global_mean) / (uc + 5) - self.global_mean
-        item_mean = (its + 5 * self.global_mean) / (ic + 5) - self.global_mean
+            preferences = preferences - (exclude - mean)[:, None] * item_genres
+        else:
+            mean = np.float32(self.global_mean)
+        user_mean = (us + 5 * mean) / (uc + 5) - mean
+        item_mean = (its + 5 * mean) / (ic + 5) - mean
         preferences = preferences / (uc[:, None] + 5)
         dense = np.column_stack(
             [
@@ -82,7 +114,7 @@ class FeatureRegression(RatingModel):
                 item_genres,
                 preferences * item_genres,
             ]
-        ).astype(np.float32)
+        ).astype(np.float32, copy=False)
         if not self.use_identity:
             return dense
         rows = np.arange(len(users))
@@ -102,7 +134,11 @@ class FeatureRegression(RatingModel):
         users, items = self.encode_queries(user_ids, movie_ids)
         if not len(users):
             return np.array([], dtype=np.float32)
-        result = self.global_mean + self.estimator.predict(self._features(users, items))
+        result = np.empty(len(users), dtype=np.float32)
+        for start in range(0, len(users), _FEATURE_BATCH_ROWS):
+            stop = min(start + _FEATURE_BATCH_ROWS, len(users))
+            features = self._feature_batch(users[start:stop], items[start:stop])
+            result[start:stop] = self.global_mean + self.estimator.predict(features)
         result[(users < 0) & (items < 0)] = self.global_mean
         return self.clip(result)
 

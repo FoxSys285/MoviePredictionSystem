@@ -43,9 +43,15 @@ try{
     assert.equal(await parameters.getAttribute('open'),null);
     assert.equal(await page.locator('.lab-criteria input[type="number"]').count(),group.metrics.length);
     await parameters.locator('summary').click();
+    const allData=page.getByLabel("Dùng toàn bộ dữ liệu đã chuẩn bị",{exact:true});
+    if(await allData.isChecked())await allData.uncheck();
     await page.getByLabel("Số user tối đa",{exact:true}).fill("40");
     if(group.id==="rating")await page.getByLabel("Epochs SVD / NCF",{exact:true}).fill("2");
-    if(["rating","classification"].includes(group.id))await page.getByLabel("Thử thêm cấu hình đơn giản hơn",{exact:true}).uncheck();
+    if(["rating","classification"].includes(group.id)){
+      const tuning=page.getByLabel("Thử thêm cấu hình đơn giản hơn",{exact:true});
+      assert.equal(await tuning.isChecked(),false);
+      await tuning.uncheck();
+    }
     if(group.id==="reinforcement")await page.getByLabel("Episodes",{exact:true}).fill("50");
     await parameters.locator('summary').click();
     assert.equal(await parameters.getAttribute('open'),null);
@@ -60,13 +66,14 @@ try{
     await page.locator(".lab-results .lab-comparison tbody tr").first().waitFor();
     assert.equal(finished.result.schema_version,3);
     assert.equal(finished.request.max_users,40,'Collapsing parameters must preserve edited values');
+    assert.equal(finished.request.use_all_data,false,'Full-data toggle must preserve the sample-run choice');
     assert.ok(await page.locator('.lab-comparison [data-verdict]').count()>0);
     assert.equal(await page.locator(".lab-chart").count(),finished.result.charts.length);
     assert.equal(await page.locator(".lab-results .lab-comparison tbody tr").count(),finished.result.rows.length);
     assert.ok(await page.locator(".lab-stat-grid").count()>=2);
     if(["rating","classification"].includes(group.id)){
       assert.equal(Object.keys(finished.result.cv).length,group.algorithms.length);
-      assert.ok(Object.values(finished.result.cv).every(c=>c.folds.length===5));
+      assert.ok(Object.values(finished.result.cv).every(c=>c.folds.length===3));
       assert.ok((await page.locator(".lab-results").innerText()).includes("Mean ± Std"));
     }
     if(group.id==="rating")assert.ok(await page.getByRole("img",{name:"NCF · Learning Curve / Early Stopping",exact:true}).count());
@@ -114,6 +121,8 @@ try{
   await page.locator(".lab-algorithm-select input").first().check();
   assert.equal(await page.locator(".lab-primary").innerText(),"Chạy thuật toán đã chọn");
   await page.locator('.lab-parameter-details summary').click();
+  const allData=page.getByLabel("Dùng toàn bộ dữ liệu đã chuẩn bị",{exact:true});
+  if(await allData.isChecked())await allData.uncheck();
   await page.getByLabel("Số user tối đa",{exact:true}).fill('');
   await page.locator('.lab-parameter-details summary').click();
   await page.locator('.lab-primary').click();
@@ -135,5 +144,5 @@ try{
   await page.locator(".lab-algorithms article").last().waitFor();
   assert.deepEqual(errors,[]);
   await writeFile(path.join(output,"lab-real-runs.json"),JSON.stringify(summary,null,2));
-  console.log("PASS six groups, real training, 5-Fold CV, single/multiple selection, history, exports, mobile dark/light and error recovery.");
+  console.log("PASS six groups, real training, 3-Fold CV, single/multiple selection, history, exports, mobile dark/light and error recovery.");
 }finally{await browser?.close();server.kill();}

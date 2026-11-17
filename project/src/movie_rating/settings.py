@@ -13,7 +13,7 @@ ALGORITHMS = (*PRIMARY_ALGORITHMS, "baseline", "item_knn", "nmf")
 
 class DataSettings(BaseModel):
     directory: str = "../dataset"
-    user_sample_fraction: float = Field(default=0.02, gt=0, le=1)
+    user_sample_fraction: float = Field(default=1.0, gt=0, le=1)
     chunksize: int = Field(default=500_000, gt=0)
     train_fraction: float = Field(default=0.8, gt=0, lt=1)
     validation_fraction: float = Field(default=0.1, gt=0, lt=1)

@@ -19,11 +19,13 @@ class ModelParameters(BaseModel):
     factors: int = Field(16, ge=2, le=128)
     hidden_size: int = Field(32, ge=4, le=256)
     learning_rate: float = Field(0.005, gt=0, le=0.1)
+    xgb_learning_rate: float = Field(0.05, gt=0, le=0.3)
     regularization: float = Field(0.02, ge=0, le=10)
-    n_estimators: int = Field(80, ge=10, le=500)
-    max_depth: int = Field(6, ge=1, le=20)
+    n_estimators: int = Field(50, ge=10, le=500)
+    max_depth: int = Field(4, ge=1, le=20)
     c: float = Field(1, gt=0, le=100)
-    min_samples_leaf: int = Field(3, ge=1, le=50)
+    max_iter: int = Field(200, ge=50, le=2000)
+    min_samples_leaf: int = Field(5, ge=1, le=50)
     dropout: float = Field(0.1, ge=0, lt=1)
     batch_size: int = Field(2048, ge=32, le=16384)
 
@@ -33,10 +35,11 @@ class ExperimentRequest(BaseModel):
     group: Literal["rating", "classification", "clustering", "association", "pca", "reinforcement"]
     seed: Literal[42] = 42
     max_users: int = Field(150, ge=10, le=5000)
+    use_all_data: bool = True
     algorithms: list[str] | None = None
-    epochs: int = Field(8, ge=2, le=100)
+    epochs: int = Field(4, ge=2, le=100)
     patience: int = Field(3, ge=1, le=20)
-    tune: bool = True
+    tune: bool = False
     parameters: ModelParameters = Field(default_factory=ModelParameters)
     k_values: list[int] = Field(default_factory=lambda: [3, 4, 6], min_length=1, max_length=10)
     eps_values: list[float] = Field(

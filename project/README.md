@@ -1,6 +1,6 @@
 # Ứng dụng học máy dự đoán đánh giá phim — MovieLens 25M
 
-Trang **Thực nghiệm** có sidebar sáu nhóm, chạy thuật toán thật trên MovieLens: Regression, Classification, Clustering, Association Rules, Dimensionality Reduction và Reinforcement Learning. Pipeline v3 hỗ trợ 5-Fold CV, chọn cấu hình trên Validation, refit 85%, lịch sử và xuất CSV/Excel/JSON. Xem [hướng dẫn Experiment Studio](docs/experiment-studio.md) và [kết quả xác nhận](docs/experiment-studio-results.md).
+Trang **Thực nghiệm** có sidebar sáu nhóm, chạy thuật toán thật trên MovieLens: Regression, Classification, Clustering, Association Rules, Dimensionality Reduction và Reinforcement Learning. Pipeline v3 hỗ trợ 3-Fold CV cho Regression/Classification, chọn cấu hình trên Validation, refit 85%, lịch sử và xuất CSV/Excel/JSON. Xem [hướng dẫn Experiment Studio](docs/experiment-studio.md) và [kết quả xác nhận](docs/experiment-studio-results.md).
 
 Login có 5 tài khoản demo lấy lịch sử từ MovieLens, hiển thị email/mật khẩu và nút
 điền nhanh. [Luồng tài khoản mới và hồ sơ dataset](docs/user-profiles.md) mô tả cách
@@ -52,7 +52,7 @@ Movie Rating Prediction/
 | Linear / Ridge | One-hot sparse, thống kê train và tương tác hồ sơ thể loại, L2 | Hồi quy tuyến tính |
 | XGBoost | Cây boosting trên đặc trưng thống kê/thể loại, không dùng ID số thô | Hồi quy phi tuyến |
 | SVD / Funk SVD | Phân rã ma trận với bias, tối ưu bằng SGD trên đánh giá quan sát | Mô hình nhân tố tiềm ẩn |
-| NCF | Embedding user/item, MLP trên phần dư bias, MSE, AdamW, early stopping | Deep learning với PyTorch CPU |
+| NCF | Embedding user/item, MLP trên phần dư bias, MSE, AdamW, early stopping | Deep learning với PyTorch, tự dùng CUDA nếu khả dụng |
 
 Baseline Bias, Item-KNN và NMF vẫn có thể cấu hình làm mốc tham chiếu.
 Combobox ở Home/Gallery luôn hiển thị bốn thuật toán chính; chỉ bật mô hình có
@@ -130,8 +130,10 @@ Nếu CSV đặt ở nơi khác, sửa `data.directory` ở `configs/default.tom
 hoặc đặt `$env:MOVIE_DATASET_DIR` đến thư mục chứa CSV.
 Đường dẫn trong cấu hình được tính từ `project/`.
 
-Mặc định lấy toàn bộ lịch sử của khoảng **2% người dùng** để phát triển.
-Đổi `user_sample_fraction = 1.0` khi chạy toàn bộ 25M, sau khi kiểm tra RAM và thời gian.
+Mặc định dùng toàn bộ **25.000.095 ratings** (`user_sample_fraction = 1.0`).
+Chuẩn bị dữ liệu và chạy thực nghiệm có thể cần nhiều thời gian và RAM; trên máy
+16 GB nên chỉ chọn một thuật toán mỗi lần, giữ tuning tắt và theo dõi bộ nhớ.
+Giao diện có tùy chọn giới hạn user để chạy thử, nhưng mặc định không lấy mẫu.
 Việc đọc theo chunk giảm bộ nhớ lúc đọc; các tập sau lấy mẫu vẫn được giữ trong RAM
 để sắp xếp/chia dữ liệu và huấn luyện. Chưa benchmark toàn bộ 25M trên máy này.
 

@@ -1,4 +1,4 @@
-"""Neural collaborative filtering adapted to explicit 0.5–5 ratings on CPU."""
+"""Neural collaborative filtering adapted to explicit 0.5–5 ratings."""
 
 import copy
 
@@ -65,10 +65,11 @@ class NeuralCF(BiasBaseline):
         self.learning_rate, self.dropout, self.patience = learning_rate, dropout, patience
         self.profile_steps, self.seed = profile_steps, seed
 
-    def fit(self, ratings, validation=None):
+    def fit(self, ratings, validation=None, progress=None):
         super().fit(ratings)
         users, items, values = self.encode_training(ratings)
         torch.set_num_threads(4)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Keep initialization and dropout reproducible without advancing callers' RNG state.
         with torch.random.fork_rng(devices=[]):
             torch.manual_seed(self.seed)
@@ -78,14 +79,16 @@ class NeuralCF(BiasBaseline):
                 self.factors,
                 self.hidden_size,
                 self.dropout,
-            )
+            ).to(self.device)
             optimizer = torch.optim.AdamW(
                 self.network.parameters(), lr=self.learning_rate, weight_decay=self.regularization
             )
-            user_tensor, item_tensor = torch.from_numpy(users), torch.from_numpy(items)
+            user_tensor = torch.from_numpy(users).to(self.device)
+            item_tensor = torch.from_numpy(items).to(self.device)
             residual = torch.tensor(
                 values - self.global_mean - self.user_bias[users] - self.movie_bias[items],
                 dtype=torch.float32,
+                device=self.device,
             )
             rng = np.random.default_rng(self.seed)
             best, stale, checkpoint = float("inf"), 0, None
@@ -121,6 +124,8 @@ class NeuralCF(BiasBaseline):
                     else:
                         stale += 1
                 self.learning_curve.append(row)
+                if progress is not None:
+                    progress(epoch + 1, self.epochs)
                 if stale >= self.patience:
                     break
             if checkpoint is not None:
@@ -139,9 +144,9 @@ class NeuralCF(BiasBaseline):
             for start in range(0, len(indices), self.batch_size):
                 rows = indices[start : start + self.batch_size]
                 output[rows] += self.network(
-                    torch.from_numpy(users[rows]),
-                    torch.from_numpy(items[rows]),
-                ).numpy()
+                    torch.from_numpy(users[rows]).to(self.device),
+                    torch.from_numpy(items[rows]).to(self.device),
+                ).cpu().numpy()
         return self.clip(output)
 
     def predict_profile(self, history):
@@ -151,11 +156,17 @@ class NeuralCF(BiasBaseline):
         if not available:
             return None
         indices = np.array([index[row["movie_id"]] for row in available])
-        items = torch.from_numpy(indices)
-        target = torch.tensor([row["rating"] for row in available], dtype=torch.float32)
-        base = torch.tensor(self.global_mean + self.movie_bias[indices], dtype=torch.float32)
+        items = torch.from_numpy(indices).to(self.device)
+        target = torch.tensor(
+            [row["rating"] for row in available], dtype=torch.float32, device=self.device
+        )
+        base = torch.tensor(
+            self.global_mean + self.movie_bias[indices],
+            dtype=torch.float32,
+            device=self.device,
+        )
         with torch.enable_grad():
-            embedding = nn.Parameter(torch.zeros(1, self.factors))
+            embedding = nn.Parameter(torch.zeros(1, self.factors, device=self.device))
             bias = nn.Parameter((target - base).mean().detach())
             optimizer = torch.optim.Adam([embedding, bias], lr=0.03)
             for _ in range(self.profile_steps):
@@ -171,8 +182,9 @@ class NeuralCF(BiasBaseline):
             for start in range(0, len(output), self.batch_size):
                 end = min(start + self.batch_size, len(output))
                 correction = self.network.score(
-                    embedding.expand(end - start, -1), torch.arange(start, end)
-                ).numpy()
+                    embedding.expand(end - start, -1),
+                    torch.arange(start, end, device=self.device),
+                ).cpu().numpy()
                 output[start:end] = (
                     self.global_mean + self.movie_bias[start:end] + float(bias) + correction
                 )
