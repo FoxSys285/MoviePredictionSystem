@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { ChevronDown, RotateCcw } from "lucide-react";
 import type { Criterion, LabGroup, LabResult, LabRow } from "../lib/lab";
 import { assessMetric, referenceLabel, referenceValue, type ReferenceSettings, type ReferenceValues } from "../lib/metric-references";
+import { usePreferences } from "../lib/preferences";
 
 const storageKey="movie-lab-metric-references-v1";
 function readSettings():ReferenceSettings {
@@ -26,9 +27,11 @@ function ReferenceInput({metric,value,onChange}:{metric:Criterion;value:number;o
 }
 
 export function MetricReferenceTable({group,values,onChange,onReset}:{group:LabGroup;values:ReferenceValues;onChange:(key:string,value:number)=>void;onReset:()=>void}) {
-  return <section id="lab-metrics" className="lab-section"><div className="lab-section-heading"><h2>Tiêu chí so sánh & mốc đánh giá</h2><button type="button" className="lab-outline" onClick={onReset}><RotateCcw size={14}/>Khôi phục mốc mặc định</button></div>
+  const [analysisOpen,setAnalysisOpen]=useState(false);
+  const {t}=usePreferences();
+  return <section id="lab-metrics" className="lab-section"><div className="lab-section-heading"><h2>Tiêu chí so sánh & mốc đánh giá</h2><div className="lab-reference-actions"><button type="button" className="lab-outline lab-reference-toggle" aria-expanded={analysisOpen} aria-controls="lab-criteria-table" onClick={()=>setAnalysisOpen(value=>!value)}><ChevronDown size={14} className={analysisOpen?"is-open":""}/>{t(analysisOpen?"Thu gọn phân tích":"Mở rộng phân tích")}</button><button type="button" className="lab-outline" onClick={onReset}><RotateCcw size={14}/>Khôi phục mốc mặc định</button></div></div>
     <p className="lab-muted lab-reference-intro">Mốc khởi đầu do dự án lựa chọn, có thể điều chỉnh và được nhớ trên trình duyệt này. Nhãn “Tốt theo mốc” chỉ áp dụng cho từng chỉ số; không chứng nhận toàn bộ mô hình. Thay mốc không thay đổi kết quả huấn luyện hay mô hình đã được chọn.</p>
-    <div className="lab-table-scroll lab-criteria"><table><caption>Tiêu chí đánh giá · {group.title}</caption><thead><tr><th>Tiêu chí</th><th>Đánh giá gì / cách xác định</th><th>Mốc tham khảo</th><th>Phân tích mốc & cách đọc</th></tr></thead><tbody>{group.metrics.map(m=><tr key={m.key}><th scope="row">{m.name}</th><td>{m.definition}</td><td>{m.reference?<><ReferenceInput metric={m} value={referenceValue(m,values)!} onChange={v=>onChange(m.key,v)}/><strong className="lab-reference-target">{referenceLabel(m,values)}</strong><small>Mặc định: {m.reference.value} {m.reference.unit}</small></>:"Chưa có mốc"}</td><td>{m.reference?<><p>{m.reference.rationale}</p><p>{referenceValue(m,values)===m.reference.value?m.reference.interpretation:`Đang dùng mốc tùy chỉnh: ${referenceLabel(m,values)}. Các khoảng mặc định bên dưới chỉ là tham khảo. ${m.reference.interpretation}`}</p><p className="lab-reference-caution">{m.reference.caution}</p></>:m.interpretation}</td></tr>)}</tbody></table></div>
+    <div className={`lab-table-scroll lab-criteria${analysisOpen?" is-expanded":""}`}><table id="lab-criteria-table"><caption>Tiêu chí đánh giá · {group.title}</caption><thead><tr><th>Tiêu chí</th><th>Đánh giá gì / cách xác định</th><th>Mốc tham khảo</th>{analysisOpen&&<th>Phân tích mốc & cách đọc</th>}</tr></thead><tbody>{group.metrics.map(m=><tr key={m.key}><th scope="row">{m.name}</th><td>{m.definition}</td><td>{m.reference?<><ReferenceInput metric={m} value={referenceValue(m,values)!} onChange={v=>onChange(m.key,v)}/><strong className="lab-reference-target">{referenceLabel(m,values)}</strong><small>Mặc định: {m.reference.value} {m.reference.unit}</small></>:"Chưa có mốc"}</td>{analysisOpen&&<td>{m.reference?<><p>{m.reference.rationale}</p><p>{referenceValue(m,values)===m.reference.value?m.reference.interpretation:`Đang dùng mốc tùy chỉnh: ${referenceLabel(m,values)}. Các khoảng mặc định bên dưới chỉ là tham khảo. ${m.reference.interpretation}`}</p><p className="lab-reference-caution">{m.reference.caution}</p></>:m.interpretation}</td>}</tr>)}</tbody></table></div>
   </section>;
 }
 

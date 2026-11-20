@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { Activity, ChartPie, Database, Download, Film, Layers, Star, Tags, Users } from "lucide-react";
 import { LabChartFigure } from "./LabChart";
 import { MetricAssessment } from "./MetricReferences";
 import { AssociationTrainingSummary } from "./AssociationDataSource";
@@ -49,14 +49,16 @@ function AprioriRanking({recommendation}:{recommendation:NonNullable<LabResult["
 }
 
 export function DatasetSummary({stats,label}:{stats?:DatasetStats;label:string}) {
+  const {t}=usePreferences();
   if(!stats)return null;
   const cells:[[string,unknown],...[string,unknown][]]=[
     ["Ratings",stats.ratings],["Users",stats.users],["Movies có ratings",stats.movies],["Genres",stats.genres],
     ["Rating min / max",`${stats.rating_min} / ${stats.rating_max}`],["Rating mean",metricNumber(stats.rating_mean)],
     ["Sparsity",`${(stats.sparsity*100).toFixed(3)}%`],["Movies trong catalog",stats.catalog_movies],
   ];
-  return <section className="lab-section"><div className="lab-section-heading"><h2>{label}</h2><span className="lab-badge">MovieLens 25M</span></div>
-    <div className="lab-stat-grid">{cells.map(([name,value])=><div key={name}><span>{name}</span><strong>{typeof value==="number"?value.toLocaleString("vi-VN"):String(value)}</strong></div>)}</div></section>;
+  const icons=[Activity,Users,Film,Tags,Star,ChartPie,Layers,Database];
+  return <section className="lab-section lab-dataset-summary"><div className="lab-section-heading"><div className="lab-section-title"><span className="lab-section-icon"><Database size={21}/></span><div><h2>{t(label)}</h2><p>{t("Thống kê được tính từ dữ liệu MovieLens đã chuẩn bị.")}</p></div></div><span className="lab-badge">MovieLens 25M</span></div>
+    <div className="lab-stat-grid">{cells.map(([name,value],index)=>{const Icon=icons[index];return <div className={`lab-stat-card tone-${index%4}`} key={name}><span className="lab-stat-icon"><Icon size={19}/></span><div><span>{t(name)}</span><strong>{typeof value==="number"?value.toLocaleString("vi-VN"):String(value)}</strong></div></div>;})}</div></section>;
 }
 
 function Rules({rules}:{rules:LabRule[]}) {

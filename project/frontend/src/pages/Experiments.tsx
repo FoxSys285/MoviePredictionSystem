@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, AlertCircle, ChevronRight, Download, FlaskConical, Layers, Loader2, Minimize2, Network, Play, RefreshCw, Target, type LucideIcon } from "lucide-react";
+import { Activity, AlertCircle, CalendarDays, ChevronRight, Database, Download, FlaskConical, Layers, Loader2, Minimize2, Network, Play, RefreshCw, Target, type LucideIcon } from "lucide-react";
 import { PageHero } from "../components/ui";
 import { LabChartFigure } from "../components/LabChart";
 import { ExperimentResults, DatasetSummary } from "../components/ExperimentResults";
@@ -61,6 +61,8 @@ export function Experiments() {
   const visibleJob=job?.group===group?.id ? job : null;
   const active=runs.find(busy);
   const algorithms=group ? algorithmChoices[group.id]??group.algorithms.map(a=>a.id) : [];
+  const crossValidated=group?.id==="rating"||group?.id==="classification";
+  const usesTemporalHoldout=group?.id!=="association";
   const statusJob:LabJob|null=submitting&&group&&submissionStartedAt?{
     id:"submitting",group:group.id,status:"queued",progress:0,
     message:"Đang gửi yêu cầu thực nghiệm…",created_at:submissionStartedAt,
@@ -123,11 +125,16 @@ export function Experiments() {
         {visibleJob?.status==="completed"&&[3,4].includes(visibleJob.result?.schema_version||0)?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group} references={referenceSettings.settings[group.id]||{}}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:null}
       </>:<>
         <header className="lab-group-header"><span className="lab-kicker">RESEARCH WORKSPACE / {String(primaryGroups.indexOf(group)+1).padStart(2,"0")}</span><div><h1>{t(group.title)}</h1><span className="lab-badge">{group.algorithms.length} thuật toán</span></div><p className="lab-objective">{group.question}</p></header>
-        <div className="lab-protocol-strip"><span><b>42</b> Random Seed</span><span><b>70 / 15 / 15</b> Train / Validation / Test</span><span><b>{["rating","classification"].includes(group.id)?"3 lượt CV thời gian":"Train only"}</b> {["rating","classification"].includes(group.id)?"Đặc trưng riêng từng fold":"Fit đặc trưng"}</span></div>
+        <div className="lab-protocol-strip" aria-label={t("Tóm tắt giao thức thực nghiệm")}>
+          <div className="lab-protocol-card"><span className="lab-protocol-icon"><Database size={20}/></span><div><strong>{catalog?.statistics?.ratings?.toLocaleString("vi-VN")??"MovieLens 25M"}</strong><small>{t(catalog?.statistics?"Ratings trong dữ liệu đã chuẩn bị":"Nguồn dữ liệu thực nghiệm")}</small></div></div>
+          <div className="lab-protocol-card"><span className="lab-protocol-icon"><CalendarDays size={20}/></span><div><strong>{usesTemporalHoldout?"70 / 15 / 15":t("Train đã chuẩn bị")}</strong><small>{t(usesTemporalHoldout?"Train / Validation / Test theo thời gian từng user":"Apriori chỉ khai phá trên tập Train")}</small></div></div>
+          <div className="lab-protocol-card"><span className="lab-protocol-icon"><Activity size={20}/></span><div><strong>{crossValidated?"3-Fold CV":t("Validation + Test")}</strong><small>{t(crossValidated?"CV chạy trên Train, giữ riêng Validation và Test":"Validation chọn cấu hình · Test đánh giá cuối")}</small></div></div>
+        </div>
         <DatasetSummary stats={catalog?.statistics} label="Dataset đã chuẩn bị"/>
         {group.id==="association"&&<AssociationDataSource catalog={catalog!}/>}
         <nav className="lab-jump-links" aria-label={t("Điều hướng trong nhóm")}><a href="#lab-run"><Play size={12}/>{t("Chạy thực nghiệm")}</a>{visibleJob?.status==="completed"&&<a href="#lab-results">{t("Kết quả thực nghiệm")}</a>}</nav>
-        <div className="lab-algorithms">{group.algorithms.map(a=><article key={a.id}><h2>{a.name}</h2><p>{a.description}</p></article>)}</div>
+        <header className="lab-algorithm-heading"><div><span className="lab-kicker">{t("MÔ HÌNH TRONG THỰC NGHIỆM")}</span><h2>{t("Thuật toán trong nhóm này")}</h2><p>{t("Chọn một thuật toán để mở cấu hình chạy tương ứng.")}</p></div><span className="lab-badge">{group.algorithms.length} {t("thuật toán")}</span></header>
+        <div className="lab-algorithms">{group.algorithms.map((a,index)=>{const Icon=a.id.includes("forest")||a.id.includes("ncf")?Network:a.id.includes("svd")?Layers:Activity;return <article className={`lab-algorithm-card tone-${index%2}`} key={a.id}><span className="lab-algorithm-icon"><Icon size={28}/></span><div className="lab-algorithm-copy"><span className="lab-algorithm-label">{t("THUẬT TOÁN {number}",{number:String(index+1).padStart(2,"0")})}</span><h3>{a.name}</h3><p>{a.description}</p></div><button className="lab-algorithm-use" type="button" aria-label={t("Chọn {name} để chạy",{name:a.name})} aria-controls="lab-run" disabled={submitting||!!active} onClick={()=>{setAlgorithmChoices(previous=>({...previous,[group.id]:[a.id]}));requestAnimationFrame(()=>document.getElementById("lab-run")?.scrollIntoView({block:"start",behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}}>{t("Dùng thuật toán này")}<ChevronRight size={16}/></button></article>;})}</div>
         <ExperimentReductionGuide group={group} config={config}/>
         <MetricReferenceTable group={group} values={referenceSettings.settings[group.id]||{}} onChange={(key,value)=>referenceSettings.setValue(group.id,key,value)} onReset={()=>referenceSettings.reset(group.id)}/>
         <section id="lab-run" className="lab-section lab-run-panel" aria-label={t("Chạy thực nghiệm")}><div className="lab-section-heading"><h2>{t("Chạy thực nghiệm nhóm")}</h2><span className="lab-data-status"><i/>{t(catalog?.data_ready?"Dữ liệu đã sẵn sàng":"Chưa chuẩn bị dữ liệu")}</span></div>
