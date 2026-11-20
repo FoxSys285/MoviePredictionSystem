@@ -97,11 +97,10 @@ cho thư mục artifacts mới dùng cấu hình `split_strategy="per_user_tempo
 `global_temporal` vẫn có thể chọn cho nghiên cứu tương lai toàn cục.
 
 [Chi tiết vận hành và RAM](personalized-experiments.md). Thực nghiệm lớn chạy
-trong tiến trình riêng. Ngân sách mặc định 4096 MiB cho bộ nhớ riêng của worker,
-đồng thời hạ theo RAM khả dụng; để lại ít nhất 12% RAM máy (tối thiểu 1 GiB).
-Khi worker vượt ngân sách hoặc RAM khả dụng dưới mức dự phòng, dừng tiến trình,
-không công bố kết quả dở. Đây là giám sát mỗi 0,25 giây, không phải hard limit
-của hệ điều hành. File cache có thể làm RSS cao nhưng được hệ điều hành thu hồi.
+trong tiến trình riêng, không có giới hạn thời gian hoặc ngưỡng RAM tự dừng.
+Worker ghi mức dùng RAM riêng và RAM khả dụng của máy mỗi 30 giây; người dùng có
+thể dừng thủ công trên giao diện. Hệ điều hành vẫn có thể kết thúc tiến trình nếu
+máy cạn bộ nhớ. File cache có thể làm RSS cao nhưng được hệ điều hành thu hồi.
 
 Đặc trưng float32 tạo theo batch 65.536 hàng. Linear tích lũy thống kê OLS nhỏ;
 Logistic/Forest dùng file memmap khi ma trận trên 64 MiB; XGBoost lớn dùng trang

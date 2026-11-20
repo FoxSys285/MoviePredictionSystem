@@ -65,7 +65,7 @@ try{
     assert.equal(await guide.getAttribute('data-mode'),'enabled');
     assert.ok((await guide.innerText()).includes(guideMarker[group.id]),`Missing group-specific reduction details for ${group.id}`);
     assert.equal(await page.getByTestId('reduction-card-pca').getAttribute('data-active'),'true');
-    assert.equal(await page.getByTestId('reduction-card-truncated_svd').getAttribute('data-active'),'false');
+    assert.equal(await page.getByTestId('reduction-card-truncated_svd').getAttribute('data-active'),'true');
     assert.equal(await guide.locator('.lab-reduction-card').count(),2);
     assert.deepEqual(await page.evaluate(()=>{
       const cards=[...document.querySelectorAll('.lab-content > .lab-reduction-guide')];
@@ -87,7 +87,6 @@ try{
       await page.getByLabel("XGBoost · Trees",{exact:true}).fill("10");
       await page.getByLabel("XGBoost · Max depth",{exact:true}).fill("2");
       await page.locator(".lab-config select").first().selectOption("compare");
-      await page.locator(".lab-config select[multiple]").selectOption(["pca","truncated_svd"]);
       await page.locator(".lab-config label").filter({hasText:"Components cần thử"}).locator("input").fill("1");
     }
     if(["rating","classification"].includes(group.id)){
@@ -101,7 +100,6 @@ try{
     }
     if(group.id==="clustering"){
       await page.locator(".lab-config select").first().selectOption("compare");
-      await page.locator(".lab-config select[multiple]").selectOption(["pca","truncated_svd"]);
       await page.locator(".lab-config label").filter({hasText:"Components cần thử"}).locator("input").fill("1");
       await page.locator(".lab-config label").filter({hasText:"K-Means · Danh sách K"}).locator("input").fill("2");
       await page.locator(".lab-config label").filter({hasText:"DBSCAN · Danh sách min_samples"}).locator("input").fill("5");

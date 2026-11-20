@@ -50,7 +50,7 @@ try{
   await page.locator(".lab-config label").filter({hasText:"Components cần thử"}).locator("input").fill("1");
   assert.equal(await reductionGuide.getAttribute("data-mode"),"enabled");
   assert.equal(await page.getByTestId("reduction-card-pca").getAttribute("data-active"),"true");
-  assert.equal(await page.getByTestId("reduction-card-truncated_svd").getAttribute("data-active"),"false");
+  assert.equal(await page.getByTestId("reduction-card-truncated_svd").getAttribute("data-active"),"true");
   await page.locator(".lab-config label").filter({hasText:"Apriori · K số nhóm user"}).locator("input").fill("2");
   const source=page.getByRole("region",{name:"Nguồn dữ liệu Apriori",exact:true});
   assert.ok((await source.innerText()).includes(manifest.splits.train.ratings.toLocaleString("vi-VN")));
@@ -67,7 +67,7 @@ try{
   assert.equal(finished.status,"completed",finished.message);
   assert.equal(finished.request.use_all_data,true);
   assert.equal(finished.request.reduction_mode,"enabled");
-  assert.deepEqual(finished.request.reduction_methods,["pca"]);
+  assert.deepEqual(finished.request.reduction_methods,["pca","truncated_svd"]);
   assert.deepEqual(finished.request.components,[1]);
   const data=finished.result.association_data;
   assert.equal(data.train_ratings,manifest.splits.train.ratings);

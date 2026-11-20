@@ -27,7 +27,7 @@ export type LabResult = {
   class_balance?:Record<string,{positive:number;negative:number;positive_fraction:number}>;
   rules?:LabRule[]; search?:Record<string,unknown>[];
   clusters?:{algorithm:string;variant_id?:string;qualified?:boolean;stability?:{adjusted_rand_mean:number|null;joint_coverage_mean:number;comparisons:number};profiles:{cluster:number;users:number;genre_means:Record<string,number>}[]}[];
-  runtime?:{isolated_process?:boolean;memory_budget_mb?:number;worker_peak_private_mb?:number;system_min_available_mb?:number;processor:string;cpu_count:number;ram_bytes:number;device:string;python:string;platform:string};
+  runtime?:{isolated_process?:boolean;automatic_memory_limit?:boolean;memory_budget_mb?:number;worker_peak_private_mb?:number;system_min_available_mb?:number;processor:string;cpu_count:number;ram_bytes:number;device:string;python:string;platform:string};
   provenance: { split_files?:Record<string,string>|null;source_prepared_files?:Record<string,string>;metadata_file?:string; association_source?:{mode:"full_prepared_train";train_file:string;movies_file:string;heldout_files:string[];prepared_user_sample_fraction:number|null}; exclusions?:{excluded_users:number;excluded_ratings:number}; protocol?: string; sampled_ratings: number; sampled_users: number; sample?:DatasetStats; prepared?:DatasetStats; splits: Record<string, { ratings: number }> };
 };
 export type LabJob = { id: string; group: LabGroupId; status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted"; progress: number; message: string; created_at: string; finished_at?: string; cancel_requested?: boolean; result?: LabResult };

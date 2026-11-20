@@ -107,6 +107,13 @@ export function Experiments() {
     try {const response=await api<LabJob>("/experiment-lab/runs",{method:"POST",body:JSON.stringify({...config,...(group.id==="association"?{use_all_data:true}:{}),group:group.id,algorithms})});successSound.track(response.id);setRuns(v=>[response,...v]);setChosen(v=>({...v,[group.id]:response.id}));setJob(response);}
     catch(e){setError((e as Error).message);}finally{setSubmitting(false);setSubmissionStartedAt(null);}
   }
+  function toggleReductionMethod(method:"pca"|"truncated_svd"){
+    setConfig(current=>{
+      const selected=current.reduction_methods.includes(method);
+      if(selected&&current.reduction_methods.length===1)return current;
+      return {...current,reduction_methods:selected?current.reduction_methods.filter(item=>item!==method):[...current.reduction_methods,method]};
+    });
+  }
   async function stop(id:string){try {await api(`/experiment-lab/runs/${id}/cancel`,{method:"POST"});setReload(v=>v+1);}catch(e){setError((e as Error).message);}}
   return <div className="lab-page"><PageHero title={t("THỰC NGHIỆM")} subtitle="MovieLens Research Studio · Huấn luyện thật. Đánh giá minh bạch." variant="experiments"/>
     <main id="main" className="container lab-layout"><aside className="lab-sidebar" aria-label={t("Danh mục nhóm thuật toán")}>
@@ -135,7 +142,7 @@ export function Experiments() {
         <nav className="lab-jump-links" aria-label={t("Điều hướng trong nhóm")}><a href="#lab-run"><Play size={12}/>{t("Chạy thực nghiệm")}</a>{visibleJob?.status==="completed"&&<a href="#lab-results">{t("Kết quả thực nghiệm")}</a>}</nav>
         <header className="lab-algorithm-heading"><div><span className="lab-kicker">{t("MÔ HÌNH TRONG THỰC NGHIỆM")}</span><h2>{t("Thuật toán trong nhóm này")}</h2><p>{t("Chọn một thuật toán để mở cấu hình chạy tương ứng.")}</p></div><span className="lab-badge">{group.algorithms.length} {t("thuật toán")}</span></header>
         <div className="lab-algorithms">{group.algorithms.map((a,index)=>{const Icon=a.id.includes("forest")||a.id.includes("ncf")?Network:a.id.includes("svd")?Layers:Activity;return <article className={`lab-algorithm-card tone-${index%2}`} key={a.id}><span className="lab-algorithm-icon"><Icon size={28}/></span><div className="lab-algorithm-copy"><span className="lab-algorithm-label">{t("THUẬT TOÁN {number}",{number:String(index+1).padStart(2,"0")})}</span><h3>{a.name}</h3><p>{a.description}</p></div><button className="lab-algorithm-use" type="button" aria-label={t("Chọn {name} để chạy",{name:a.name})} aria-controls="lab-run" disabled={submitting||!!active} onClick={()=>{setAlgorithmChoices(previous=>({...previous,[group.id]:[a.id]}));requestAnimationFrame(()=>document.getElementById("lab-run")?.scrollIntoView({block:"start",behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}}>{t("Dùng thuật toán này")}<ChevronRight size={16}/></button></article>;})}</div>
-        <ExperimentReductionGuide group={group} config={config}/>
+        <ExperimentReductionGuide group={group} config={config} onToggleMethod={toggleReductionMethod} disabled={submitting||!!active}/>
         <MetricReferenceTable group={group} values={referenceSettings.settings[group.id]||{}} onChange={(key,value)=>referenceSettings.setValue(group.id,key,value)} onReset={()=>referenceSettings.reset(group.id)}/>
         <section id="lab-run" className="lab-section lab-run-panel" aria-label={t("Chạy thực nghiệm")}><div className="lab-section-heading"><h2>{t("Chạy thực nghiệm nhóm")}</h2><span className="lab-data-status"><i/>{t(catalog?.data_ready?"Dữ liệu đã sẵn sàng":"Chưa chuẩn bị dữ liệu")}</span></div>
           <form onInvalidCapture={e=>{const details=(e.target as HTMLElement).closest("details");if(details)details.open=true;}} onSubmit={e=>{e.preventDefault();void start();}}><ExperimentConfiguration key={group.id} group={group} value={config} onChange={setConfig} disabled={submitting||!!active} algorithms={algorithms} setAlgorithms={v=>setAlgorithmChoices(previous=>({...previous,[group.id]:v}))}/><div className="lab-run-actions"><button className="lab-primary" type="submit" disabled={submitting||!!active||!catalog?.data_ready||!algorithms.length}><Play size={17}/>{algorithms.length===1?"Chạy thuật toán đã chọn":t("Chạy thực nghiệm nhóm")}</button><span className="lab-muted">{algorithms.length} thuật toán được chọn</span></div></form>

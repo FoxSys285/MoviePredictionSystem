@@ -45,9 +45,13 @@ const groupApplications: Record<string, Record<"pca" | "truncated_svd", string>>
 export function ExperimentReductionGuide({
   group,
   config,
+  onToggleMethod,
+  disabled,
 }: {
   group: LabGroup;
   config: ExperimentConfigValue;
+  onToggleMethod: (method: "pca" | "truncated_svd") => void;
+  disabled: boolean;
 }) {
   const { t } = usePreferences();
   const modes: Record<ExperimentConfigValue["reduction_mode"], string> = {
@@ -76,11 +80,12 @@ export function ExperimentReductionGuide({
       </div>
       <p className="lab-reduction-context">{t(groupExplanation[group.id])}</p>
       <p className="lab-muted">
-        {t("Mặc định đã bật PCA với các components đang chọn. Có thể đổi chế độ và phương pháp ở phần cấu hình; trạng thái bên dưới phản ánh lựa chọn hiện tại.")}
+        {t("Mặc định đã chọn cả PCA và TruncatedSVD. Chọn phương pháp ngay trên thẻ; chế độ chạy và components được chỉnh trong cấu hình.")}
       </p>
       <div className="lab-reduction-grid">
         {(["pca", "truncated_svd"] as const).map((method) => {
-          const active = config.reduction_mode !== "off" && config.reduction_methods.includes(method);
+          const selected = config.reduction_methods.includes(method);
+          const active = config.reduction_mode !== "off" && selected;
           return (
             <article
               className={`lab-reduction-card${active ? " active" : ""}`}
@@ -88,11 +93,12 @@ export function ExperimentReductionGuide({
               data-testid={`reduction-card-${method}`}
               data-method={method}
               data-active={active}
+              data-selected={selected}
             >
               <div className="lab-reduction-card-heading">
                 <h3>{method === "pca" ? "PCA" : "TruncatedSVD"}</h3>
                 <span className={`lab-reduction-status${active ? " active" : ""}`}>
-                  {t(active ? "Đang dùng" : config.reduction_mode === "off" ? "Chưa bật" : "Không chọn")}
+                  {t(active ? "Đang dùng" : selected ? "Đã chọn · đang tắt" : "Không chọn")}
                 </span>
               </div>
               <p>{t(methodDetails[method].summary)}</p>
@@ -101,6 +107,15 @@ export function ExperimentReductionGuide({
                 <p>{t(groupApplications[group.id][method])}</p>
               </div>
               <small>{t("Components đang chọn: {components}", { components })}</small>
+              <button
+                className="lab-reduction-toggle"
+                type="button"
+                aria-pressed={selected}
+                disabled={disabled || (selected && config.reduction_methods.length === 1)}
+                onClick={() => onToggleMethod(method)}
+              >
+                {t(selected ? "Bỏ chọn" : "Chọn phương pháp")}
+              </button>
             </article>
           );
         })}

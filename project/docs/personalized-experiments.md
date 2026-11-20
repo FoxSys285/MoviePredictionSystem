@@ -141,16 +141,14 @@ lai cố định, báo candidate/group coverage, fallback và positive ngoài ca
   trả thống kê. Không giữ đồng thời mô hình của các fold/cấu hình đã chấm.
 
 Khi dữ liệu nguồn từ 1 triệu rating, Lab chạy job trong tiến trình riêng và
-giám sát mỗi 0,25 giây. Ngân sách mặc định 4096 MiB cho bộ nhớ riêng (USS), giảm
-theo RAM đang khả dụng và không quá nửa RAM máy. Giữ ít nhất 12% RAM máy, tối
-thiểu 1 GiB, cho hệ thống. Vượt ngân sách hoặc thiếu RAM thì dừng worker, không
-công bố kết quả dở; ứng dụng vẫn đọc được lỗi và có thể chạy lại. Đây là cơ chế
-giám sát, không phải hard limit RAM của Windows, nên có thể vượt ngắn giữa hai
-lần lấy mẫu. RSS còn gồm các trang file memmap/cache có thể thu hồi.
+theo dõi RAM mỗi 0,25 giây để ghi peak USS và RAM khả dụng thấp nhất. Worker
+không có giới hạn thời gian hoặc ngưỡng RAM tự dừng; có thể dừng thủ công trên
+giao diện. Nếu máy cạn bộ nhớ, hệ điều hành vẫn có thể kết thúc tiến trình. RSS
+còn gồm các trang file memmap/cache có thể thu hồi.
 
 File tạm nằm trong thư mục scratch riêng, được dọn khi hoàn tất/lỗi/dừng. Trên Windows, XGBoost cần đường dẫn cache không dấu; tự dùng short path hoặc thư mục tạm không dấu, có thể đặt `MOVIE_SCRATCH_DIR` để chọn ổ lưu cache. Cần
 đủ dung lượng ổ đĩa (khoảng 6 GiB cho đặc trưng phân loại 21 triệu hàng, ngoài
-cache dữ liệu). Không tăng ngân sách RAM để ép chạy khi đang mở nhiều ứng dụng.
+cache dữ liệu). Chọn số user và cấu hình theo khả năng của máy.
 
 ## Kiểm tra có thể lặp lại
 
@@ -169,7 +167,8 @@ cache dữ liệu). Không tăng ngân sách RAM để ép chạy khi đang mở
 Nguồn: `artifacts/experiment-lab/20261117T063322-aee23787/result.json`. Peak đo cả
 chuẩn bị dữ liệu/CV/refit; USS và RSS là hai cách đo khác nhau; USS cũng có thể tính trang file chưa chia sẻ. Kết quả trên máy
 16 GiB, không bảo đảm mọi thuật toán/cấu hình đều nằm trong cùng mức RAM. Các
-mô hình còn lại cần đo riêng; giới hạn worker sẽ dừng nếu không đủ ngân sách.
+mô hình còn lại cần đo riêng; mức dùng RAM của lượt này không đảm bảo các cấu
+hình khác sẽ có mức tương tự.
 Không so mức cải thiện trực tiếp với RMSE của giao thức cũ.
 
 Đường XGBoost external-memory cũng đã chạy trên 300.000 rating thật, 10 cây,
@@ -177,10 +176,14 @@ depth 2: fit 3,71 giây, RSS đỉnh 691,52 MiB. Đã sửa lỗi cache với đ
 Windows có dấu và xác nhận file tạm được dọn. Đây là kiểm tra đường chạy,
 không phải kết quả benchmark XGBoost toàn bộ dữ liệu.
 
-Kiểm thử backend: 128 passed, 1 skipped (phụ thuộc báo cáo tùy chọn chưa cài).
-Kiểm tra bổ sung bao gồm timestamp trùng nhau, held-out không đổi cấu hình,
-OLS theo batch so với OLS dense, memmap được dọn, XGBoost external-memory và
-tiến trình thật bị dừng khi vượt giới hạn RAM giả lập. Frontend đã build và kiểm tra UI sáu nhóm thành công. XGBoost external-memory được chạy thêm trên 300.000 rating thật: fit 3,71 giây, peak RSS khoảng 692 MiB; đã kiểm tra đường dẫn chứa tiếng Việt trên Windows.
+Các số liệu kiểm thử dưới đây được ghi trước khi bỏ ngưỡng RAM tự dừng, nên
+không phải kết quả kiểm thử của phiên bản hiện tại. Khi cập nhật tính năng,
+backend trước đó có 128 passed, 1 skipped; frontend đã build và kiểm tra UI sáu
+nhóm thành công. Các kiểm tra lịch sử gồm timestamp trùng nhau, held-out không
+đổi cấu hình, OLS theo batch, dọn memmap, XGBoost external-memory và nhánh dừng
+worker theo ngân sách RAM giả lập. XGBoost external-memory cũng đã chạy trên
+300.000 rating thật: fit 3,71 giây, peak RSS khoảng 692 MiB; đã kiểm tra đường
+dẫn chứa tiếng Việt trên Windows.
 
 Từ thư mục `project`:
 

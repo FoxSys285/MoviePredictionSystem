@@ -9,8 +9,6 @@ from scipy.spatial import cKDTree
 from sklearn import config_context
 from sklearn.neighbors import NearestNeighbors
 
-from movie_rating.memory import check_memory
-
 QUERY_BATCH = 512
 
 
@@ -41,7 +39,6 @@ class Neighborhoods:
         self.neighbor_distances = np.empty((len(self.x), width), dtype=np.float64)
         self.neighbor_indices = np.empty((len(self.x), width), dtype=np.int32)
         for start in range(0, len(self.x), QUERY_BATCH):
-            check_memory()
             stop = min(start + QUERY_BATCH, len(self.x))
             # Brute-force BLAS is much faster than a kd-tree for the 38-dimensional
             # taste vectors. The reducer retains only k results per query row.
@@ -133,7 +130,6 @@ class FullDBSCAN:
                 point = stack.pop()
                 now = time.monotonic()
                 if now - last_update >= 0.5:
-                    check_memory()
                     update(
                         None,
                         f"DBSCAN · nối cụm core {len(core_ids) - remaining:,}/{len(core_ids):,}",
@@ -159,7 +155,6 @@ class FullDBSCAN:
         if len(core_ids):
             borders = np.flatnonzero(~core)
             for start in range(0, len(borders), QUERY_BATCH):
-                check_memory()
                 ids = borders[start : start + QUERY_BATCH]
                 # Every eps neighbor of a non-core point is in its cached first k
                 # neighbors, since its k-th distance exceeds eps. No second full

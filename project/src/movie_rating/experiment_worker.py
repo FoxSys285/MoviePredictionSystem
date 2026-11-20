@@ -35,20 +35,10 @@ def run_isolated(service, job, request):
     scratch = scratch_parent / job["id"]
     scratch.mkdir(parents=True, exist_ok=True)
     memory = psutil.virtual_memory()
-    reserve = max(1024 * 2**20, memory.total * 0.12)
-    budget = min(
-        request.memory_budget_mb * 2**20,
-        memory.total * 0.5,
-        memory.available - reserve - 256 * 2**20,
-    )
     peak, minimum_available = 0, memory.available
     process = None
-    failure, cancelled = None, False
+    cancelled = False
     try:
-        if budget < 768 * 2**20:
-            raise MemoryError(
-                "Chưa đủ RAM khả dụng để khởi chạy; hãy đóng ứng dụng đang dùng nhiều RAM."
-            )
         context = mp.get_context("spawn")
         cancel_event = context.Event()
         process = context.Process(
@@ -58,7 +48,7 @@ def run_isolated(service, job, request):
         )
         process.start()
         if logger:
-            logger.write(f"Đã khởi chạy worker · ngân sách RAM {budget / 2**20:.0f} MiB.")
+            logger.write("Đã khởi chạy worker · không đặt giới hạn thời gian hoặc RAM tự động.")
         monitor = psutil.Process(process.pid)
         started = last_heartbeat = time.monotonic()
         while process.is_alive():
@@ -72,7 +62,7 @@ def run_isolated(service, job, request):
             memory = psutil.virtual_memory()
             minimum_available = min(minimum_available, memory.available)
             try:
-                # Private resident pages; the system reserve also covers mapped file caches.
+                # Track private resident pages for reporting; never use RAM as an auto-stop rule.
                 try:
                     used = monitor.memory_full_info().uss
                 except psutil.AccessDenied:
@@ -89,29 +79,19 @@ def run_isolated(service, job, request):
                     f"RAM máy khả dụng {memory.available / 2**20:.0f} MiB."
                 )
                 last_heartbeat = now
-            if used > budget or memory.available < reserve:
-                failure = (
-                    f"Đã dừng để bảo vệ RAM: worker dùng {used / 2**20:.0f} MiB, "
-                    f"giới hạn khả dụng {budget / 2**20:.0f} MiB. "
-                    "Đóng ứng dụng khác hoặc giảm cấu hình rồi chạy lại."
-                )
-                break
-        if cancelled or failure:
-            if process.is_alive():
-                process.terminate()
-                process.join(timeout=5)
-        if process.is_alive():
-            process.kill()
+        if cancelled and process.is_alive():
+            process.terminate()
             process.join(timeout=5)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5)
         latest = read_json(folder / "job.json")
         if latest["status"] not in ("completed", "failed", "cancelled"):
             latest.update(
                 status="cancelled" if cancelled else "failed",
                 message="Đã dừng; không công bố kết quả chạy dở."
                 if cancelled
-                else (
-                    failure or f"Tiến trình thực nghiệm kết thúc bất thường ({process.exitcode})."
-                ),
+                else f"Tiến trình thực nghiệm kết thúc bất thường ({process.exitcode}).",
                 finished_at=datetime.now(UTC).isoformat(),
             )
             if logger:
@@ -122,7 +102,7 @@ def run_isolated(service, job, request):
             result = read_json(result_path)
             result.setdefault("runtime", {}).update(
                 isolated_process=True,
-                memory_budget_mb=round(budget / 2**20),
+                automatic_memory_limit=False,
                 worker_peak_private_mb=round(peak / 2**20, 1),
                 system_min_available_mb=round(minimum_available / 2**20, 1),
             )

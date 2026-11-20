@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from movie_rating.memory import BATCH_ROWS, check_memory
+from movie_rating.memory import BATCH_ROWS
 from movie_rating.models.baseline import BiasBaseline
 
 
@@ -107,7 +107,6 @@ class NeuralCF(BiasBaseline):
             metric_rows = np.linspace(0, len(ratings) - 1, min(50_000, len(ratings)), dtype=int)
             metric_sample = ratings.iloc[metric_rows]
             for epoch in range(self.epochs):
-                check_memory()
                 self.network.train()
                 total = 0.0
                 order = rng.permutation(len(values))

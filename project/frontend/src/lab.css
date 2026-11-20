@@ -46,6 +46,10 @@
 .lab-reduction-application { border-top:1px solid var(--lab-line); margin-top:14px; padding-top:12px; }
 .lab-reduction-application strong { font-size:10px; color:var(--lab-accent); }
 .lab-reduction-card small { display:block; margin-top:13px; color:var(--lab-muted); font-size:9px; line-height:1.8; }
+.lab-reduction-toggle { margin-top:14px; padding:7px 11px; border:1px solid var(--lab-line); border-radius:7px; color:var(--lab-text); background:transparent; font:inherit; font-size:10px; cursor:pointer; transition:border-color .18s ease,background .18s ease,color .18s ease; }
+.lab-reduction-toggle:hover:not(:disabled),.lab-reduction-toggle[aria-pressed="true"] { border-color:var(--lab-accent); color:var(--lab-accent); background:#9868da12; }
+.lab-reduction-toggle:focus-visible { outline:2px solid var(--lab-accent); outline-offset:3px; }
+.lab-reduction-toggle:disabled { cursor:not-allowed; opacity:.55; }
 .lab-legacy-pca { border:1px dashed var(--lab-line); border-radius:10px; background:var(--lab-card); padding:20px; margin-top:22px; }
 .lab-legacy-pca h2 { font-size:17px; font-weight:500; }
 .lab-legacy-pca p { color:var(--lab-muted); font-size:11px; line-height:1.9; margin-top:8px; }

@@ -8,19 +8,11 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
-import psutil
 
 from movie_rating.settings import PROJECT_ROOT
 
 BATCH_ROWS = 65_536
 MEMMAP_THRESHOLD_BYTES = 64 * 2**20
-
-
-def check_memory():
-    memory = psutil.virtual_memory()
-    reserve = max(768 * 2**20, memory.total * 0.1)
-    if memory.available < reserve:
-        raise MemoryError("RAM khả dụng quá thấp; đã dừng để giữ bộ nhớ cho hệ điều hành.")
 
 
 def scratch_root(native_ascii=False):
@@ -70,7 +62,6 @@ def feature_buffer(rows, columns, batches):
         try:
             offset = 0
             for features in batches:
-                check_memory()
                 stop = offset + len(features)
                 matrix[offset:stop] = features
                 offset = stop

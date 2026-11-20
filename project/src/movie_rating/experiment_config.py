@@ -43,7 +43,10 @@ class ExperimentRequest(BaseModel):
     epochs: int = Field(15, ge=2, le=100)
     patience: int = Field(3, ge=1, le=20)
     tune: bool = False
-    memory_budget_mb: int = Field(4096, ge=1024, le=32768)
+    # Legacy field accepted from older clients; isolated workers no longer enforce it.
+    memory_budget_mb: int = Field(
+        4096, ge=1024, le=32768, description="Deprecated; ignored by workers"
+    )
     parameters: ModelParameters = Field(default_factory=ModelParameters)
     k_values: list[int] = Field(
         default_factory=lambda: [2, 3, 4, 6, 8, 10], min_length=1, max_length=10
@@ -87,7 +90,7 @@ class ExperimentRequest(BaseModel):
     hidden_sizes: list[int] = Field(default_factory=lambda: [64, 64], min_length=1, max_length=4)
     reduction_mode: Literal["off", "enabled", "compare"] = "off"
     reduction_methods: list[Literal["pca", "truncated_svd"]] = Field(
-        default_factory=lambda: ["pca"], min_length=1, max_length=2
+        default_factory=lambda: ["pca", "truncated_svd"], min_length=1, max_length=2
     )
 
     @model_validator(mode="after")

@@ -13,7 +13,6 @@ import pyarrow.parquet as pq
 from sklearn.model_selection import train_test_split
 
 from movie_rating.data.temporal import PERSONALIZED_PROTOCOL, user_temporal_split
-from movie_rating.memory import check_memory
 
 
 def dataset_statistics(ratings, movies):
@@ -121,7 +120,6 @@ class ExperimentData:
         destination = self.directory.parent / f"data-personalized-v2-{digest}"
         if (destination / "manifest.json").exists():
             return destination
-        check_memory()
         staging_root = Path(os.environ.get("MOVIE_SCRATCH_DIR", self.directory.parent))
         staging_root.mkdir(parents=True, exist_ok=True)
         staging = tempfile.mkdtemp(prefix=".personalized-", dir=staging_root)

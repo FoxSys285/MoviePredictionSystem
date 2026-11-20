@@ -13,7 +13,7 @@ from sklearn.metrics import adjusted_rand_score
 from movie_rating.experiment_reduction import FeatureReducer, ReductionSpec, reduction_variants
 from movie_rating.experiment_unsupervised import cluster_scores, projected_chart
 from movie_rating.lab import chart, measured, series
-from movie_rating.memory import check_memory, serialized_size
+from movie_rating.memory import serialized_size
 from movie_rating.models.full_dbscan import CoreNeighbors, FullDBSCAN, Neighborhoods
 
 PROFILE_BATCH = 262_144
@@ -88,7 +88,6 @@ def taste_profiles(frame, movies, minimum=5, shrinkage=10.0, update=lambda *_: N
     genre_counts = np.zeros_like(sums, dtype=np.int32)
     user_sums = np.zeros(len(users), dtype=np.float64)
     for start in range(0, len(frame), PROFILE_BATCH):
-        check_memory()
         batch = frame.iloc[start : start + PROFILE_BATCH]
         uc = user_index.get_indexer(batch.userId)
         keep = uc >= 0
@@ -151,7 +150,6 @@ class ClusterModel:
         labels = np.full(len(x), -1, dtype=np.int32)
         size = 512 if self.algorithm == "dbscan" else 65_536
         for start in range(0, len(x), size):
-            check_memory()
             batch = x[start : start + size]
             if self.algorithm == "kmeans":
                 labels[start : start + len(batch)] = self.model.predict(batch)
@@ -182,7 +180,6 @@ def fit_cluster(
         for epoch in range(3):
             order = rng.permutation(len(fit))
             for start in range(0, len(fit), 2048):
-                check_memory()
                 model.partial_fit(fit[order[start : start + 2048]])
             update(None, f"K-Means · lượt {epoch + 1}/3 đã đọc {len(fit):,}/{len(fit):,} user")
     else:
@@ -304,7 +301,6 @@ def evaluate_ranking(splits, profiles, assignments, request, update):
             else np.zeros(shape, dtype=np.float32)
         )
     for start in range(0, len(splits["train"]), PROFILE_BATCH):
-        check_memory()
         batch = splits["train"].iloc[start : start + PROFILE_BATCH]
         uc = user_index.get_indexer(batch.userId)
         mc = item_index.get_indexer(batch.movieId)

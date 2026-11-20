@@ -3,7 +3,7 @@
 import numpy as np
 from scipy import sparse
 
-from movie_rating.memory import BATCH_ROWS, check_memory
+from movie_rating.memory import BATCH_ROWS
 from movie_rating.models.base import RatingModel
 
 
@@ -89,7 +89,6 @@ class RatingFeatures(RatingModel):
 
     def iter_features(self, ratings, training=False, batch_rows=BATCH_ROWS):
         for start in range(0, len(ratings), batch_rows):
-            check_memory()
             batch = ratings.iloc[start : start + batch_rows]
             users, items = self.encode_queries(batch.userId, batch.movieId)
             yield self._feature_batch(

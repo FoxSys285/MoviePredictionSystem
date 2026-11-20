@@ -413,8 +413,8 @@ def _finished(service, run_id):
     raise AssertionError("Worker did not finish")
 
 
-@pytest.mark.parametrize("force_limit", [False, True])
-def test_large_job_is_isolated_and_memory_limit_stops_worker(configured, monkeypatch, force_limit):
+@pytest.mark.parametrize("pressure", ["worker", "system"])
+def test_large_job_is_isolated_without_automatic_memory_stop(configured, monkeypatch, pressure):
     import movie_rating.experiment_worker as worker
 
     prepare(configured)
@@ -423,31 +423,25 @@ def test_large_job_is_isolated_and_memory_limit_stops_worker(configured, monkeyp
     service = LabService(configured)
     stats = service.data.catalog_statistics()
     monkeypatch.setattr(service.data, "catalog_statistics", lambda: {**stats, "ratings": 1_000_000})
-    if force_limit:
+    if pressure == "worker":
         monkeypatch.setattr(
             worker.psutil,
             "Process",
             lambda pid: SimpleNamespace(memory_full_info=lambda: SimpleNamespace(uss=2**40)),
         )
     else:
-        # Keep this worker/isolation test deterministic on shared CI hosts with
-        # less than the worker's fixed OS reserve; the separate branch above
-        # exercises the forced-stop path.
         memory = worker.psutil.virtual_memory()
         monkeypatch.setattr(
             worker.psutil,
             "virtual_memory",
-            lambda: memory._replace(available=max(memory.available, memory.total * 0.3)),
+            lambda: memory._replace(available=0),
         )
     job = service.start(
         ExperimentRequest(group="rating", algorithms=["linear"], memory_budget_mb=2048)
     )
     result = _finished(service, job["id"])
-    if force_limit:
-        assert result["status"] == "failed" and "RAM" in result["message"]
-        assert "result" not in result
-    else:
-        assert result["status"] == "completed", result["message"]
-        assert result["result"]["runtime"]["isolated_process"]
+    assert result["status"] == "completed", result["message"]
+    assert result["result"]["runtime"]["isolated_process"]
+    assert result["result"]["runtime"]["automatic_memory_limit"] is False
     assert not (service.directory / job["id"] / "scratch").exists()
     assert not (scratch_parent / job["id"]).exists()

@@ -1,4 +1,4 @@
-"""Run a supervised or clustering job through the web UI's isolation/RAM guard."""
+"""Run a supervised or clustering job through the web UI's isolated worker."""
 
 import argparse
 import json
@@ -20,7 +20,12 @@ def main():
     parser.add_argument("--max-users", type=int, default=150)
     parser.add_argument("--tune", action="store_true")
     parser.add_argument("--epochs", type=int, default=15)
-    parser.add_argument("--memory-budget-mb", type=int, default=4096)
+    parser.add_argument(
+        "--memory-budget-mb",
+        type=int,
+        default=4096,
+        help="Deprecated compatibility option; workers no longer enforce a RAM budget.",
+    )
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     settings = load_settings()

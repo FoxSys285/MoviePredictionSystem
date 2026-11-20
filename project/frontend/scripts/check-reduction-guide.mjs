@@ -64,7 +64,7 @@ try{
     assert.equal(await guide.getAttribute("data-mode"),"enabled");
     assert.equal(await guide.locator(".lab-reduction-card").count(),2);
     assert.equal(await page.getByTestId("reduction-card-pca").getAttribute("data-active"),"true");
-    assert.equal(await page.getByTestId("reduction-card-truncated_svd").getAttribute("data-active"),"false");
+    assert.equal(await page.getByTestId("reduction-card-truncated_svd").getAttribute("data-active"),"true");
     assert.ok((await guide.innerText()).includes(marker[group]),`Missing ${group} reducer explanation`);
     assert.deepEqual(await guide.locator(".lab-reduction-grid").evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(" ").length),2);
     assert.deepEqual(await page.evaluate(()=>{
@@ -79,11 +79,12 @@ try{
   const guide=page.getByTestId("lab-reduction-guide");
   await page.locator(".lab-parameter-details summary").click();
   await page.locator(".lab-config select").first().selectOption("enabled");
-  await page.locator(".lab-config select[multiple]").selectOption(["truncated_svd"]);
+  await page.getByTestId("reduction-card-pca").getByRole("button",{name:"Bỏ chọn"}).click();
   await page.locator(".lab-config label").filter({hasText:"Components cần thử"}).locator("input").fill("1");
   assert.equal(await guide.getAttribute("data-mode"),"enabled");
   assert.equal(await page.getByTestId("reduction-card-pca").getAttribute("data-active"),"false");
   assert.equal(await page.getByTestId("reduction-card-truncated_svd").getAttribute("data-active"),"true");
+  assert.equal(await page.locator(".lab-config select[multiple]").count(),0);
   for(const theme of ["dark","light"]){
     await page.evaluate(value=>{document.documentElement.dataset.theme=value;},theme);
     await page.setViewportSize({width:390,height:844});
