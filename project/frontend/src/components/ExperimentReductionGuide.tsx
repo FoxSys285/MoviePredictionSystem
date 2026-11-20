@@ -76,7 +76,7 @@ export function ExperimentReductionGuide({
       </div>
       <p className="lab-reduction-context">{t(groupExplanation[group.id])}</p>
       <p className="lab-muted">
-        {t("Chế độ mặc định là tắt. Bật cấu hình ở phần chạy thực nghiệm; lựa chọn bên dưới phản ánh đúng phương pháp và components đang chọn.")}
+        {t("Mặc định đã bật PCA với các components đang chọn. Có thể đổi chế độ và phương pháp ở phần cấu hình; trạng thái bên dưới phản ánh lựa chọn hiện tại.")}
       </p>
       <div className="lab-reduction-grid">
         {(["pca", "truncated_svd"] as const).map((method) => {

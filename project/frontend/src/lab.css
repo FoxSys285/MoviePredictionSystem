@@ -290,13 +290,9 @@ html[data-theme="light"] .lab-page .lab-protocol-card + .lab-protocol-card { bor
 .lab-reference-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
 .lab-reference-toggle svg { transition:transform .18s ease; }
 .lab-reference-toggle svg.is-open { transform:rotate(180deg); }
-.lab-criteria:not(.is-expanded) table { min-width:620px; }
-.lab-criteria:not(.is-expanded) th:first-child { width:20%; }
-.lab-criteria:not(.is-expanded) th:nth-child(2) { width:43%; }
-.lab-criteria:not(.is-expanded) th:nth-child(3) { width:37%; }
-.lab-criteria.is-expanded table { min-width:920px; }
-.lab-criteria.is-expanded th:first-child { width:15%; }
-.lab-criteria.is-expanded th:nth-child(2) { width:27%; }
-.lab-criteria.is-expanded th:nth-child(3) { width:20%; }
-.lab-criteria.is-expanded th:nth-child(4) { width:38%; }
+.lab-reference-content[hidden] { display:none; }
+.lab-criteria table { min-width:620px; }
+.lab-criteria th:first-child { width:20%; }
+.lab-criteria th:nth-child(2) { width:43%; }
+.lab-criteria th:nth-child(3) { width:37%; }
 @media(max-width:600px) { .lab-reference-actions { width:100%; justify-content:flex-start; }.lab-reference-actions .lab-outline { flex:1 1 auto; } }

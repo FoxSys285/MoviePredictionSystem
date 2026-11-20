@@ -61,9 +61,9 @@ try{
     }
     const guide=page.getByTestId("lab-reduction-guide");
     assert.equal(await guide.getAttribute("data-group-id"),group);
-    assert.equal(await guide.getAttribute("data-mode"),"off");
+    assert.equal(await guide.getAttribute("data-mode"),"enabled");
     assert.equal(await guide.locator(".lab-reduction-card").count(),2);
-    assert.equal(await page.getByTestId("reduction-card-pca").getAttribute("data-active"),"false");
+    assert.equal(await page.getByTestId("reduction-card-pca").getAttribute("data-active"),"true");
     assert.equal(await page.getByTestId("reduction-card-truncated_svd").getAttribute("data-active"),"false");
     assert.ok((await guide.innerText()).includes(marker[group]),`Missing ${group} reducer explanation`);
     assert.deepEqual(await guide.locator(".lab-reduction-grid").evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(" ").length),2);

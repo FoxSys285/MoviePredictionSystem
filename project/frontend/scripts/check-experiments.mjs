@@ -62,9 +62,9 @@ try{
     const guide=page.locator('.lab-reduction-guide');
     assert.equal(await guide.count(),1);
     assert.equal(await guide.getAttribute('data-group-id'),group.id);
-    assert.equal(await guide.getAttribute('data-mode'),'off');
+    assert.equal(await guide.getAttribute('data-mode'),'enabled');
     assert.ok((await guide.innerText()).includes(guideMarker[group.id]),`Missing group-specific reduction details for ${group.id}`);
-    assert.equal(await page.getByTestId('reduction-card-pca').getAttribute('data-active'),'false');
+    assert.equal(await page.getByTestId('reduction-card-pca').getAttribute('data-active'),'true');
     assert.equal(await page.getByTestId('reduction-card-truncated_svd').getAttribute('data-active'),'false');
     assert.equal(await guide.locator('.lab-reduction-card').count(),2);
     assert.deepEqual(await page.evaluate(()=>{
