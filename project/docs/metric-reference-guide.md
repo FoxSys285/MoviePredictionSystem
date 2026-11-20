@@ -20,10 +20,10 @@ chạy lại training, không đổi metric và không chọn lại mô hình b�
 | Association | Confidence | ≥0,30 | Ít nhất 30% user có vế trái cũng có vế phải, khớp min_confidence ban đầu. Confidence cao có thể chỉ do phim vế phải phổ biến; cần xem Lift. |
 | Association | Lift | >1,00 | Lift >1 biểu thị đồng xuất hiện dương; =1 không tăng so độc lập; <1 liên kết âm. Lift 1,20 tương ứng confidence cao hơn tần suất nền 20%, không phải độ chính xác 120%. |
 | Reduction | Reconstruction MSE | ≤0,10 | Mục tiêu mất mát tái tạo nhỏ trên vector user–genre đã chuẩn hóa. Không dùng mốc này trên dữ liệu chưa chuẩn hóa hay coi đó là sai số dự đoán rating. |
-| Reduction | Explained Variance | ≥0,90 | Giữ ít nhất 90% phương sai Train; dưới mốc nên thử thêm components nếu ưu tiên giữ thông tin. Phương sai không đồng nghĩa độ chính xác tác vụ gợi ý. |
+| Reduction | Explained Variance | ≥0,90 | Giữ ít nhất 90% phương sai Train; TruncatedSVD dùng phương sai thực tế của thành phần chiếu chia cho tổng phương sai đầu vào đã scale, không dùng tỷ lệ năng lượng. Dưới mốc có thể thử thêm components; phương sai không đồng nghĩa độ chính xác tác vụ gợi ý. |
 | Reduction | Components | ≤8 chiều | Ngân sách nén khởi đầu cho vector khoảng 19 genres. Chỉ hiện đánh giá tốt về độ gọn khi EVR và reconstruction error cũng đạt các mốc tương ứng. |
-| RL | Cumulative Reward | Δ>0 so baseline | Δ = reward Q-Learning − max(reward Random, reward Popularity) trên cùng split/episode/horizon. Δ dương vượt baseline tốt nhất; bằng 0 là chưa cải thiện; âm là chưa vượt. |
-| RL | Average Reward/action | Δ>0 so baseline | So reward mỗi hành động với cùng hai baseline. Không lấy reward thô >0 làm bằng chứng Q-Learning tốt hơn; baseline có thể tốt hơn dù reward Q-Learning dương. |
+| RL | Cumulative Reward | Δ>0 so baseline | Δ = reward DQN − max(reward Random, reward Popularity) trên cùng split/episode/horizon. Cumulative reward phụ thuộc số action thực tế; đọc cùng reward/action và coverage. |
+| RL | Average Reward/action | Δ>0 so baseline | So reward mỗi hành động với cùng hai baseline. Không lấy reward thô >0 làm bằng chứng DQN tốt hơn; baseline có thể tốt hơn dù reward DQN dương. |
 
 Nhãn “Tốt theo mốc” chỉ đánh giá **một tiêu chí**, không kết luận toàn mô hình.
 Giá trị N/A không được đổi thành 0 hoặc gắn nhãn tốt/xấu. Khi thay mốc tùy chỉnh,
@@ -42,7 +42,7 @@ phản hồi thiếu được quy ước là 0, coverage hạn chế và không 
 
 | Tiêu chí | Mốc khởi đầu | Ý nghĩa |
 |---|---|---|
-| Training Time / Execution Time | ≤60 giây | Ngân sách một lần fit cuối hoặc khai phá trên mẫu đã chọn; không phải tổng thời gian tuning/CV. Q-Learning có đánh giá checkpoint trong training time. |
+| Training Time / Execution Time | ≤60 giây | Ngân sách một lần fit cuối hoặc khai phá trên mẫu đã chọn; không phải tổng thời gian tuning/CV. DQN có đánh giá checkpoint Validation trong thời gian học. |
 | Inference Time | ≤0,10 giây/batch | Ngân sách 100 ms cho **cả batch**, không phải mỗi rating. Chỉ so batch cùng số dòng, phần cứng, số luồng và phạm vi phép đo. |
 
 Nhãn thời gian là “Trong ngân sách” / “Vượt ngân sách”, không phải dự đoán

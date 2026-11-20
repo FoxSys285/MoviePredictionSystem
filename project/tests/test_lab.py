@@ -50,7 +50,7 @@ def test_catalog_covers_six_groups_and_required_algorithms():
     }
     assert {a["id"] for a in groups["rating"]["algorithms"]} == {"linear", "xgboost", "svd", "ncf"}
     assert {a["id"] for a in groups["reinforcement"]["algorithms"]} == {
-        "q_learning",
+        "dqn",
         "random",
         "popular",
     }
@@ -69,7 +69,7 @@ def test_six_groups_fit_real_models_and_serialize_finite_results(group, lab_data
     )
     result = execute(splits, movies, request, lambda *_: None)
     assert json.dumps(native(result), allow_nan=False)
-    assert result["schema_version"] == 3 and result["rows"] and result["charts"]
+    assert result["schema_version"] == 4 and result["rows"] and result["charts"]
     assert result["selection"] and result["best_configs"] and result["notes"]
     if group in ("rating", "classification"):
         assert set(result["cv"]) == set(request.algorithms)
@@ -87,11 +87,15 @@ def test_six_groups_fit_real_models_and_serialize_finite_results(group, lab_data
             if r["split"] == "test"
         )
     if group == "rating":
-        curve = next(c for c in result["charts"] if c["kind"] == "line")
-        assert [s["label"] for s in curve["series"]] == ["Train Loss", "Validation Loss"]
+        curve = next(c for c in result["charts"] if c["title"] == "NCF · Rating MSE / Early Stopping")
+        assert curve["y_label"] == "Rating MSE ↓"
+        assert [s["label"] for s in curve["series"]] == [
+            "Train rating MSE", "Validation rating MSE"
+        ]
     if group == "reinforcement":
-        assert all(-1 <= r["average_reward"] <= 1 for r in result["rows"])
+        assert all(r["average_reward"] is None or -1 <= r["average_reward"] <= 1 for r in result["rows"])
         assert all(0 <= r["observed_feedback_fraction"] <= 1 for r in result["rows"])
+        assert result["rl_protocol"]["name"] == "temporal_support_query_dqn_v1"
     if group == "clustering":
         assert {r["algorithm"] for r in result["search"]} == {"kmeans", "dbscan"}
         assert all("coverage" in r and "qualified" in r for r in result["rows"])
@@ -300,6 +304,7 @@ def test_async_api_history_provenance_csv_and_excel(configured):
         run_id = response.json()["id"]
         job = wait_for_job(LabService(configured), run_id)
         assert job["status"] == "completed", job
+        assert job["schema_version"] == 4 and job["result"]["schema_version"] == 4
         assert job["result"]["provenance"]["protocol"] == "per_user_temporal_70_15_15_v2"
         assert job["result"]["runtime"]["code_sha256"]
         csv = client.get(root + f"/runs/{run_id}/export/csv")
@@ -314,6 +319,45 @@ def test_async_api_history_provenance_csv_and_excel(configured):
         assert client.get(root + "/runs/not-a-run").status_code == 404
         assert client.post(root + "/runs", json={"group": "rating", "seed": 1}).status_code == 422
     assert LabService(configured).get(run_id)["status"] == "completed"
+
+
+def test_grouped_apriori_exports_rules_groups_ranking_and_protocol(configured):
+    service = LabService(configured)
+    run_id = "20261120T000000-acde1234"
+    folder = service.directory / run_id
+    folder.mkdir(parents=True)
+    (folder / "job.json").write_text(json.dumps({
+        "id": run_id, "group": "association", "schema_version": 4, "status": "completed",
+    }), encoding="utf-8")
+    result = {
+        "schema_version": 4,
+        "group_rules": [{
+            "variant_id": "apriori_grouped_pca_1_k2", "group": 1,
+            "antecedent_ids": [1], "consequent_ids": [2],
+            "support_in_group": 0.25, "support_global": 0.1,
+        }],
+        "grouped_variants": [{
+            "variant_id": "apriori_grouped_pca_1_k2", "k": 2,
+            "rule_summary": {"rules": 1, "fallback_groups": 1},
+            "fit_metadata": {"method": "pca", "components": 1},
+            "groups": [{"group": 1, "users": 3, "status": "rules", "rule_count": 1}],
+        }],
+        "recommendation": {"rows": [{
+            "variant_id": "apriori_grouped_pca_1_k2", "algorithm": "apriori_grouped",
+            "split": "validation", "ndcg_at_10": 0.5,
+        }]},
+        "reduction": {"mode": "compare", "selected_variant_id": "pca_1"},
+    }
+    (folder / "result.json").write_text(json.dumps(result), encoding="utf-8")
+
+    csv = service.csv_export(run_id)
+    assert "association_group_rule" in csv
+    assert "apriori_grouped_pca_1_k2" in csv and "future_recommendation" in csv
+    workbook = load_workbook(io.BytesIO(service.excel_export(run_id)))
+    assert {"Grouped rules", "Apriori groups", "Future ranking", "Protocol"} <= set(workbook.sheetnames)
+    assert workbook["Grouped rules"]["A2"].value == "apriori_grouped_pca_1_k2"
+    assert workbook["Apriori groups"]["A2"].value == "apriori_grouped_pca_1_k2"
+    assert workbook["Future ranking"]["A2"].value == "apriori_grouped_pca_1_k2"
 
 
 def test_missing_data_and_duplicate_active_jobs(configured):
@@ -434,6 +478,53 @@ def test_legacy_history_remains_readable(configured):
     )
     assert service.list_runs()[0]["schema_version"] == 2
     assert service.get(folder.name)["result"]["rows"][0]["rmse"] == 1.2
+
+
+def test_legacy_pca_history_remains_readable_and_exportable(configured):
+    from movie_rating.lab import save_json
+
+    service = LabService(configured)
+    run_id = "20260101T000001-aabbccdd"
+    folder = service.directory / run_id
+    folder.mkdir(parents=True)
+    save_json(
+        folder / "job.json",
+        {"id": run_id, "schema_version": 2, "status": "completed", "group": "pca"},
+    )
+    save_json(
+        folder / "result.json",
+        {
+            "schema_version": 2,
+            "provenance": {"sampled_users": 4, "sampled_ratings": 40},
+            "rows": [{
+                "algorithm": "pca", "name": "PCA", "split": "train",
+                "components": 1, "explained_variance_ratio": 0.42,
+            }],
+            "charts": [], "notes": [],
+        },
+    )
+
+    assert any(run["id"] == run_id and run["group"] == "pca" for run in service.list_runs())
+    assert service.get(run_id)["result"]["rows"][0]["components"] == 1
+    assert "explained_variance_ratio" in service.csv_export(run_id)
+    workbook = load_workbook(io.BytesIO(service.excel_export(run_id)))
+    assert workbook["Metrics"]["A2"].value == "pca"
+
+
+def test_history_schema_three_and_four_remain_listable(configured):
+    from movie_rating.lab import save_json
+
+    service = LabService(configured)
+    for schema in (3, 4):
+        folder = service.directory / f"20260101T00000{schema}-aabbccdd"
+        folder.mkdir(parents=True)
+        save_json(folder / "job.json", {"id": folder.name, "schema_version": schema,
+                 "status": "completed", "group": "reinforcement"})
+        save_json(folder / "result.json", {"schema_version": schema,
+                 "rows": [{"algorithm": "dqn" if schema == 4 else "q_learning"}]})
+    versions = {row["schema_version"] for row in service.list_runs("reinforcement")}
+    assert versions == {3, 4}
+    assert service.get("20260101T000004-aabbccdd")["result"]["rows"][0]["algorithm"] == "dqn"
 
 
 def test_ncf_stops_when_validation_does_not_improve(lab_data, monkeypatch):

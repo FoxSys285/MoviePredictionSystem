@@ -10,25 +10,25 @@
         {
           "id": "linear",
           "name": "Linear Regression",
-          "description": "Học quan hệ tuyến tính giữa đặc trưng và rating. Dễ diễn giải; hiệu quả phụ thuộc vào biểu diễn đầu vào và việc xây dựng đặc trưng.",
+          "description": "Học quan hệ tuyến tính giữa đặc trưng và rating. Biến thể giảm chiều chỉ nén block tương tác hồ sơ user–genre với genre phim; bias và thống kê nền được giữ.",
           "output": "Một giá trị rating dự đoán, ví dụ 4,2 sao."
         },
         {
           "id": "xgboost",
           "name": "XGBoost Regressor",
-          "description": "Kết hợp các cây quyết định theo boosting để giảm sai số. Học quan hệ phi tuyến và tương tác giữa những đặc trưng đã cung cấp.",
+          "description": "Kết hợp các cây quyết định theo boosting để giảm sai số. Biến thể giảm chiều giữ bias/thống kê nền và nén block tương tác user–genre; PCA không được giả định có lợi cho cây.",
           "output": "Một giá trị rating dự đoán."
         },
         {
           "id": "svd",
           "name": "SVD/MF có bias",
-          "description": "Học vector nhân tố tiềm ẩn của user và movie từ rating quan sát được; kết hợp mức điểm chung, bias user/movie và tương tác nhân tố.",
+          "description": "Học vector nhân tố tiềm ẩn của user và movie từ rating quan sát được; biến thể hybrid giữ latent factors và cộng nhánh hiệu chỉnh từ hồ sơ tương tác đã giảm chiều.",
           "output": "Một giá trị rating dự đoán."
         },
         {
           "id": "ncf",
           "name": "NCF hồi quy",
-          "description": "Học embedding user/movie và tương tác bằng mạng neural. Trong đề tài phải dùng đầu ra và hàm mất mát phù hợp dự đoán rating.",
+          "description": "Học embedding user/movie bằng mạng neural; biến thể hybrid ghép profile đã giảm chiều qua một nhánh MLP được fit trong từng fold.",
           "output": "Một giá trị rating dự đoán."
         }
       ],
@@ -137,13 +137,13 @@
         {
           "id": "logistic",
           "name": "Logistic Regression",
-          "description": "Ước lượng xác suất thuộc lớp; log-odds là hàm tuyến tính của đặc trưng. Là mốc so sánh phân loại đơn giản và dễ diễn giải.",
+          "description": "Ước lượng xác suất thuộc lớp; scaler và reducer fit riêng trong Train/fold, chỉ nén block tương tác user–genre. Threshold được chọn trên Validation.",
           "output": "Xác suất thích và nhãn thích/không thích."
         },
         {
           "id": "random_forest",
           "name": "Random Forest Classifier",
-          "description": "Tổng hợp nhiều cây quyết định được huấn luyện với lấy mẫu và chọn đặc trưng ngẫu nhiên; học ranh giới phân loại phi tuyến.",
+          "description": "Tổng hợp nhiều cây quyết định để học ranh giới phi tuyến. Biến thể PCA giữ đặc trưng nền và chỉ nén block tương tác profile; so với nhánh raw trên cùng fold.",
           "output": "Xác suất và nhãn lớp."
         }
       ],
@@ -275,13 +275,13 @@
         {
           "id": "kmeans",
           "name": "K-Means",
-          "description": "Chia đối tượng thành K cụm dựa trên khoảng cách tới tâm; phải chọn trước K. Phù hợp hơn với cụm tương đối gọn trong không gian đặc trưng.",
+          "description": "Chia hồ sơ sở thích tương đối và tần suất của user thành K cụm. PCA/TruncatedSVD chỉ đổi biểu diễn fit từ user Train; mô tả cụm vẫn dùng genre gốc.",
           "output": "Nhãn cụm của từng đối tượng và các tâm cụm."
         },
         {
           "id": "dbscan",
           "name": "DBSCAN",
-          "description": "Tìm cụm theo mật độ với eps và min_samples; không đặt trước số cụm. Có thể phát hiện cụm hình dạng khác nhau và gán nhãn nhiễu.",
+          "description": "Tìm cụm theo mật độ với eps và min_samples; nếu giảm chiều, eps được tìm lại trong không gian mới. Noise dùng Popularity dự phòng khi đánh giá gợi ý.",
           "output": "Nhãn cụm hoặc nhãn nhiễu của từng đối tượng."
         }
       ],
@@ -408,7 +408,7 @@
         {
           "id": "apriori",
           "name": "Apriori",
-          "description": "Tìm tập phim phổ biến bằng cách sinh và kiểm tra ứng viên theo từng mức độ dài; sau đó sinh luật từ các tập phổ biến.",
+          "description": "Apriori toàn cục giữ transaction Train làm baseline. Biến thể hỗ trợ giảm chiều nén profile user để phân nhóm rồi khai phá luật riêng; không PCA transaction phim.",
           "output": "Tập phim phổ biến và luật A → B kèm các chỉ số."
         }
       ],
@@ -523,7 +523,7 @@
         {
           "id": "truncated_svd",
           "name": "TruncatedSVD",
-          "description": "Phân rã SVD đặc trưng, khác SVD Collaborative Filtering ở Regression.",
+          "description": "Chiếu SVD không trừ trung bình; tỷ lệ phương sai giải thích đo phương sai thành phần chiếu chia cho tổng phương sai của đầu vào đã scale, không phải tỷ lệ năng lượng.",
           "output": "Vector user–genre ít chiều."
         }
       ],
@@ -549,9 +549,9 @@
         {
           "key": "explained_variance_ratio",
           "name": "Explained Variance ↑",
-          "definition": "Tổng phương sai giữ lại học từ Train.",
+          "definition": "Phương sai thực tế của các thành phần chiếu chia cho tổng phương sai của đầu vào đã scale trên Train. TruncatedSVD giữ phép chiếu không centering; chỉ số không phải tỷ lệ năng lượng.",
           "interpretation": "Cao hơn tốt hơn.",
-          "question": "Tổng phương sai giữ lại học từ Train.",
+          "question": "Bao nhiêu phần trăm phương sai đầu vào được giữ trong các thành phần chiếu?",
           "reference": {
             "value": 0.9,
             "operator": "gte",
@@ -627,13 +627,13 @@
     {
       "id": "reinforcement",
       "title": "Reinforcement Learning",
-      "question": "Q-Learning gợi ý phim tuần tự hiệu quả ra sao trong môi trường offline MovieLens?",
+      "question": "DQN và các policy đối chứng nhận reward mô phỏng thế nào trên episode theo thời gian MovieLens?",
       "algorithms": [
         {
-          "id": "q_learning",
-          "name": "Q-Learning",
-          "description": "Học Q bằng epsilon-greedy từ phản hồi rating Train.",
-          "output": "Policy chọn phim theo trạng thái."
+          "id": "dqn",
+          "name": "DQN",
+          "description": "Q-Learning xấp xỉ bằng mạng nhỏ để chia sẻ đặc trưng sở thích giữa user; dùng target network và replay buffer.",
+          "output": "Policy tuần tự chọn phim từ observation có action mask."
         },
         {
           "id": "random",
@@ -652,9 +652,9 @@
         {
           "key": "cumulative_reward",
           "name": "Cumulative Reward ↑",
-          "definition": "Tổng reward 100 episode × 5 hành động.",
+          "definition": "Tổng reward trên số bước thực tế; phụ thuộc số episode và horizon.",
           "interpretation": "Cao hơn tốt hơn.",
-          "question": "Tổng reward 100 episode × 5 hành động.",
+          "question": "Tổng reward mô phỏng trên các hành động thực tế.",
           "reference": {
             "value": 0,
             "operator": "gt",
@@ -662,17 +662,17 @@
             "unit": "Δ reward",
             "minimum": -500,
             "maximum": null,
-            "rationale": "Mốc là chênh lệch 0 so với policy tốt hơn trong Random và Popularity trên cùng split, số episode và horizon.",
-            "interpretation": "Δ>0: Q-Learning vượt cả hai baseline; Δ=0: ngang baseline tốt nhất; Δ<0: chưa vượt. Không chỉ so reward thô với 0.",
-            "caution": "Cần đủ hai baseline và cùng điều kiện đánh giá. Reward offline, phản hồi thiếu =0 và coverage thấp giới hạn kết luận."
+            "rationale": "Chênh lệch phải dương so với baseline tốt nhất trên cùng cohort, episode và catalog.",
+            "interpretation": "Δ>0: vượt baseline tốt nhất; Δ=0: ngang mốc; Δ<0: chưa vượt.",
+            "caution": "Cumulative reward phụ thuộc số bước thực tế. Đọc cùng coverage và user count; reward offline không chứng minh hiệu quả online."
           }
         },
         {
           "key": "average_reward",
           "name": "Average Reward ↑",
-          "definition": "Reward trung bình mỗi hành động.",
+          "definition": "Reward mô phỏng trung bình trên mỗi hành động thực tế; bước thiếu phản hồi nhận 0.",
           "interpretation": "Cao hơn tốt hơn.",
-          "question": "Reward trung bình mỗi hành động.",
+          "question": "Reward trung bình mỗi hành động thực tế.",
           "reference": {
             "value": 0,
             "operator": "gt",
@@ -680,17 +680,17 @@
             "unit": "Δ reward/action",
             "minimum": -500,
             "maximum": null,
-            "rationale": "Mục tiêu reward mỗi hành động tăng so với max(Random, Popularity), không dùng một trị reward thô cố định.",
-            "interpretation": "Δ>0: vượt baseline tốt nhất; Δ=0: chưa có cải thiện; Δ<0: policy kém hơn baseline.",
-            "caution": "Tất cả policy phải dùng cùng split và episode. Mốc này không chứng minh hiệu quả online hoặc ý nghĩa thống kê."
+            "rationale": "Chỉ so với baseline trên cùng cohort, episode và candidate catalog.",
+            "interpretation": "Đọc chênh lệch ghép cặp và coverage; không kết luận policy tốt hơn chỉ từ reward thô.",
+            "caution": "Reward offline từ phản hồi từng phần; không phải đánh giá counterfactual hay hiệu quả online."
           }
         },
         {
           "key": "fit_seconds",
           "name": "Training Time (s) ↓",
-          "definition": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
+          "definition": "Fit DQN gồm preprocessing, train và checkpoint Validation trên CPU; baseline có thời gian khởi tạo riêng.",
           "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
+          "question": "Thời gian học/checkpoint theo CPU.",
           "reference": {
             "value": 60,
             "operator": "lte",
@@ -700,7 +700,7 @@
             "maximum": null,
             "rationale": "Ngân sách khởi đầu 60 giây cho một lần fit cuối / khai phá trên mẫu đang chọn.",
             "interpretation": "≤60 giây: trong ngân sách; >60 giây: vượt ngân sách. Chậm không đồng nghĩa dự đoán kém.",
-            "caution": "Chỉ so cùng mẫu, CPU, số luồng và cách đo. Không gồm toàn bộ tuning/CV; Q-Learning có checkpoint Validation."
+            "caution": "So cùng dữ liệu, CPU và ngân sách. Baseline không có training time tương đương DQN."
           }
         }
       ],
@@ -708,17 +708,17 @@
         {
           "name": "Cumulative Reward ↑",
           "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Tổng reward 100 episode × 5 hành động."
+          "question": "Tổng reward trên số bước thực tế, đọc cùng coverage và số user."
         },
         {
           "name": "Average Reward ↑",
           "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Reward trung bình mỗi hành động."
+          "question": "Reward trung bình trên mỗi hành động, bước thiếu phản hồi nhận 0."
         },
         {
           "name": "Training Time (s) ↓",
           "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU."
+          "question": "Thời gian train DQN và khởi tạo baseline trên cùng cấu hình."
         }
       ]
     }

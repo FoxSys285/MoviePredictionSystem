@@ -78,6 +78,52 @@ Kiểm tra giao diện: `npm run test:experiment-logs` trong `frontend/`; chạy
 hai nhóm và kiểm tra chiều cao, scroll/follow, reload lịch sử, tải log, kết nối
 lại và việc các nhóm khác chưa hiển thị log.
 
+## Học tăng cường trong Experiment Studio
+
+Nhóm mới dùng ID `dqn` cho policy Q-Learning xấp xỉ bằng mạng nhỏ; `q_learning`
+chỉ còn trong kết quả lịch sử. Loader của RL dùng split thời gian trong từng
+user giống các thực nghiệm cá nhân hóa. Mỗi episode Train tách support/query theo
+timestamp: profile ban đầu chỉ đọc support và reward lấy từ query. Nếu không thể
+tạo hai đoạn thời gian hợp lệ, user được loại và số lượng/lý do xuất hiện trong
+protocol.
+
+DQN nhận profile sở thích/tần suất, độ đầy đủ lịch sử, action mask, số bước còn
+lại và phản hồi quan sát được trước đó. Mạng không nhận user ID. Action là một
+phim trong catalog phổ biến từ Train; phim support và phim đã chọn bị mask.
+Target network, replay buffer hữu hạn, Huber loss, gradient clipping và epsilon
+schedule có cấu hình riêng. Random và Popularity dùng lại đúng episode, catalog
+và mask để làm baseline.
+
+Reward mô phỏng từ rating thực, `(rating - 2,75) / 2,25`. Hành động không có
+rating quan sát nhận 0 theo quy ước, nên không được diễn giải là dislike hoặc
+ước lượng counterfactual. Báo cáo giữ tỷ lệ hành động có phản hồi, coverage,
+ranking và bất định ghép cặp cùng average reward. Validation chọn checkpoint;
+Test dùng snapshot đóng băng, không cập nhật trọng số hay reducer.
+
+`reduction_mode=compare` so DQN raw và nén trên cùng cohort/episode IDs, seed,
+catalog và training-step budget. Reducer chỉ fit profile Train/support; action
+mask, số bước, độ đầy đủ lịch sử và observed flag giữ nguyên. Random/Popularity
+không tạo bản sao giả chỉ để gắn nhãn representation. Metadata variant lưu
+phương pháp, số chiều, feature family, fit scope, fingerprint và model size.
+
+## Giảm chiều theo adapter
+
+`off` giữ thuật toán gốc; `enabled` chạy representation được chọn; `compare`
+thêm raw control. PCA/TruncatedSVD fit trong tập Train hoặc fold tương ứng và
+Validation chọn variant theo metric tác vụ. TruncatedSVD chiếu không center;
+explained variance là `Var(XV)` trên tổng phương sai của đầu vào đã scale,
+không phải tỷ lệ năng lượng `E[(XV)^2]`. EVR/reconstruction chỉ dùng chẩn
+đoán. Adapter hồi quy/phân loại nén block tương tác user–genre nhưng giữ bias
+và thống kê nền; Funk SVD/NCF dùng nhánh hybrid để profile nén thực sự tham gia
+dự đoán. Phân cụm fit lại K/eps trong không gian mới. Profile genre gốc vẫn dùng
+để diễn giải cụm.
+
+Apriori không giảm chiều ma trận transaction. Biến thể mới fit reducer trên
+profile user Train, phân nhóm user rồi khai phá luật riêng từng nhóm; luật toàn
+cục vẫn là baseline. Support trong nhóm và support toàn cục được báo riêng.
+Nhóm thiếu luật rơi về luật toàn cục rồi Popularity. Ranking dùng cohort tương
+lai cố định, báo candidate/group coverage, fallback và positive ngoài catalog.
+
 ## Bộ nhớ
 
 - Linear giải OLS từ các tổng và tích ma trận nhỏ theo batch, không tạo ma trận

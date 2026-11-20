@@ -40,7 +40,7 @@ const components=metric('pca','components');
 assert.equal(assessMetric(components,{components:4,explained_variance_ratio:.5,reconstruction_error:.5},empty,{},groups.pca.metrics).tone,'caution');
 assert.equal(assessMetric(components,{components:8,explained_variance_ratio:.95,reconstruction_error:.05},empty,{},groups.pca.metrics).tone,'good');
 const reward=metric('reinforcement','average_reward');
-const row={algorithm:'q_learning',split:'test',evaluation_episodes:100,average_reward:.2};
+const row={algorithm:'dqn',split:'test',evaluation_episodes:100,average_reward:.2};
 const baseline={rows:[{algorithm:'random',split:'test',evaluation_episodes:100,average_reward:.1},{algorithm:'popular',split:'test',evaluation_episodes:100,average_reward:.15}]};
 assert.equal(assessMetric(reward,row,baseline).tone,'good');
 assert.equal(assessMetric(reward,{...row,average_reward:.15},baseline).tone,'neutral');

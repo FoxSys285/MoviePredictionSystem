@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, AlertCircle, ChevronRight, Download, FlaskConical, Layers, Loader2, Minimize2, Network, Play, RefreshCw, Target } from "lucide-react";
+import { Activity, AlertCircle, ChevronRight, Download, FlaskConical, Layers, Loader2, Minimize2, Network, Play, RefreshCw, Target, type LucideIcon } from "lucide-react";
 import { PageHero } from "../components/ui";
 import { LabChartFigure } from "../components/LabChart";
 import { ExperimentResults, DatasetSummary } from "../components/ExperimentResults";
@@ -8,13 +8,14 @@ import { ExperimentConfiguration, experimentDefaults } from "../components/Exper
 import { ExperimentLog } from "../components/ExperimentLog";
 import { ExperimentJobStatus } from "../components/ExperimentJobStatus";
 import { AssociationDataSource } from "../components/AssociationDataSource";
+import { ExperimentReductionGuide } from "../components/ExperimentReductionGuide";
 import { MetricReferenceTable, useMetricReferenceSettings } from "../components/MetricReferences";
 import { api, apiResourceUrl } from "../lib/api";
 import { ExperimentSuccessSound } from "../lib/experiment-sound";
-import { busy, metricNumber, type LabCatalog, type LabGroup, type LabJob } from "../lib/lab";
+import { busy, metricNumber, type LabCatalog, type LabGroup, type LabJob, type LabRow } from "../lib/lab";
 import { usePreferences } from "../lib/preferences";
 
-const icons=[Activity,Target,Layers,Network,Minimize2,FlaskConical];
+const icons:Record<string,LucideIcon>={rating:Activity,classification:Target,clustering:Layers,association:Network,pca:Minimize2,reinforcement:FlaskConical};
 const statuses: Record<string,string>={queued:"Đang chờ",running:"Đang chạy",completed:"Đã hoàn tất",failed:"Có lỗi",cancelled:"Đã dừng",interrupted:"Bị gián đoạn"};
 
 function Results({job,group}:{job:LabJob;group:LabGroup}) {
@@ -22,11 +23,12 @@ function Results({job,group}:{job:LabJob;group:LabGroup}) {
   const result=job.result!;
   const historicMetrics=result.charts.filter(c=>c.metric_key).map(c=>({key:c.metric_key!,name:c.title,definition:"",interpretation:"",question:""}));
   if(historicMetrics.length)group={...group,metrics:historicMetrics};
-  const algorithms=[...new Map(result.rows.map(r=>[r.algorithm,r.name])).entries()];
-  const lookup=new Map(result.rows.map(r=>[`${r.algorithm}/${r.split}`,r]));
+  const identity=(row:LabRow)=>String(row.variant_id||row.algorithm);
+  const algorithms=[...new Map(result.rows.map(r=>[identity(r),r.name])).entries()];
+  const lookup=new Map(result.rows.map(r=>[`${identity(r)}/${r.split}`,r]));
   const charts=group.metrics.map(metric=>result.charts.find(c=>c.metric_key===metric.key)).filter(c=>c!==undefined);
   return <section id="lab-results" className="lab-section lab-results" aria-label={t("Kết quả thực nghiệm")}>
-    <div className="lab-section-heading"><h2>{t("Kết quả Validation và Test")}</h2><div className="lab-downloads">{["csv","json"].map(format=><a key={format} className="lab-outline" href={apiResourceUrl(`/experiment-lab/runs/${job.id}/export/${format}`)}><Download size={14}/>{format.toUpperCase()}</a>)}</div></div>
+    <div className="lab-section-heading"><h2>{t("Kết quả Validation và Test")}</h2><div className="lab-downloads">{["csv","xlsx","json"].map(format=><a key={format} className="lab-outline" href={apiResourceUrl(`/experiment-lab/runs/${job.id}/export/${format}`)}><Download size={14}/>{format.toUpperCase()}</a>)}</div></div>
     <p className="lab-muted">{result.provenance.sampled_users.toLocaleString("vi-VN")} user · {result.provenance.sampled_ratings.toLocaleString("vi-VN")} rating. N/A: {t("không đủ dữ liệu hoặc chỉ số không xác định.")}</p>
     {["rating","classification"].includes(group.id)&&<p className="lab-muted">{result.provenance.protocol==="global_temporal_70_15_15_v1"?"Giao thức: chia toàn cục theo thời gian (70/15/15).":result.provenance.protocol==="iid_rating_70_15_15_v3"?"Giao thức: chia IID theo từng rating (70/15/15).":"Kết quả lịch sử dùng giao thức cũ."}</p>}
     <div className="lab-table-scroll lab-comparison"><table><caption>{t("Bảng so sánh kết quả")} · Validation &amp; Test</caption><thead>
@@ -52,6 +54,8 @@ export function Experiments() {
   const [submissionStartedAt,setSubmissionStartedAt]=useState<string|null>(null);
   const groupId=params.get("group")||"rating";
   const group=catalog?.groups.find(g=>g.id===groupId)||catalog?.groups[0];
+  const primaryGroups=catalog?.groups.filter(g=>g.id!=="pca")||[];
+  const legacyPca=group?.id==="pca";
   const groupRuns=runs.filter(r=>r.group===group?.id);
   const selectedId=group ? chosen[group.id]||groupRuns[0]?.id : undefined;
   const visibleJob=job?.group===group?.id ? job : null;
@@ -105,15 +109,26 @@ export function Experiments() {
   return <div className="lab-page"><PageHero title={t("THỰC NGHIỆM")} subtitle="MovieLens Research Studio · Huấn luyện thật. Đánh giá minh bạch." variant="experiments"/>
     <main id="main" className="container lab-layout"><aside className="lab-sidebar" aria-label={t("Danh mục nhóm thuật toán")}>
       <div className="lab-sidebar-heading"><FlaskConical size={20}/><div><strong>{t("Phòng thực nghiệm")}</strong><span>MovieLens 25M</span></div></div><p className="lab-sidebar-label">{t("NHÓM THUẬT TOÁN")}</p>
-      <nav>{catalog?.groups.map((g,i)=>{const Icon=icons[i];return <button type="button" key={g.id} className={group?.id===g.id?"selected":""} aria-current={group?.id===g.id?"page":undefined} onClick={()=>{setParams({group:g.id});requestAnimationFrame(()=>document.querySelector(".lab-content")?.scrollIntoView({block:"start",behavior:"instant"}));}}><Icon size={18}/><span>{t(g.title)}<small>{g.algorithms.length} {t("thuật toán")} · {g.metrics.length} {t("chỉ số")}</small></span><ChevronRight size={14}/></button>;})}</nav>
+      <nav>{primaryGroups.map(g=>{const Icon=icons[g.id];return <button type="button" key={g.id} data-group-id={g.id} className={group?.id===g.id?"selected":""} aria-current={group?.id===g.id?"page":undefined} onClick={()=>{setParams({group:g.id});requestAnimationFrame(()=>document.querySelector(".lab-content")?.scrollIntoView({block:"start",behavior:"instant"}));}}><Icon size={18}/><span>{t(g.title)}<small>{g.algorithms.length} {t("thuật toán")} · {g.metrics.length} {t("chỉ số")}</small></span><ChevronRight size={14}/></button>;})}</nav>
     </aside><div className="lab-content">
-      {catalogError?<section className="lab-alert" role="alert"><AlertCircle/><div><h2>{t("Chưa tải được phần thực nghiệm")}</h2><p>{catalogError}</p><button className="lab-outline" onClick={()=>setReload(v=>v+1)}><RefreshCw size={15}/>{t("Thử lại")}</button></div></section>:!group?<div className="lab-loading" role="status"><Loader2 className="lab-spin"/>{t("Đang tải danh mục thuật toán…")}</div>:<>
-        <header className="lab-group-header"><span className="lab-kicker">RESEARCH WORKSPACE / {String(catalog!.groups.indexOf(group)+1).padStart(2,"0")}</span><div><h1>{t(group.title)}</h1><span className="lab-badge">{group.algorithms.length} thuật toán</span></div><p className="lab-objective">{group.question}</p></header>
+      {catalogError?<section className="lab-alert" role="alert"><AlertCircle/><div><h2>{t("Chưa tải được phần thực nghiệm")}</h2><p>{catalogError}</p><button className="lab-outline" onClick={()=>setReload(v=>v+1)}><RefreshCw size={15}/>{t("Thử lại")}</button></div></section>:!group?<div className="lab-loading" role="status"><Loader2 className="lab-spin"/>{t("Đang tải danh mục thuật toán…")}</div>:legacyPca?<>
+        <header className="lab-group-header" data-testid="legacy-pca-page"><span className="lab-kicker">LEGACY RESULTS / PCA</span><div><h1>{t("Lịch sử PCA cũ")}</h1><span className="lab-badge">{groupRuns.length} {t("lần chạy đã lưu")}</span></div></header>
+        <section className="lab-legacy-pca" role="note"><h2>{t("Lịch sử PCA cũ")}</h2><p>{t("Đường dẫn PCA cũ được giữ để xem và xuất kết quả đã lưu. Để chạy PCA/TruncatedSVD trong một tác vụ, hãy chọn một trong năm nhóm chính và bật giảm chiều trong cấu hình.")}</p></section>
+        <section className="lab-section lab-run-panel lab-legacy-history" aria-label={t("Lịch sử thực nghiệm")}>
+          {groupRuns.length>0?<label className="lab-history">{t("Lịch sử thực nghiệm")}<select value={selectedId||""} onChange={e=>setChosen(v=>({...v,[group.id]:e.target.value}))}>{groupRuns.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("vi-VN")} · {t(statuses[r.status])}</option>)}</select></label>:<p className="lab-muted">{t("Chưa có lịch sử PCA cũ. Chạy một nhóm chính để dùng PCA hoặc TruncatedSVD trong pipeline của thuật toán.")}</p>}
+          {statusJob&&<ExperimentJobStatus key={`status-${statusJob.id}`} job={statusJob} statusLabel={t(statuses[statusJob.status])} onCancel={!submitting?()=>void stop(statusJob.id):undefined}/>}
+          {!submitting&&visibleJob&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
+          {selectedId&&!visibleJob&&<div className="lab-loading" role="status"><Loader2 className="lab-spin"/>{t("Đang tải kết quả lịch sử…")}</div>}
+        </section>
+        {visibleJob?.status==="completed"&&[3,4].includes(visibleJob.result?.schema_version||0)?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group} references={referenceSettings.settings[group.id]||{}}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:null}
+      </>:<>
+        <header className="lab-group-header"><span className="lab-kicker">RESEARCH WORKSPACE / {String(primaryGroups.indexOf(group)+1).padStart(2,"0")}</span><div><h1>{t(group.title)}</h1><span className="lab-badge">{group.algorithms.length} thuật toán</span></div><p className="lab-objective">{group.question}</p></header>
         <div className="lab-protocol-strip"><span><b>42</b> Random Seed</span><span><b>70 / 15 / 15</b> Train / Validation / Test</span><span><b>{["rating","classification"].includes(group.id)?"3 lượt CV thời gian":"Train only"}</b> {["rating","classification"].includes(group.id)?"Đặc trưng riêng từng fold":"Fit đặc trưng"}</span></div>
         <DatasetSummary stats={catalog?.statistics} label="Dataset đã chuẩn bị"/>
         {group.id==="association"&&<AssociationDataSource catalog={catalog!}/>}
         <nav className="lab-jump-links" aria-label={t("Điều hướng trong nhóm")}><a href="#lab-run"><Play size={12}/>{t("Chạy thực nghiệm")}</a>{visibleJob?.status==="completed"&&<a href="#lab-results">{t("Kết quả thực nghiệm")}</a>}</nav>
         <div className="lab-algorithms">{group.algorithms.map(a=><article key={a.id}><h2>{a.name}</h2><p>{a.description}</p></article>)}</div>
+        <ExperimentReductionGuide group={group} config={config}/>
         <MetricReferenceTable group={group} values={referenceSettings.settings[group.id]||{}} onChange={(key,value)=>referenceSettings.setValue(group.id,key,value)} onReset={()=>referenceSettings.reset(group.id)}/>
         <section id="lab-run" className="lab-section lab-run-panel" aria-label={t("Chạy thực nghiệm")}><div className="lab-section-heading"><h2>{t("Chạy thực nghiệm nhóm")}</h2><span className="lab-data-status"><i/>{t(catalog?.data_ready?"Dữ liệu đã sẵn sàng":"Chưa chuẩn bị dữ liệu")}</span></div>
           <form onInvalidCapture={e=>{const details=(e.target as HTMLElement).closest("details");if(details)details.open=true;}} onSubmit={e=>{e.preventDefault();void start();}}><ExperimentConfiguration key={group.id} group={group} value={config} onChange={setConfig} disabled={submitting||!!active} algorithms={algorithms} setAlgorithms={v=>setAlgorithmChoices(previous=>({...previous,[group.id]:v}))}/><div className="lab-run-actions"><button className="lab-primary" type="submit" disabled={submitting||!!active||!catalog?.data_ready||!algorithms.length}><Play size={17}/>{algorithms.length===1?"Chạy thuật toán đã chọn":t("Chạy thực nghiệm nhóm")}</button><span className="lab-muted">{algorithms.length} thuật toán được chọn</span></div></form>
@@ -121,9 +136,9 @@ export function Experiments() {
           {active&&active.id!==visibleJob?.id&&<div className="lab-active-other" role="status"><Loader2 size={16} className="lab-spin"/><p>{t("Đang chạy nhóm")}: {catalog?.groups.find(g=>g.id===active.group)?.title}</p><button className="lab-outline" onClick={()=>void stop(active.id)}>{t("Dừng")}</button></div>}
           {!!groupRuns.length&&<label className="lab-history">{t("Lịch sử thực nghiệm")}<select value={selectedId||""} onChange={e=>setChosen(v=>({...v,[group.id]:e.target.value}))}>{groupRuns.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("vi-VN")} · {t(statuses[r.status])}</option>)}</select></label>}
           {statusJob&&<ExperimentJobStatus key={`status-${statusJob.id}`} job={statusJob} statusLabel={t(statuses[statusJob.status])} onCancel={!submitting?()=>void stop(statusJob.id):undefined}/>}
-          {!submitting&&visibleJob&&["rating","classification","association","clustering"].includes(visibleJob.group)&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
+          {!submitting&&visibleJob&&["rating","classification","association","clustering","reinforcement","pca"].includes(visibleJob.group)&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
         </section>
-        {visibleJob?.status==="completed"&&visibleJob.result?.schema_version===3?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group} references={referenceSettings.settings[group.id]||{}}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ. Chạy lại để áp dụng pipeline hiện tại và 3-Fold CV.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:!visibleJob&&<section className="lab-empty" role="status"><FlaskConical size={28}/><h2>{t("Chưa có kết quả thực nghiệm")}</h2><p>Chọn thuật toán và chạy để tạo báo cáo từ dữ liệu MovieLens thật.</p></section>}
+        {visibleJob?.status==="completed"&&[3,4].includes(visibleJob.result?.schema_version||0)?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group} references={referenceSettings.settings[group.id]||{}}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ. Chạy lại để áp dụng pipeline hiện tại và 3-Fold CV.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:!visibleJob&&<section className="lab-empty" role="status"><FlaskConical size={28}/><h2>{t("Chưa có kết quả thực nghiệm")}</h2><p>Chọn thuật toán và chạy để tạo báo cáo từ dữ liệu MovieLens thật.</p></section>}
       </>}
     </div></main>
   </div>;

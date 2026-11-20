@@ -284,6 +284,74 @@ def test_future_rating_changes_do_not_change_cluster_features_or_hyperparameters
     assert json.dumps(native(second), allow_nan=False)
 
 
+@pytest.mark.parametrize("algorithm", ["kmeans", "dbscan"])
+def test_clustering_reduction_fits_train_user_profiles_and_preserves_global_fallback(lab_data, algorithm):
+    splits, movies = lab_data
+    request = ExperimentRequest(
+        group="clustering", algorithms=[algorithm], k_values=[2],
+        reduction_mode="compare", reduction_methods=["pca"], components=[1],
+        cluster_eval_users=20,
+    )
+    result = clustering.clustering(splits, movies, request, lambda *_: None)
+
+    assert result["reduction"]["variants"] == [
+        {"variant_id": "raw", "method": None, "components": None},
+        {"variant_id": "pca_1", "method": "pca", "components": 1},
+    ]
+    assert {row["variant_id"] for row in result["rows"]} == {f"{algorithm}_raw", f"{algorithm}_pca_1"}
+    assert set(result["best_configs"]) == {f"{algorithm}_raw", f"{algorithm}_pca_1"}
+    reduced = next(row for row in result["rows"] if row["variant_id"] == f"{algorithm}_pca_1")
+    assert reduced["reduction"]["fit_scope"] == "train_all_eligible_users"
+    assert reduced["reduction"]["fit_rows"] == result["training"]["eligible_users"]
+    assert reduced["representation"] == "reduced_taste_profiles"
+    assert len([r for r in result["recommendation"]["rows"] if r["algorithm"] == "popularity"]) == 2
+    assert len([r for r in result["recommendation"]["rows"] if r["variant_id"] == f"{algorithm}_pca_1"]) == 2
+
+
+@pytest.mark.parametrize("method", ["pca", "truncated_svd"])
+def test_reduced_kmeans_and_dbscan_search_is_independent_of_algorithm_order(lab_data, method):
+    splits, movies = lab_data
+    common = {
+        "reduction_mode": "enabled",
+        "reduction_methods": [method],
+        "components": [1],
+        "k_values": [2],
+        "cluster_auto_eps": False,
+        "eps_values": [0.5, 1.0, 2.0],
+        "min_samples_values": [2, 3],
+        "cluster_eval_users": 20,
+    }
+    results = {}
+    for algorithms in (["kmeans"], ["dbscan"], ["kmeans", "dbscan"], ["dbscan", "kmeans"]):
+        request = ExperimentRequest(group="clustering", algorithms=algorithms, **common)
+        results[tuple(algorithms)] = clustering.clustering(splits, movies, request, lambda *_: None)
+
+    def search_signature(result, algorithm):
+        return [
+            (
+                row["config"], row["validation_silhouette"], row["validation_dbi"],
+                row["validation_coverage"], row["qualified"],
+            )
+            for row in result["search"]
+            if row["algorithm"] == algorithm and row["variant_id"] == f"{algorithm}_{method}_1"
+        ]
+
+    for algorithm in ("kmeans", "dbscan"):
+        standalone = results[(algorithm,)]
+        assert search_signature(standalone, algorithm)
+        assert search_signature(standalone, algorithm) == search_signature(
+            results[("kmeans", "dbscan")], algorithm
+        )
+        assert search_signature(standalone, algorithm) == search_signature(
+            results[("dbscan", "kmeans")], algorithm
+        )
+        standalone_config = standalone["best_configs"][f"{algorithm}_{method}_1"]
+        selected = standalone_config["config"]
+        assert standalone_config["reduction"]["method"] == method
+        assert selected == results[("kmeans", "dbscan")]["best_configs"][f"{algorithm}_{method}_1"]["config"]
+        assert selected == results[("dbscan", "kmeans")]["best_configs"][f"{algorithm}_{method}_1"]["config"]
+
+
 def test_no_coverage_qualified_dbscan_is_reported_without_a_false_winner(lab_data):
     splits, movies = lab_data
     result = clustering.clustering(

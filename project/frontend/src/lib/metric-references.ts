@@ -23,10 +23,10 @@ export function assessMetric(metric:Criterion,row:LabRow,result:LabResult,values
   if(typeof raw!=="number"||!Number.isFinite(raw))return {tone:"neutral",label:"Không đủ dữ liệu",explanation:"Chỉ số không xác định; không thay bằng 0 và không kết luận tốt/xấu."};
   if(!ref||target===undefined)return {tone:"neutral",label:"Chưa có mốc",explanation:"Cần mốc cùng đơn vị đo để diễn giải."};
   if(ref.kind==="baseline") {
-    if(row.algorithm!=="q_learning")return {tone:"neutral",label:"Baseline đối chiếu",explanation:"Policy tham chiếu để đánh giá mức cải thiện của Q-Learning."};
+    if(row.algorithm!=="dqn")return {tone:"neutral",label:"Baseline đối chiếu",explanation:"Policy tham chiếu để đánh giá mức cải thiện của DQN."};
     const baselines=["random","popular"].map(a=>result.rows.find(r=>r.algorithm===a&&r.split===row.split));
     if(!baselines.every(r=>typeof r?.[metric.key]==="number"&&Number.isFinite(r[metric.key])))return {tone:"neutral",label:"Thiếu baseline",explanation:"Chạy cùng cả Random và Popularity để xác định mốc; không dùng 0 thay cho baseline thiếu."};
-    if(!baselines.every(r=>typeof row.evaluation_episodes==="number"&&r!.evaluation_episodes===row.evaluation_episodes))return {tone:"caution",label:"Khác điều kiện đo",explanation:"Cần cùng số episode khi so policy."};
+    if(!baselines.every(r=>typeof row.evaluation_episodes==="number"&&r!.evaluation_episodes===row.evaluation_episodes))return {tone:"caution",label:"Khác điều kiện đo",explanation:"Cần cùng cohort episode khi so policy."};
     const base=Math.max(...baselines.map(r=>Number(r![metric.key]))),delta=raw-base;
     const equal=Math.abs(delta-target)<=1e-12;
     return {tone:equal?"neutral":delta>target?"good":"bad",label:equal?"Ngang mốc cải thiện":delta>target?"Vượt mốc baseline":"Chưa vượt baseline",

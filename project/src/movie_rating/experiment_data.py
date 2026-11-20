@@ -154,7 +154,7 @@ class ExperimentData:
         return destination
 
     def load(self, request):
-        historical = request.group in ("rating", "classification", "clustering")
+        historical = request.group in ("rating", "classification", "clustering", "reinforcement")
         key = (
             self.current_signature(),
             request.use_all_data,

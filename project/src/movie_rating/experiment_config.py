@@ -10,7 +10,7 @@ ALGORITHMS = {
     "clustering": ("kmeans", "dbscan"),
     "association": ("apriori",),
     "pca": ("pca", "truncated_svd"),
-    "reinforcement": ("q_learning", "random", "popular"),
+    "reinforcement": ("dqn", "random", "popular"),
 }
 
 
@@ -64,10 +64,31 @@ class ExperimentRequest(BaseModel):
     min_confidence: float = Field(0.3, ge=0.01, le=1)
     max_rule_length: int = Field(2, ge=2, le=3)
     components: list[int] = Field(default_factory=lambda: [2, 4, 8], min_length=1, max_length=12)
-    episodes: int = Field(500, ge=10, le=20000)
-    learning_rate: float = Field(0.2, gt=0, le=1)
+    # Legacy Q-table fields remain readable in saved schema 2/3 reports. New
+    # runs use the explicitly named DQN parameters below.
+    episodes: int = Field(500, ge=1, le=20000)
+    learning_rate: float = Field(0.001, gt=0, le=0.1)
     discount_factor: float = Field(0.9, ge=0, le=1)
     exploration_rate: float = Field(0.2, ge=0, le=1)
+    training_sweeps: int = Field(1, ge=1, le=20)
+    max_training_steps: int = Field(100000, ge=1, le=2_000_000)
+    training_user_limit: int = Field(5000, ge=10, le=50000)
+    action_limit: int = Field(30, ge=5, le=30)
+    horizon: int = Field(5, ge=1, le=30)
+    evaluation_users: int = Field(1000, ge=10, le=5000)
+    replay_capacity: int = Field(50000, ge=100, le=500000)
+    dqn_batch_size: int = Field(128, ge=8, le=2048)
+    checkpoint_interval_steps: int = Field(5000, ge=1, le=100000)
+    replay_warmup: int = Field(500, ge=1, le=50000)
+    target_update_steps: int = Field(250, ge=1, le=10000)
+    epsilon_start: float = Field(0.9, ge=0, le=1)
+    epsilon_end: float = Field(0.05, ge=0, le=1)
+    epsilon_decay_steps: int = Field(10000, ge=1, le=2_000_000)
+    hidden_sizes: list[int] = Field(default_factory=lambda: [64, 64], min_length=1, max_length=4)
+    reduction_mode: Literal["off", "enabled", "compare"] = "off"
+    reduction_methods: list[Literal["pca", "truncated_svd"]] = Field(
+        default_factory=lambda: ["pca"], min_length=1, max_length=2
+    )
 
     @model_validator(mode="after")
     def validate_options(self):
@@ -89,4 +110,16 @@ class ExperimentRequest(BaseModel):
         ]:
             if any(not low <= v <= high for v in values):
                 raise ValueError(f"Giá trị danh sách phải nằm trong [{low}, {high}].")
+        if len(set(self.reduction_methods)) != len(self.reduction_methods):
+            raise ValueError("Không được lặp phương pháp giảm chiều.")
+        if any(size < 4 or size > 256 for size in self.hidden_sizes):
+            raise ValueError("Mỗi lớp DQN phải có từ 4 đến 256 units.")
+        if self.epsilon_end > self.epsilon_start:
+            raise ValueError("epsilon_end phải nhỏ hơn hoặc bằng epsilon_start.")
+        if self.replay_warmup > self.replay_capacity:
+            raise ValueError("Replay warmup không được lớn hơn replay_capacity.")
+        if self.group == "reinforcement" and self.horizon > self.action_limit:
+            # Episodes are allowed to shorten when fewer actions remain, but a
+            # horizon larger than the catalog limit is almost always accidental.
+            raise ValueError("Horizon không được lớn hơn action_limit.")
         return self

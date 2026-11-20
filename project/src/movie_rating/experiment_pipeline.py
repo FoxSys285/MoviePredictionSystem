@@ -22,8 +22,11 @@ def execute(splits, movies, request, update):
     comparisons = []
     for metric in metrics:
         key = metric["key"]
-        algorithms = list(dict.fromkeys((r["algorithm"], r["name"]) for r in result["rows"]))
-        lookup = {(r["algorithm"], r["split"]): r for r in result["rows"]}
+        def identity(row):
+            return row.get("variant_id") or row["algorithm"]
+
+        algorithms = list(dict.fromkeys((identity(r), r["name"]) for r in result["rows"]))
+        lookup = {(identity(r), r["split"]): r for r in result["rows"]}
         splits_used = list(dict.fromkeys(r["split"] for r in result["rows"]))
         comparisons.append(
             chart(
@@ -47,5 +50,5 @@ def execute(splits, movies, request, update):
     result["charts"] = comparisons + result.get("charts", [])
     for index, figure in enumerate(result["charts"]):
         figure["index"] = index
-    result["schema_version"] = 3
+    result["schema_version"] = 4
     return result

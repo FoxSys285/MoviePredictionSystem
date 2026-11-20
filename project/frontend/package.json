@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test:ui": "node scripts/check-ui.mjs",
     "test:experiments": "node scripts/check-experiments.mjs",
+    "test:reduction-guide": "node scripts/check-reduction-guide.mjs",
     "test:experiment-logs": "node scripts/check-experiment-logs.mjs",
     "test:association": "node scripts/check-association.mjs",
     "test:metric-references": "node scripts/check-metric-references.mjs",

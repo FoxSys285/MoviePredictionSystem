@@ -6,7 +6,7 @@ import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
-LOGGED_GROUPS = ("rating", "classification", "association", "clustering")
+LOGGED_GROUPS = ("rating", "classification", "association", "clustering", "reinforcement", "pca")
 
 
 @contextmanager

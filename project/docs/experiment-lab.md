@@ -1,5 +1,11 @@
 # Phòng thực nghiệm rút gọn — tài liệu lịch sử v2
 
+> Tài liệu này mô tả giao thức lịch sử `schema_version=2` và chỉ được giữ để đọc
+> các báo cáo cũ. Experiment Studio hiện chạy schema 4 với DQN, log RL và adapter
+> PCA/TruncatedSVD theo thuật toán. Xem [pipeline và protocol hiện hành](experiment-studio.md),
+> [báo cáo triển khai RL/giảm chiều](rl-dimensionality-reduction-report.md) và
+> [hướng dẫn metric](metric-reference-guide.md) trước khi chạy hoặc diễn giải kết quả mới.
+
 > Module hiện tại đã chuyển sang pipeline v3 với sáu nhóm. Xem
 > [hướng dẫn Experiment Studio](experiment-studio.md) và
 > [kết quả xác nhận](experiment-studio-results.md). Phần dưới mô tả giao thức cũ,

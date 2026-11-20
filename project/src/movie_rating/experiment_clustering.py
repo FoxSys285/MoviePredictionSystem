@@ -10,6 +10,7 @@ from sklearn.cluster import DBSCAN, KMeans, MiniBatchKMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import adjusted_rand_score
 
+from movie_rating.experiment_reduction import FeatureReducer, ReductionSpec, reduction_variants
 from movie_rating.experiment_unsupervised import cluster_scores, projected_chart
 from movie_rating.lab import chart, measured, series
 from movie_rating.memory import check_memory, serialized_size
@@ -409,7 +410,7 @@ def evaluate_ranking(splits, profiles, assignments, request, update):
     }
 
 
-def clustering(splits, movies, request, update):
+def _clustering_single(splits, movies, request, update, reduction_variant=None):
     profiles = taste_profiles(
         splits["train"], movies, request.min_user_ratings, request.cluster_shrinkage, update
     )
@@ -425,9 +426,23 @@ def clustering(splits, movies, request, update):
     # Hold out USERS with the same past-history representation, not fragments of future ratings.
     held_count = max(2, min(SCORE_USERS, len(raw) // 5))
     fit_indices, held_indices = shuffled[held_count:], shuffled[:held_count]
-    scale = TasteScale.fit(raw[fit_indices])
-    x = scale.transform(raw)
-    fit_x = x[fit_indices]
+    selection_scale = TasteScale.fit(raw[fit_indices])
+    selection_x = selection_scale.transform(raw)
+    selection_reducer = None
+    if reduction_variant is not None:
+        selection_reducer = FeatureReducer(
+            reduction_variant["method"], reduction_variant["components"], seed=request.seed,
+            scale=True,
+        ).fit(
+            selection_x[fit_indices],
+            feature_schema={"family": "relative_genre_preference_and_frequency",
+                            "genres": profiles.genres},
+            fit_scope="train_user_fit_selection",
+        )
+        update(None, f"Reducer {selection_reducer.method} · {selection_reducer.input_dimensions}→"
+               f"{selection_reducer.output_dimensions} · fit {len(fit_indices):,} Train users for tuning.")
+        selection_x = selection_reducer.transform(selection_x)
+    fit_x = selection_x[fit_indices]
     neighborhoods = None
     if "dbscan" in request.algorithms:
         update(
@@ -470,13 +485,14 @@ def clustering(splits, movies, request, update):
                     aid,
                     config,
                     fit_x,
-                    minibatch=len(x) > MINIBATCH_USERS,
+                    seed=request.seed,
+                    minibatch=len(selection_x) > MINIBATCH_USERS,
                     neighborhoods=neighborhoods,
                     update=update,
                 )
             train_labels = candidate.model.labels_ if aid == "dbscan" else candidate.predict(fit_x)
-            train_score = scores(x[fit_indices], train_labels)
-            held_score = scores(x[held_indices], candidate.predict(x[held_indices]))
+            train_score = scores(selection_x[fit_indices], train_labels)
+            held_score = scores(selection_x[held_indices], candidate.predict(selection_x[held_indices]))
             qualified = candidate_key(held_score, request.cluster_min_coverage)[0]
             report_scores(name, f"user giữ lại · {config}", held_score, update)
             search.append(
@@ -509,22 +525,42 @@ def clustering(splits, movies, request, update):
         )
         progress = 20 + 60 * (request.algorithms.index(aid) + 0.8) / len(request.algorithms)
         update(progress, f"{aid} · fit cấu hình đã chọn trên hồ sơ lịch sử Train")
+        # Final fit has its own frozen representation. It must not overwrite the
+        # selection-space arrays reused by the next algorithm's hyperparameter search.
+        final_scale = TasteScale.fit(raw)
+        final_scaled = final_scale.transform(raw)
+        final_reducer = None
+        final_reduction_metadata = None
+        if reduction_variant is not None:
+            final_reducer = FeatureReducer(
+                reduction_variant["method"], reduction_variant["components"], seed=request.seed,
+                scale=True,
+            ).fit(
+                final_scaled,
+                feature_schema={"family": "relative_genre_preference_and_frequency",
+                                "genres": profiles.genres},
+                fit_scope="train_all_eligible_users",
+            )
+            final_reduction_metadata = final_reducer.metadata()
+            final_x = final_reducer.transform(final_scaled)
+        else:
+            final_x = final_scaled
         with measured() as timing:
-            model = fit_cluster(aid, best, x, update=update)
-        labels = model.model.labels_.copy() if aid == "dbscan" else model.predict(x)
-        inference_x = x[held_indices]
+            model = fit_cluster(aid, best, final_x, seed=request.seed, update=update)
+        labels = model.model.labels_.copy() if aid == "dbscan" else model.predict(final_x)
+        inference_x = final_x[held_indices]
         start = time.perf_counter()
         model.predict(inference_x)
         inference = time.perf_counter() - start
-        quality = scores(x, labels)
+        quality = scores(final_x, labels)
         qualified = bool(best_key[0]) and candidate_key(quality, request.cluster_min_coverage)[0]
-        report_scores(name, f"fit cuối {model.fit_users:,}/{len(x):,} user Train", quality, update)
+        report_scores(name, f"fit cuối {model.fit_users:,}/{len(final_x):,} user Train", quality, update)
         update(
             None,
             f"{name} · fit cuối mất {timing['fit_seconds']:.3f}s · "
             + ("đạt điều kiện chọn" if qualified else "chưa đạt điều kiện chọn"),
         )
-        stable = stability(aid, best, x, model, update)
+        stable = stability(aid, best, final_x, model, update)
         update(
             None,
             f"{name} · độ ổn định: ARI trung bình="
@@ -540,12 +576,13 @@ def clustering(splits, movies, request, update):
                 **timing,
                 "inference_seconds": inference,
                 "inference_rows": len(inference_x),
-                "model_bytes": serialized_size((scale, model)),
+                "model_bytes": serialized_size((final_scale, final_reducer, model)),
                 "fit_users": model.fit_users,
                 "train_ratings": int(profiles.rating_counts.sum()),
-                "fit_fraction": model.fit_users / len(x),
+                "fit_fraction": model.fit_users / len(final_x),
                 "qualified": qualified,
                 "stability_ari": stable["adjusted_rand_mean"],
+                "reduction": final_reduction_metadata,
             }
         )
         descriptions = []
@@ -567,12 +604,16 @@ def clustering(splits, movies, request, update):
                 "profiles": descriptions,
                 "qualified": qualified,
                 "stability": stable,
+                "reduction": final_reduction_metadata,
             }
         )
         assignments[aid] = labels
-        chosen = np.sort(rng.choice(len(x), min(500, len(x)), False))
-        pca_fit = x[np.sort(rng.choice(len(x), min(5000, len(x)), False))]
-        projection = PCA(2, random_state=42).fit(pca_fit).transform(x[chosen])
+        chosen = np.sort(rng.choice(len(final_x), min(500, len(final_x)), False))
+        pca_fit = final_x[np.sort(rng.choice(len(final_x), min(5000, len(final_x)), False))]
+        if final_x.shape[1] >= 2:
+            projection = PCA(2, random_state=42).fit(pca_fit).transform(final_x[chosen])
+        else:
+            projection = np.column_stack((final_x[chosen, 0], np.zeros(len(chosen))))
         charts.append(
             projected_chart(f"{aid} · hồ sơ lịch sử / PCA 2D", projection, labels[chosen])
         )
@@ -638,18 +679,23 @@ def clustering(splits, movies, request, update):
         "search": search,
         "clusters": winners,
         "charts": charts,
-        "best_configs": {w["algorithm"]: w["config"] for w in winners},
+        "best_configs": {
+            w["algorithm"]: {"config": w["config"], "reduction": w["reduction"]}
+            if w["reduction"] else w["config"]
+            for w in winners
+        },
         "selection": selection,
         "recommendation": recommendation,
         "clustering_protocol": "past_taste_full_train_future_ranking_v2",
         "cluster_min_coverage": request.cluster_min_coverage,
         "profile_kind": "relative_genre_preference_and_frequency",
+        "reduction": next((w["reduction"] for w in winners if w["reduction"]), None),
         "profile_excluded_users": profiles.excluded_users,
         "training": {
             "split": "train",
             "ratings": len(splits["train"]),
             "eligible_ratings": int(profiles.rating_counts.sum()),
-            "eligible_users": len(x),
+            "eligible_users": len(raw),
             "scope": "all_eligible_train_users",
         },
         "notes": [
@@ -663,7 +709,7 @@ def clustering(splits, movies, request, update):
             "Hình học trong bảng đo trên Train; "
             "chọn cấu hình bằng user giữ lại từ chính hồ sơ quá khứ (không dùng rating tương lai).",
             f"Tuning dùng toàn bộ {len(fit_indices):,} hồ sơ Train ngoài "
-            f"{held_count:,} user giữ lại; fit cuối dùng toàn bộ {len(x):,} user đủ lịch sử. "
+            f"{held_count:,} user giữ lại; fit cuối dùng toàn bộ {len(raw):,} user đủ lịch sử. "
             "Silhouette tối đa 2.000 user không noise. "
             f"Yêu cầu bao phủ ≥{request.cluster_min_coverage:.0%} "
             "và ≥2 cụm trước khi xếp hạng. Không có cấu hình đạt thì báo chưa đạt.",
@@ -687,3 +733,140 @@ def clustering(splits, movies, request, update):
             "Số liệu theo giao thức mới không so trực tiếp với lịch sử phân cụm cũ.",
         ],
     }
+
+
+def clustering(splits, movies, request, update):
+    if request.reduction_mode == "off":
+        return _clustering_single(splits, movies, request, update)
+
+    spec = ReductionSpec(
+        mode=request.reduction_mode,
+        methods=tuple(request.reduction_methods),
+        components=tuple(request.components),
+        seed=request.seed,
+        scale=True,
+    )
+    output = {"rows": [], "search": [], "clusters": [], "charts": [],
+              "best_configs": {}, "notes": [], "recommendation": None}
+    baseline_rows = set()
+    variants = reduction_variants(spec)
+    for descriptor in variants:
+        descriptor_id = descriptor["variant_id"]
+        reducer = ({"method": descriptor["method"], "components": descriptor["components"]}
+                   if descriptor["method"] else None)
+        update(None, f"Phân cụm · biểu diễn {descriptor_id} · giữ cùng hồ sơ Train và cohort.")
+        result = _clustering_single(splits, movies, request, update, reducer)
+        representation = "raw" if not descriptor["method"] else "reduced_taste_profiles"
+        for row in result["rows"]:
+            aid = row["algorithm"]
+            row.update(
+                variant_id=f"{aid}_{descriptor_id}",
+                base_algorithm=aid,
+                representation=representation,
+                reduction_method=descriptor["method"],
+                components=descriptor["components"],
+                feature_family="relative_genre_preference_and_frequency",
+                fit_scope="train_all_eligible_users",
+            )
+        for row in result["search"]:
+            aid = row["algorithm"]
+            row.update(
+                variant_id=f"{aid}_{descriptor_id}",
+                base_algorithm=aid,
+                representation=representation,
+                reduction_method=descriptor["method"],
+                components=descriptor["components"],
+                feature_family="relative_genre_preference_and_frequency",
+                fit_scope="train_user_fit_selection",
+            )
+        for cluster in result["clusters"]:
+            aid = cluster["algorithm"]
+            cluster.update(
+                variant_id=f"{aid}_{descriptor_id}",
+                base_algorithm=aid,
+                representation=representation,
+                reduction_method=descriptor["method"],
+                components=descriptor["components"],
+            )
+        for row in result["recommendation"]["rows"]:
+            aid = row["algorithm"]
+            if aid == "popularity":
+                row.update(variant_id="popularity_raw", base_algorithm=aid,
+                           representation="raw", reduction_method=None, components=None,
+                           fit_scope="train")
+                identity = (aid, row["split"])
+                if identity in baseline_rows:
+                    continue
+                baseline_rows.add(identity)
+            else:
+                row.update(
+                    variant_id=f"{aid}_{descriptor_id}",
+                    base_algorithm=aid,
+                    representation=representation,
+                    reduction_method=descriptor["method"],
+                    components=descriptor["components"],
+                    feature_family="relative_genre_preference_and_frequency",
+                    fit_scope="train",
+                )
+            if output["recommendation"] is None:
+                output["recommendation"] = {**result["recommendation"], "rows": []}
+            output["recommendation"]["rows"].append(row)
+        for key, config in result["best_configs"].items():
+            variant_id = f"{key}_{descriptor_id}"
+            reduction_metadata = config.get("reduction") if isinstance(config, dict) else None
+            selected_config = (
+                config["config"]
+                if reduction_metadata is not None and "config" in config
+                else config
+            )
+            output["best_configs"][variant_id] = {
+                "config": selected_config,
+                "variant_id": variant_id,
+                "base_algorithm": key,
+                "representation": representation,
+                "reduction_method": descriptor["method"],
+                "components": descriptor["components"],
+                "feature_family": "relative_genre_preference_and_frequency",
+                "fit_scope": "train_all_eligible_users",
+            }
+            if reduction_metadata is not None:
+                output["best_configs"][variant_id]["reduction"] = reduction_metadata
+        for item in result["charts"]:
+            item["variant_id"] = descriptor_id
+            item["title"] = f"{item['title']} · {descriptor_id}"
+            output["charts"].append(item)
+        output["rows"].extend(result["rows"])
+        output["search"].extend(result["search"])
+        output["clusters"].extend(result["clusters"])
+        output["notes"].extend(result["notes"])
+        for key in ("clustering_protocol", "cluster_min_coverage", "profile_kind",
+                    "profile_excluded_users", "training"):
+            output[key] = result[key]
+
+    recommendation_rows = output["recommendation"]["rows"]
+    validation = [
+        row for row in recommendation_rows
+        if row["split"] == "validation" and row["algorithm"] != "popularity"
+    ]
+    eligible = {cluster["variant_id"] for cluster in output["clusters"] if cluster["qualified"]}
+    validation = [row for row in validation if row["variant_id"] in eligible
+                  and row["ndcg_at_10"] is not None]
+    winner = max(validation, key=lambda row: row["ndcg_at_10"]) if validation else None
+    output["selection"] = (
+        f"Trong các biến thể đạt điều kiện bao phủ và số cụm, {winner['variant_id']} "
+        f"có NDCG@10 Validation cao nhất ({winner['ndcg_at_10']:.4f}); "
+        "Test chỉ báo cáo cuối."
+        if winner else
+        "Chưa có biến thể đạt điều kiện phân cụm và có đủ phản hồi Validation để chọn theo NDCG@10."
+    )
+    output["reduction"] = {
+        "mode": request.reduction_mode,
+        "variants": [
+            {"variant_id": d["variant_id"], "method": d["method"], "components": d["components"]}
+            for d in variants
+        ],
+        "selected_variant_id": winner["variant_id"] if winner else None,
+        "selection_metric": "ndcg_at_10",
+        "feature_family": "relative_genre_preference_and_frequency",
+    }
+    return output

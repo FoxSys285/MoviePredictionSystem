@@ -34,3 +34,13 @@ npm run test:association
 ```
 
 `test:association` khởi chạy server kiểm thử cổng 8141 và tạo một lần chạy Apriori thật trên toàn bộ Train hiện có; kiểm tra việc chuyển từ nhóm đang lấy mẫu, log/lịch sử/tải xuống và UI desktop/mobile sáng/tối. Kết quả và ảnh chụp nằm trong `frontend/test-results/association-*`.
+
+## Apriori phân nhóm có hỗ trợ giảm chiều
+
+Chế độ mặc định vẫn là Apriori toàn cục ở trên. Khi chọn `enabled` hoặc `compare`, một biểu diễn sở thích tương đối + tần suất của mỗi user được fit từ Train, scale và nén bằng PCA/TruncatedSVD rồi gom user bằng K-Means. Cấu hình cho phép chọn danh sách `K` nhóm và số components cần thử. Mỗi nhóm khai phá Apriori trên các transaction Train của user thuộc nhóm đó.
+
+Reducer không nhìn transaction/phim đã thích; transaction boolean và transaction rỗng giữ nguyên. Mẫu số support trong nhóm là tất cả user của nhóm, kể giao dịch rỗng; support toàn cục dùng mẫu số toàn Train. Hai chỉ số được lưu riêng, không so trực tiếp nếu mẫu số khác nhau.
+
+Nhóm quá nhỏ hoặc không sinh được luật dùng luật toàn cục; nếu cũng không có luật khả dụng thì dùng Popularity. Validation chọn kích thước nhóm/representation bằng NDCG@10; Test chỉ báo cáo cuối. Cohort Validation/Test được lấy mẫu cố định, Train history làm context, phim positive ngoài catalog vẫn được tính vào eligible positives để báo candidate coverage.
+
+Bảng kết quả/API lưu variant, k, số luật, support trong nhóm/toàn cục, nhóm fallback, coverage, NDCG Validation và fingerprint fit. Xuất CSV có các hàng luật theo nhóm và xếp hạng tương lai; XLSX thêm sheets `Grouped rules`, `Apriori groups` và `Future ranking`.

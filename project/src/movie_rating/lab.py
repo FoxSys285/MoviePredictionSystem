@@ -239,7 +239,7 @@ class LabService:
                 job = read_json(path)
             except (OSError, ValueError):
                 continue
-            if job.get('schema_version') not in (2, 3) or job['group'] not in GROUPS:
+            if job.get('schema_version') not in (2, 3, 4) or job['group'] not in GROUPS:
                 continue
             if group is None or job['group'] == group:
                 if job['status'] in ('queued', 'running') and job.get('process_id') != os.getpid():
@@ -271,7 +271,7 @@ class LabService:
             run_id = datetime.now(UTC).strftime('%Y%m%dT%H%M%S') + '-' + uuid4().hex[:8]
             folder = self.directory / run_id
             folder.mkdir(parents=True)
-            job = {'id': run_id, 'group': request.group, 'schema_version': 3, 'status': 'queued', 'progress': 0,
+            job = {'id': run_id, 'group': request.group, 'schema_version': 4, 'status': 'queued', 'progress': 0,
                    'message': 'Đang chuẩn bị dữ liệu', 'created_at': requested_at,
                    'request': request.model_dump(), 'process_id': os.getpid(), 'cancel_requested': False}
             save_json(folder / 'job.json', job)
@@ -352,7 +352,9 @@ class LabService:
 
         try:
             message = (
-                'Đọc dữ liệu; chuẩn bị lịch sử theo user cho hồi quy/phân loại/phân cụm'
+                'Đọc dữ liệu; chuẩn bị lịch sử theo thời gian trong từng user cho RL'
+                if request.group == 'reinforcement'
+                else 'Đọc dữ liệu; chuẩn bị lịch sử theo user cho hồi quy/phân loại/phân cụm'
                 if request.use_all_data
                 else 'Lấy mẫu lịch sử MovieLens, chia 70/15/15 với seed 42'
             )
@@ -393,6 +395,41 @@ class LabService:
                                  'sinh luật; các chỉ số Train chưa xác nhận chất lượng gợi ý tương lai.')
             result.update(provenance=provenance, group=request.group, config=request.model_dump(),
                           notes=[*result.get('notes', []), data_note, protocol_note])
+            result['sample_sha256'] = provenance.get('sample_sha256')
+            result['protocol'] = (
+                result.get('rl_protocol', {}).get('name')
+                or result.get('clustering_protocol')
+                or provenance.get('protocol')
+            )
+            for row in result.get('rows', []):
+                row.setdefault('variant_id', row.get('algorithm'))
+                row.setdefault('base_algorithm', row.get('algorithm'))
+                row.setdefault(
+                    'representation',
+                    'global_transactions' if request.group == 'association'
+                    else 'raw_taste_profiles' if request.group == 'clustering'
+                    else 'raw_profile' if request.group == 'reinforcement' and row.get('algorithm') == 'dqn'
+                    else 'not_applicable' if request.group == 'reinforcement'
+                    else 'raw',
+                )
+                row.setdefault('reduction_method', None)
+                row.setdefault('components', None)
+                if 'fit_scope' not in row:
+                    row['fit_scope'] = (
+                        'train_plus_validation' if row.get('split') == 'test'
+                        else 'train' if row.get('split') == 'validation'
+                        else 'train_all_eligible_users' if request.group == 'clustering'
+                        else 'train' if request.group == 'association'
+                        else 'not_applicable' if request.group == 'reinforcement'
+                        else 'train'
+                    )
+                row.setdefault('sample_sha256', result['sample_sha256'])
+                row.setdefault('protocol', result['protocol'])
+            for key, config in result.get('best_configs', {}).items():
+                if isinstance(config, dict):
+                    config.setdefault('variant_id', key)
+                    config.setdefault('protocol', result['protocol'])
+                    config.setdefault('sample_sha256', result['sample_sha256'])
             device = 'CPU'
             if (
                 request.group == 'rating'
@@ -435,6 +472,10 @@ class LabService:
             flattened.append({'record_type': 'association_rule', **{
                 key: json.dumps(native(value), ensure_ascii=False) if isinstance(value, list) else value
                 for key, value in rule.items()}})
+        for rule in job.get('result', {}).get('group_rules', []):
+            flattened.append({'record_type': 'association_group_rule', **{
+                key: json.dumps(native(value), ensure_ascii=False) if isinstance(value, (list, dict)) else value
+                for key, value in rule.items()}})
         for row in job.get('result', {}).get('recommendation', {}).get('rows', []):
             flattened.append({'record_type': 'future_recommendation', **row})
         fields = list(dict.fromkeys(k for row in flattened for k in row))
@@ -451,15 +492,17 @@ class LabService:
         for row in result.get('rows', []):
             flat = {k: json.dumps(native(v), ensure_ascii=False) if isinstance(v, (list, dict)) else v
                     for k, v in row.items()}
-            for key, stats in result.get('cv', {}).get(row['algorithm'], {}).get('metrics', {}).items():
+            variant_id = row.get('variant_id') or row['algorithm']
+            cv_data = result.get('cv', {}).get(variant_id) or result.get('cv', {}).get(row['algorithm'], {})
+            for key, stats in cv_data.get('metrics', {}).items():
                 flat[f'cv_{key}_mean'] = stats['mean']
                 flat[f'cv_{key}_std'] = stats['std']
             configs = result.get('best_configs', {})
-            config = configs.get(row['algorithm'])
+            config = configs.get(variant_id) or configs.get(row['algorithm'])
             if config is None:
                 config = next((v for k, v in configs.items()
                                if row['algorithm'].startswith(k + '_')), {})
-            flat['best_config'] = json.dumps(config)
+            flat['best_config'] = json.dumps(config, ensure_ascii=False)
             rows.append(flat)
         return rows
 
@@ -473,6 +516,23 @@ class LabService:
                 rules = [{k: json.dumps(v, ensure_ascii=False) if isinstance(v, list) else v
                           for k, v in r.items()} for r in result['rules']]
                 pd.DataFrame(rules).to_excel(writer, sheet_name='Rules', index=False)
+            if result.get('group_rules'):
+                group_rules = [{k: json.dumps(native(v), ensure_ascii=False)
+                                if isinstance(v, (list, dict)) else v for k, v in row.items()}
+                               for row in result['group_rules']]
+                pd.DataFrame(group_rules).to_excel(writer, sheet_name='Grouped rules', index=False)
+            if result.get('grouped_variants'):
+                groups = []
+                for variant in result['grouped_variants']:
+                    for group in variant.get('groups', []):
+                        groups.append({
+                            'variant_id': variant['variant_id'],
+                            'k': variant['k'],
+                            **group,
+                            'rule_summary': json.dumps(native(variant['rule_summary']), ensure_ascii=False),
+                            'reduction': json.dumps(native(variant['fit_metadata']), ensure_ascii=False),
+                        })
+                pd.DataFrame(groups).to_excel(writer, sheet_name='Apriori groups', index=False)
             if result.get('cv'):
                 folds = [{'algorithm': a, **{k: v for k, v in row.items() if not isinstance(v, list)}}
                          for a, data in result['cv'].items() for row in data['folds']]
@@ -485,9 +545,11 @@ class LabService:
                            if isinstance(v, (list, dict)) else v for k, v in row.items()}
                           for row in result.get('search', [])]
                 pd.DataFrame(search).to_excel(writer, sheet_name='Cluster search', index=False)
-            pd.DataFrame({'key': ['request', 'provenance', 'runtime', 'selection'],
+            pd.DataFrame({'key': ['request', 'provenance', 'runtime', 'selection', 'rl_protocol',
+                                  'paired_test_uncertainty', 'reduction'],
                           'value': [json.dumps(result.get(k, job.get(k)), ensure_ascii=False)
-                                    for k in ['request', 'provenance', 'runtime', 'selection']]}).to_excel(
+                                    for k in ['request', 'provenance', 'runtime', 'selection', 'rl_protocol',
+                                              'paired_test_uncertainty', 'reduction']]}).to_excel(
                                         writer, sheet_name='Protocol', index=False)
             # Preserve movie titles literally even if a title starts with '='.
             for sheet in writer.book:

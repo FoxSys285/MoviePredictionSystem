@@ -1,4 +1,4 @@
-// Real regression/classification/clustering jobs, plus controlled log transport for scroll/reconnect behavior.
+// Real group jobs, including reduced DQN, plus controlled log transport for scroll/reconnect behavior.
 import assert from "node:assert/strict";
 import {access,mkdir,writeFile} from "node:fs/promises";
 import path from "node:path";
@@ -34,7 +34,7 @@ try{
   const page=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:"reduce"});
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   let latestJob,actualEvents;
-  for(const group of ["rating","classification","clustering"]){
+  for(const group of ["rating","classification","clustering","reinforcement"]){
     await page.goto(`${base}/experiments?group=${group}`);
     await page.locator(".lab-algorithm-select input").last().waitFor();
     await page.locator(".lab-parameter-details summary").click();
@@ -45,6 +45,13 @@ try{
       await page.getByLabel("XGBoost · Trees",{exact:true}).fill("10");
     }else if(group==="classification"){
       await page.getByLabel("Forest · Trees",{exact:true}).fill("10");
+    }else if(group==="reinforcement"){
+      await page.getByLabel("DQN · User Train tối đa",{exact:true}).fill("40");
+      await page.getByLabel("DQN · Giới hạn training steps",{exact:true}).fill("100");
+      await page.getByLabel("Replay warmup",{exact:true}).fill("8");
+      await page.getByLabel("DQN · Batch size",{exact:true}).fill("8");
+      await page.locator(".lab-config select").first().selectOption("compare");
+      await page.locator(".lab-config label").filter({hasText:"Components cần thử"}).locator("input").fill("1");
     }
     await page.locator(".lab-parameter-details summary").click();
     await page.waitForFunction(()=>!document.querySelector(".lab-primary")?.disabled);
@@ -56,9 +63,15 @@ try{
     assert.equal(finished.status,"completed",finished.message);
     await page.locator(".lab-log-success").last().waitFor();
     const text=await page.locator(".lab-log-viewport").innerText();
-    const stages=group==="clustering"?["K-Means","DBSCAN","Hồ sơ","bao phủ","noise","ổn định","Recall@10","NDCG@10","Validation","Test"]:["Validation","CV","refit","Test"];
+    const stages=group==="clustering"?["K-Means","DBSCAN","Hồ sơ","bao phủ","noise","ổn định","Recall@10","NDCG@10","Validation","Test"]:group==="reinforcement"?["DQN","reducer","checkpoint Validation","Train","Test"]:["Validation","CV","refit","Test"];
     for(const step of stages)assert.ok(text.includes(step),step);
-    if(group!=="clustering")assert.ok(text.includes(group==="rating"?"cây 1/10":"SAGA"));
+    if(group==="rating")assert.ok(text.includes("cây"));
+    if(group==="classification")assert.ok(text.includes("SAGA"));
+    if(group==="reinforcement"){
+      assert.ok(finished.result.reduction.variants.some(v=>v.method==="pca"&&v.components===1));
+      assert.ok(finished.result.rows.some(row=>row.variant_id==="dqn_pca_1"&&row.split==="test"));
+      assert.ok(finished.result.rows.some(row=>row.variant_id==="dqn_raw"&&row.split==="test"));
+    }
     const desktop=await page.locator(".lab-log-viewport").boundingBox();
     assert.ok(Math.abs(desktop.height-500)<2);
     assert.equal(await page.locator(".lab-log-viewport").evaluate(e=>getComputedStyle(e).overflowY),"auto");
@@ -67,6 +80,7 @@ try{
     for(const theme of ["dark","light"]){
       await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
       await page.setViewportSize({width:390,height:844});
+      await page.waitForFunction(()=>{const e=document.querySelector(".lab-log-viewport");return e&&Math.abs(e.getBoundingClientRect().height-window.innerHeight/2)<2;});
       await page.waitForFunction(()=>{const e=document.querySelector(".lab-log-viewport");return e.scrollHeight-e.scrollTop-e.clientHeight<2;});
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
       const mobile=await page.locator(".lab-log-viewport").boundingBox();
@@ -80,13 +94,18 @@ try{
     assert.ok((await download.text()).includes('"message"'));
     await page.reload();
     await page.locator(".lab-log-success").last().waitFor();
-    latestJob=finished;
     const all=await(await page.request.get(`${base}/api/v1/experiment-lab/runs/${started.id}/logs?limit=500`)).json();
-    actualEvents=all.entries;
+    if(group==="rating"){
+      latestJob=finished;
+      actualEvents=all.entries;
+    }
     summary.push({group,run_id:started.id,lines:all.entries.length,desktop_height:desktop.height});
   }
 
   // Hold the status running and append real recorded lines to exercise follow/pause semantics.
+  await page.goto(`${base}/experiments?group=rating`);
+  await page.locator(".lab-history select").selectOption(latestJob.id);
+  await page.locator(".lab-log-success").last().waitFor();
   const logUrl=`**/experiment-lab/runs/${latestJob.id}/logs?*`;
   let available=actualEvents.slice(0,50),failOnce=false;
   await page.route(`**/experiment-lab/runs/${latestJob.id}`,route=>route.fulfill({json:{...latestJob,status:"running",result:undefined}}));
@@ -115,11 +134,13 @@ try{
   assert.equal(await page.locator(".lab-log-line").count(),available.length);
   await page.unrouteAll({behavior:"wait"});
   await page.goto(`${base}/experiments?group=pca`);
-  await page.locator(".lab-algorithms article").last().waitFor();
-  assert.equal(await page.locator(".lab-log").count(),0);
+  await page.getByTestId("legacy-pca-page").waitFor();
+  assert.equal(await page.locator(".lab-sidebar nav button").count(),5);
+  assert.equal(await page.locator(".lab-algorithm-select").count(),0);
+  assert.ok((await page.locator(".lab-legacy-pca").innerText()).includes("Đường dẫn PCA cũ"));
   assert.deepEqual(errors,[]);
   await writeFile(path.join(output,"experiment-logs-check.json"),JSON.stringify({summary,scroll:"pass",reconnect:"pass",other_groups:"unchanged"},null,2));
-  console.log("PASS real regression/classification/clustering logs, half-screen desktop/mobile, history, download, pause/follow, reconnect and group scope.");
+  console.log("PASS real regression/classification/clustering/reinforcement logs, half-screen desktop/mobile, history, download, pause/follow, reconnect and legacy PCA route.");
 }finally{
   await browser?.close();
   server.kill();

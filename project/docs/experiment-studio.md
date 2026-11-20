@@ -1,12 +1,15 @@
-# MovieLens Experiment Studio — pipeline v3
+# MovieLens Experiment Studio — pipeline v4
 
 ## Kiến trúc và phạm vi thay đổi
 
 Kiểm tra ban đầu: backend FastAPI, frontend React/TypeScript/Vite, dữ liệu chuẩn bị
 Parquet từ MovieLens 25M, mô hình NumPy/Numba, scikit-learn, XGBoost và PyTorch.
 Lab cũ chạy năm nhóm qua `lab_compact.py`, chưa có 3-Fold, refit 85%, AUC,
-Q-Learning hoặc đầy đủ thông tin hiệu năng. Các handler cũ vẫn được giữ để tránh
-ảnh hưởng mã tham chiếu, nhưng API chạy mới chuyển sang pipeline v3.
+DQN hoặc đầy đủ thông tin hiệu năng. Experiment Studio hiện có năm nhóm tác vụ
+chính và một reducer dùng chung PCA/TruncatedSVD trong các pipeline. Route PCA
+độc lập chỉ còn dành để mở/xuất lịch sử cũ; API vẫn giữ handler tương thích.
+Các handler lab cũ vẫn được giữ để tránh ảnh hưởng mã tham chiếu; API chạy mới
+dùng schema 4. Lịch sử schema 2/3 vẫn đọc được.
 
 Giữ nguyên tài khoản, hồ sơ demo, danh mục phim, lịch sử đánh giá, gợi ý,
 các model production đã lưu. Cấu hình chuẩn bị mới dùng chia thời gian trong từng user; dữ liệu cũ được giữ lại. Lab lưu báo cáo vào `artifacts/experiment-lab/<run_id>/` và cache split riêng,
@@ -18,14 +21,18 @@ không ghi đè model phục vụ ứng dụng.
 | `experiment_data.py` | Dùng split đầy đủ hoặc lấy mẫu user, cache thống kê/Parquet, fingerprint |
 | `experiment_supervised.py` | 3-Fold, chọn cấu hình trên Validation, refit và đánh giá Test |
 | `experiment_clustering.py` | Sở thích tương đối, bao phủ cụm, độ ổn định và ranking tương lai |
-| `experiment_unsupervised.py` | Apriori, vector giảm chiều, PCA và TruncatedSVD |
-| `experiment_reinforcement.py` | Q-Learning và hai baseline trên môi trường phản hồi lịch sử |
+| `experiment_unsupervised.py` | Apriori toàn cục, Apriori phân nhóm và chẩn đoán PCA/TruncatedSVD |
+| `experiment_reduction.py` | Reducer dùng chung, metadata/fingerprint và biến thể raw/reduced |
+| `experiment_reinforcement.py` | DQN theo thời gian, checkpoint Validation và hai baseline |
 | `experiment_pipeline.py` | Điều phối nhóm, bảng số liệu và biểu đồ |
 | `lab.py` / `api/lab.py` | Worker nền, tiến độ, hủy, lịch sử, xuất dữ liệu |
 | `Experiments.tsx` và các component Experiment | Sidebar, cấu hình, báo cáo, biểu đồ |
 
+Chi tiết DQN, reducer theo adapter, run IDs và các giới hạn pilot được ghi trong
+[báo cáo triển khai RL/giảm chiều](rl-dimensionality-reduction-report.md).
+
 Các giai đoạn triển khai: kiểm tra kiến trúc → phân tách module → xây giao diện
-thống nhất → chuẩn hóa chia tập → triển khai sáu nhóm → lưu báo cáo → tích hợp API
+thống nhất → chuẩn hóa chia tập → triển khai năm nhóm chính và reducer dùng chung → lưu báo cáo → tích hợp API
 → kiểm thử đơn vị/API/trình duyệt và chạy MovieLens thật → tài liệu này.
 
 ## Khởi chạy và sử dụng
@@ -44,7 +51,8 @@ PATH, thư mục cài thông thường, NVM và Laragon (kể cả khi IDE chưa
 Nếu dùng vị trí khác, đặt biến `MOVIE_NODE_DIR` tới thư mục chứa `node.exe`
 và `node_modules/npm`. Python yêu cầu 3.12 hoặc 3.13.
 
-1. Chọn một trong sáu nhóm ở sidebar.
+1. Chọn một trong năm nhóm chính ở sidebar. URL `group=pca` cũ mở trang lịch sử
+   reducer độc lập để xem và xuất run đã lưu; trang này không khởi chạy run mới.
 2. Xem mục tiêu, dataset đã chuẩn bị và định nghĩa các tiêu chí.
 3. Chọn một thuật toán để chạy riêng hoặc nhiều thuật toán để so sánh.
 4. Mặc định dùng toàn bộ ratings đã chuẩn bị; có thể bỏ chọn để giới hạn user.
@@ -58,15 +66,16 @@ Mỗi tiêu chí có mốc mặc định có thể sửa, giải thích cách đ
 ngay cạnh kết quả. Xem [phân tích từng mốc](metric-reference-guide.md); các mốc
 chỉ diễn giải chỉ số, không thay đổi training hoặc lựa chọn model.
 
-CSV gồm metric, Mean/Std CV, cấu hình và các luật Apriori nếu có. Excel gồm
-Metrics, CV folds, Rules (nếu có) và Protocol. JSON giữ toàn bộ số liệu biểu đồ,
+CSV gồm metric, Mean/Std CV, cấu hình, luật Apriori toàn cục/theo nhóm nếu có.
+Excel gồm Metrics, CV folds, Rules, Grouped rules, Future ranking, Cluster search,
+Apriori groups và Protocol theo nhóm phù hợp. JSON giữ toàn bộ số liệu biểu đồ,
 các cấu hình đã thử, phân bố nhãn, fingerprint và thông tin môi trường.
 Phân cụm bổ sung bản ghi `future_recommendation` trong CSV và các sheet
 `Future ranking`, `Cluster search` trong Excel.
 
 Không tự khởi chạy huấn luyện khi chuyển nhóm. Thống kê dataset được cache theo
 size/mtime của Parquet; mẫu chia được dùng lại giữa các nhóm có cùng số user.
-Lịch sử v2 được giữ và có nhãn giao thức cũ; không so trực tiếp với kết quả v3.
+Lịch sử v2/v3 được giữ và có nhãn giao thức cũ; không so trực tiếp với schema 4.
 
 ## Dữ liệu và khả năng tái lập
 
@@ -158,7 +167,8 @@ nhập thủ công. Giữ lại user từ hồ sơ Train để chọn cấu hìn
 hợp lệ và mặc định bao phủ ≥80%, sau đó mới so Silhouette. Kiểm tra lại điều
 kiện sau fit cuối; không đạt thì chỉ báo kết quả chẩn đoán. Silhouette/DBI loại
 noise nên luôn đọc cùng bao phủ, số user được gán và kích thước cụm. Có kiểm tra
-ARI/bao phủ chung khi fit lại với seed 43/44. PCA 2D chỉ minh họa.
+ARI/bao phủ chung khi fit lại với seed 43/44. PCA 2D của biểu diễn raw chỉ minh
+họa; variant PCA/TruncatedSVD được fit lại và dùng thật để phân cụm.
 
 K-Means và DBSCAN fit cuối trên toàn bộ hồ sơ Train đủ lịch sử. DBSCAN truy vấn
 láng giềng theo batch và duyệt core chưa gán để không giữ đồ thị khoảng cách bậc
@@ -182,35 +192,66 @@ Apriori sinh itemsets và luật thật; báo số luật và sắp xếp Lift/C
 Execution time gồm khai phá và sinh luật, không báo inference giả.
 Không tìm thấy luật là kết quả hợp lệ, không tự chèn ví dụ vào báo cáo.
 
-### Dimensionality Reduction
+### Giảm chiều hỗ trợ từng thuật toán
 
-PCA và TruncatedSVD dùng cùng vector user–genre chuẩn hóa; thử danh sách
-components. PCA center nội bộ; TruncatedSVD không center nội bộ nhưng đầu vào
-chung đã chuẩn hóa nên kết quả có thể rất gần nhau. Đây là SVD giảm chiều,
-khác Funk SVD học rating ở Regression.
+Ngay sau thẻ thuật toán, một khối dùng chung hai thẻ PCA và TruncatedSVD mô tả
+đầu vào/đường dùng theo nhóm. Trạng thái hoạt động và components phản ánh cấu hình
+đang chọn. Chế độ mặc định là tắt; `enabled` chỉ dùng representation được chọn,
+`compare` thêm raw control. Cấu hình chi tiết nằm trong phần Chạy thực nghiệm.
+
+`reduction_mode=off` giữ đường chạy gốc. `enabled` chạy các representation đã
+chọn; `compare` thêm raw control trên cùng split, seed và budget. Variant IDs
+ổn định xuất hiện ở bảng, cấu hình, CV, biểu đồ và export. Chọn reducer/chiều
+bằng metric tác vụ trên Validation; EVR và reconstruction chỉ là chẩn đoán.
+
+- Linear/XGBoost/Logistic/Forest chỉ nén block tương tác preference-user với
+  genre phim, giữ bias/thống kê nền; scaler và reducer fit trong Train/fold.
+- Funk SVD giữ latent factors và thêm correction Ridge từ profile nén. NCF giữ
+  embeddings, thêm nhánh MLP từ profile nén và dùng Validation cho early stopping.
+- K-Means/DBSCAN scale/reduce hồ sơ preference+tần suất; DBSCAN tìm lại eps.
+  Profile cụm vẫn mô tả bằng genre gốc, noise dùng Popularity dự phòng.
+- DQN chỉ nén profile support; action mask, fullness, bước còn lại, observed flag
+  và tín hiệu tương tác vẫn giữ nguyên. Random/Popularity không bị chạy lại giả.
+- Apriori giữ transaction boolean. Biến thể giảm chiều phân nhóm profile Train,
+  khai phá luật riêng; support trong nhóm và support toàn cục dùng mẫu số riêng.
+
+### Chẩn đoán Dimensionality Reduction
+
+PCA và TruncatedSVD dùng feature family user/profile tương ứng; thử danh sách
+components. PCA center đặc trưng đã scale; TruncatedSVD chiếu không center. Với
+TruncatedSVD, explained variance là phương sai thực tế của thành phần chiếu
+`Var(XV)` chia tổng phương sai của đầu vào đã scale, không phải năng lượng chiếu
+`E[(XV)^2]`. Đây là SVD giảm chiều, khác Funk SVD học rating ở Regression.
 
 Explained variance học trên Train; reconstruction MSE đo trên Validation/Test.
 Vẽ variance theo số chiều, biểu diễn trước/sau và so sánh lỗi tái tạo.
-Chọn cấu hình ít chiều nhất giữ ≥90% variance, sau đó dùng reconstruction error
-Validation; nếu không đạt, chọn lỗi Validation thấp nhất. Dữ liệu không có
-phương sai được báo lỗi thay vì công bố variance giả.
+Chẩn đoán độc lập báo EVR và reconstruction; không xem đó là độ chính xác rating.
+Với adapter tác vụ, chọn bằng RMSE/F1/NDCG/reward Validation thay vì ngưỡng EVR.
+Reducer chỉ fit trên phần Train/fold và transform phần held-out; rank thấp hoặc
+không có phương sai được báo rõ.
 
 ### Reinforcement Learning
 
 Môi trường dựa trên rating thực, không sinh rating hay nhiễu nhân tạo.
 
-- State = (userId, bitmask phim đã chọn, genre phim trước, phản hồi thích/không thích).
+- DQN là Q-Learning xấp xỉ bằng MLP nhỏ; không đưa userId vào mạng. DQN có target
+  network, replay hữu hạn, Huber loss, gradient clipping và epsilon schedule.
+- Train episode chia support/query theo timestamp; profile ban đầu chỉ từ support,
+  reward chỉ từ query. Profile normalization cũng fit trên support.
+- Observation gồm preference/frequency, fullness, mask, bước còn lại, phản hồi
+  trước và observed flag.
 - Action = tối đa 30 phim phổ biến Train chưa được chọn trong episode.
 - Reward quan sát = `(rating − 2,75)/2,25`, nằm trong [-1,1].
 - Action thiếu phản hồi lịch sử nhận 0 theo quy ước; không được coi là user ghét phim.
-- Policy epsilon-greedy khi học, greedy khi đánh giá. Cấu hình alpha/gamma/epsilon.
+- Epsilon schedule áp dụng khi học; Validation chọn và phục hồi snapshot model/reducer;
+  Test dùng checkpoint đóng băng và không cập nhật trọng số.
 
-Q-table chỉ lưu state đã gặp. Q-Learning, Random và Popularity được đánh giá trên
-cùng 100 user-episode × 5 bước cho mỗi split; seed đánh giá tách seed huấn luyện.
-Huấn luyện chỉ dùng Train, checkpoint dùng Validation, Test giữ riêng.
-Hiển thị reward theo episode, cumulative/average reward và observed-feedback
-coverage. Không có propensity nên không thể suy ra giá trị counterfactual hay
-hiệu quả online từ kết quả môi trường offline này.
+Các policy dùng cùng catalog, cohort, episode IDs và mask. Chọn cohort có seed;
+log số user/step thực học và actual-action denominator. Cumulative reward là phụ,
+đọc cùng average reward/action, coverage, ranking và bootstrap ghép cặp theo user.
+Q-table `q_learning` trong báo cáo lịch sử không được đổi tên; kết quả mới dùng id
+`dqn`. Không có propensity nên reward thiếu=0 không phải đánh giá counterfactual
+không thiên lệch hoặc hiệu quả online.
 
 ## Đo hiệu năng và vận hành
 
@@ -241,15 +282,17 @@ npm run build
 npm run test:experiments
 ```
 
-Đã xác nhận bộ tests toàn dự án, TypeScript/Vite build và Playwright với sáu nhóm
-chạy MovieLens thật, chọn riêng/nhiều thuật toán, lưu và mở lại lịch sử, xuất
-CSV/XLSX/JSON, bố cục 390px ở dark/light, cùng khôi phục sau lỗi API.
+Đã xác nhận bộ tests toàn dự án, TypeScript/Vite build và Playwright với năm nhóm
+chính chạy MovieLens thật, chọn riêng/nhiều thuật toán, giảm chiều theo nhóm,
+lưu và mở lại lịch sử, xuất CSV/XLSX/JSON, bố cục 390px ở dark/light, cùng khôi
+phục sau lỗi API. PCA cũ được kiểm tra riêng ở trang history-only.
 Các phép kiểm tra chống rò rỉ xác nhận đặc trưng fold không nhận dòng giữ lại,
 thay nhãn Test không thay cấu hình được chọn, và refit dùng đúng Train + Validation.
 Fixtures sinh trong tests chỉ dùng kiểm tra công thức, không đưa vào báo cáo UI.
 
-Xem [báo cáo chạy xác nhận](experiment-studio-results.md) để lấy run ID, metric
-và cấu hình thực tế. Artifact runtime và ảnh trình duyệt không được commit.
+Xem [báo cáo chạy xác nhận lịch sử](experiment-studio-results.md) để lấy run ID,
+metric và cấu hình trước schema 4; [báo cáo RL/giảm chiều](rl-dimensionality-reduction-report.md)
+ghi các run ID và kiểm chứng mới. Artifact runtime và ảnh trình duyệt không được commit.
 
 Tham khảo phương pháp: [scikit-learn — data leakage](https://scikit-learn.org/stable/common_pitfalls.html),
 [cross-validation](https://scikit-learn.org/stable/modules/cross_validation.html),

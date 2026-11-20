@@ -204,7 +204,8 @@ try {
           -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
     } finally { $env:MOVIE_SERVER_INSTANCE = $previousInstance }
 
-    $deadline = [DateTime]::UtcNow.AddSeconds(40)
+    Write-Host 'Waiting up to 120 seconds for the API and frontend to become ready...'
+    $deadline = [DateTime]::UtcNow.AddSeconds(120)
     while ([DateTime]::UtcNow -lt $deadline) {
         $taskServer.Refresh()
         if ($taskServer.HasExited) {
