@@ -11,17 +11,15 @@ import psutil
 def _execute(settings, job, payload, cancelled, scratch):
     import os
 
-    from threadpoolctl import threadpool_limits
-
     from movie_rating.experiment_config import ExperimentRequest
     from movie_rating.lab import LabService
     from movie_rating.settings import Settings
 
     os.environ["MOVIE_SCRATCH_DIR"] = str(scratch)
+    request = ExperimentRequest.model_validate(payload)
     service = LabService(Settings.model_validate(settings))
     service.cancel_event = cancelled
-    with threadpool_limits(limits=2):
-        service._run_inline(job, ExperimentRequest.model_validate(payload))
+    service._run_inline(job, request)
 
 
 def run_isolated(service, job, request):

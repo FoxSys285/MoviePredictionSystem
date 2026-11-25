@@ -84,7 +84,11 @@ def test_fit_scope_is_train_only_and_heldout_transform_does_not_refit():
     before = reducer.metadata()
     reducer.transform(heldout)
     after = reducer.metadata()
-    assert before == after
+    assert {key: value for key, value in before.items() if key not in {"transform_seconds", "transform_calls"}} == {
+        key: value for key, value in after.items() if key not in {"transform_seconds", "transform_calls"}
+    }
+    assert after["transform_calls"] == before["transform_calls"] + 1
+    assert after["transform_seconds"] >= before["transform_seconds"]
     assert after["fit_rows"] == len(train)
     assert after["fit_scope"] == "train-only"
 

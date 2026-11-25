@@ -88,9 +88,11 @@ def clustering(splits, movies, request, update):
 def _association_global(splits, movies, request, update):
     from mlxtend.frequent_patterns import apriori, association_rules
 
+    pipeline_started = time.perf_counter()
     frame = splits["train"]
     update(12, f"Apriori · quét toàn bộ {len(frame):,} ratings Train; lọc phim rating ≥ 4,0.")
     with measured() as timing:
+        feature_started = time.perf_counter()
         positive = frame.loc[frame.rating >= 4.0, ["userId", "movieId"]]
         counts = positive.groupby("movieId").size().sort_values(ascending=False, kind="stable")
         items = counts.head(request.max_items).index
@@ -106,11 +108,13 @@ def _association_global(splits, movies, request, update):
                    items.get_indexer(selected.movieId)] = True
         transactions = pd.DataFrame(values, index=users, columns=items)
         empty_transactions = int((~values.any(axis=1)).sum())
+        feature_creation_seconds = time.perf_counter() - feature_started
         update(32, f"Transactions: {len(users):,} users × {len(items):,} phim; "
                f"giữ {empty_transactions:,} transaction rỗng trong mẫu số support; "
                f"ma trận boolean {values.nbytes / 2**20:.2f} MiB.")
         update(40, f"Bắt đầu Apriori · min_support={request.min_support:g} · "
                f"độ dài itemset tối đa={request.max_rule_length}.")
+        model_started = time.perf_counter()
         patterns = (
             apriori(
                 transactions,
@@ -138,6 +142,7 @@ def _association_global(splits, movies, request, update):
             if len(patterns)
             else pd.DataFrame()
         )
+        model_training_seconds = time.perf_counter() - model_started
     update(85, f"Đã sinh {len(rules):,} luật; sắp xếp theo Lift, Confidence và Support.")
     metadata = movies.set_index("movieId").title.to_dict()
     records = []
@@ -161,6 +166,8 @@ def _association_global(splits, movies, request, update):
         "name": "Apriori",
         "split": "train",
         **timing,
+        "feature_creation_seconds": feature_creation_seconds,
+        "model_training_seconds": model_training_seconds,
         "rule_count": len(records),
         "itemsets": len(patterns),
         "transactions": len(transactions),
@@ -210,6 +217,14 @@ def _association_global(splits, movies, request, update):
         "rows": [row],
         "charts": charts,
         "rules": records,
+        "pipeline_timings": {
+            "feature_creation_seconds": feature_creation_seconds,
+            "reducer_fit_seconds": 0.0,
+            "transform_seconds": 0.0,
+            "model_training_seconds": model_training_seconds,
+            "evaluation_seconds": 0.0,
+            "total_pipeline_seconds": time.perf_counter() - pipeline_started,
+        },
         "association_data": data_summary,
         "best_configs": {
             "apriori": {
@@ -321,6 +336,8 @@ def _rule_ranking(recommendations, relevant, k=10):
 def _association_grouped(splits, movies, request, update, global_result, descriptor):
     from movie_rating.experiment_clustering import TasteScale, taste_profiles
 
+    pipeline_started = time.perf_counter()
+    feature_started = time.perf_counter()
     train = splits["train"]
     frame = train.loc[train.rating >= 4.0, ["userId", "movieId"]]
     counts = frame.groupby("movieId").size().sort_values(ascending=False, kind="stable")
@@ -334,6 +351,7 @@ def _association_grouped(splits, movies, request, update, global_result, descrip
             pd.Index(items).get_indexer(selected.movieId),
         ] = True
     transactions = pd.DataFrame(values, index=users, columns=items)
+    transaction_feature_seconds = time.perf_counter() - feature_started
     global_rules = [
         {
             "antecedent_ids": set(rule["antecedent_ids"]),
@@ -347,12 +365,14 @@ def _association_grouped(splits, movies, request, update, global_result, descrip
     item_names = movies.set_index("movieId").title.to_dict()
     popular_order = [int(x) for x in items[np.argsort(-values.sum(axis=0), kind="stable")]]
 
+    profile_started = time.perf_counter()
     profiles = taste_profiles(
         train, movies, request.min_user_ratings, request.cluster_shrinkage,
         lambda _, message: update(None, f"Apriori phân nhóm · {message}"),
     )
     scaler = TasteScale.fit(profiles.features)
     x = scaler.transform(profiles.features)
+    profile_feature_seconds = time.perf_counter() - profile_started
     reducer = None
     reduction_metadata = None
     if descriptor["method"]:
@@ -364,8 +384,8 @@ def _association_grouped(splits, movies, request, update, global_result, descrip
                             "genres": profiles.genres},
             fit_scope="train_all_eligible_users",
         )
-        reduction_metadata = reducer.metadata()
         x = reducer.transform(x)
+        reduction_metadata = reducer.metadata()
         update(None, f"Apriori nhóm · reducer {reducer.method} · "
                f"{reducer.input_dimensions}→{reducer.output_dimensions} · "
                f"fit {reducer.fit_rows:,} Train users.")
@@ -427,6 +447,7 @@ def _association_grouped(splits, movies, request, update, global_result, descrip
             "global": global_rules,
             "groups": rule_by_group,
         }
+        evaluation_started = time.perf_counter()
         global_recommendations = []
         recommendation_rows = []
         for split in ("validation", "test"):
@@ -516,6 +537,7 @@ def _association_grouped(splits, movies, request, update, global_result, descrip
         validation = recommendation_rows[0]
         support_values = [r["support_in_group"] for r in combined_group_rules]
         support_global_values = [r["support_global"] for r in combined_group_rules]
+        evaluation_seconds = time.perf_counter() - evaluation_started
         fit_metadata = {
             "method": descriptor["method"], "components": descriptor["components"],
             "input_dimensions": reduction_metadata["input_dimensions"] if reduction_metadata else x.shape[1],
@@ -523,6 +545,12 @@ def _association_grouped(splits, movies, request, update, global_result, descrip
             "fit_scope": "train_all_eligible_users", "fit_rows": len(profiles.users),
             "feature_family": "relative_genre_preference_and_frequency",
             "fingerprint": reduction_metadata["fingerprint"] if reduction_metadata else None,
+            "feature_creation_seconds": transaction_feature_seconds + profile_feature_seconds,
+            "reducer_fit_seconds": reduction_metadata["fit_seconds"] if reduction_metadata else 0.0,
+            "transform_seconds": reduction_metadata["transform_seconds"] if reduction_metadata else 0.0,
+            "model_training_seconds": variant_fit_seconds,
+            "evaluation_seconds": evaluation_seconds,
+            "total_pipeline_seconds": time.perf_counter() - pipeline_started,
         }
         grouped.append({
             "variant_id": variant_id, "base_algorithm": "apriori", "k": k,
@@ -559,8 +587,11 @@ def _association_grouped(splits, movies, request, update, global_result, descrip
 
 
 def association(splits, movies, request, update):
+    pipeline_started = time.perf_counter()
     if request.reduction_mode == "off":
-        return _association_global(splits, movies, request, update)
+        result = _association_global(splits, movies, request, update)
+        result["pipeline_timings"]["total_pipeline_seconds"] = time.perf_counter() - pipeline_started
+        return result
 
     def global_progress(progress, message):
         mapped = None if progress is None else 3 + 33 * progress / 100
@@ -617,6 +648,7 @@ def association(splits, movies, request, update):
                 "transactions": result["association_data"]["train_users"],
                 "model_bytes": variant["model_bytes"],
                 "fit_seconds": variant["fit_seconds"],
+                "model_training_seconds": variant["fit_metadata"]["model_training_seconds"],
                 "reduction_fit_seconds": variant["reduction_fit_seconds"],
                 "reduction": variant["fit_metadata"],
             }
@@ -687,6 +719,19 @@ def association(splits, movies, request, update):
         "selection_metric": "ndcg_at_10",
         "feature_family": "relative_genre_preference_and_frequency",
         "transaction_reduction": False,
+    }
+    result["selected_variant_id"] = winner["variant_id"] if winner else None
+    grouped_timings = [variant["fit_metadata"] for variant in grouped_variants]
+    global_timings = result.get("pipeline_timings", {})
+    result["pipeline_timings"] = {
+        "feature_creation_seconds": global_timings.get("feature_creation_seconds", 0.0)
+        + sum(item["feature_creation_seconds"] for item in grouped_timings),
+        "reducer_fit_seconds": sum(item["reducer_fit_seconds"] for item in grouped_timings),
+        "transform_seconds": sum(item["transform_seconds"] for item in grouped_timings),
+        "model_training_seconds": global_timings.get("model_training_seconds", 0.0)
+        + sum(item["model_training_seconds"] for item in grouped_timings),
+        "evaluation_seconds": sum(item["evaluation_seconds"] for item in grouped_timings),
+        "total_pipeline_seconds": time.perf_counter() - pipeline_started,
     }
     result["notes"].extend([
         "Apriori toàn cục vẫn fit trên toàn bộ prepared Train; biến thể phân nhóm fit reducer, K-Means và luật chỉ từ Train.",

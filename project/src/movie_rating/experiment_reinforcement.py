@@ -714,6 +714,7 @@ def _reinforcement_single(splits, movies, request, update, reduction_variant=Non
             "Không có user Validation với action hợp lệ trong catalog; reward/ranking là N/A "
             "và checkpoint DQN cuối chỉ được giữ để báo cáo, không thể chọn bằng Validation."
         ),
+        "selected_variant_id": winner["variant_id"] if winner else None,
         "rl_protocol": {
             "name": "temporal_support_query_dqn_v1",
             "training_split": "Train: support trước timestamp, query sau support",
@@ -759,6 +760,14 @@ def _reinforcement_single(splits, movies, request, update, reduction_variant=Non
 def reinforcement(splits, movies, request, update):
     if request.reduction_mode == "off" or "dqn" not in request.algorithms:
         result = _reinforcement_single(splits, movies, request, update)
+        validation = [
+            row for row in result["rows"]
+            if row["split"] == "validation" and row.get("average_reward") is not None
+        ]
+        winner = max(validation, key=lambda row: row["average_reward"]) if validation else None
+        result["selected_variant_id"] = (
+            (winner.get("variant_id") or winner["algorithm"]) if winner else None
+        )
         if request.reduction_mode != "off":
             result["reduction"] = {
                 "mode": request.reduction_mode,
@@ -864,6 +873,7 @@ def reinforcement(splits, movies, request, update):
         if winner else
         "Không có user Validation với action hợp lệ; reward/ranking là N/A và không thể chọn biến thể."
     )
+    output["selected_variant_id"] = winner["variant_id"] if winner else None
     output["rl_protocol"] = dict(runs[0]["rl_protocol"])
     output["rl_protocol"]["reduction_variants"] = list(output["reduction"]["variants"])
     dqn_validation = [row for row in validation if row["base_algorithm"] == "dqn"]

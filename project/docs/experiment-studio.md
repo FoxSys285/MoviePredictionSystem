@@ -271,6 +271,33 @@ Cancel có hiệu lực tại checkpoint giữa bước fit, không ngắt thô 
 Job đang chạy khi server khởi động lại được hiển thị interrupted. Lỗi có thông
 báo riêng và không xuất bản result dở; JSON được ghi tạm rồi thay thế nguyên tử.
 
+## Preset và giao diện Experiment Studio
+
+Giao diện gửi mã preset phiên bản, nhóm, danh sách thuật toán và `reduction_choice`
+(`pca`, `truncated_svd` hoặc `off`). Backend xác thực lựa chọn và tự nạp các tham số chuẩn.
+Người dùng chọn một trong ba thẻ ở mục Giảm chiều dữ liệu; các tham số huấn luyện khác chỉ đọc.
+Lựa chọn được giữ riêng cho từng nhóm trong phiên mở trang và được lưu trong request của run.
+
+| Nhóm | Giảm chiều trong preset chuẩn |
+|---|---|
+| Hồi quy | Linear: PCA 8 chiều; XGBoost, Funk SVD và NCF: biểu diễn gốc |
+| Phân loại | Logistic: PCA 8 chiều; Random Forest: biểu diễn gốc |
+| Phân cụm | K-Means và DBSCAN: PCA 8 chiều trên hồ sơ Train |
+| Luật kết hợp | PCA 8 chiều để phân nhóm user; Apriori toàn cục và transaction boolean được giữ |
+| Học tăng cường | DQN dùng hồ sơ gốc; Random/Popularity không giảm chiều |
+
+Preset chuẩn tắt tuning. Bảng trên mô tả mặc định; có thể thay PCA bằng TruncatedSVD
+8 chiều hoặc chọn Không giảm chiều. DQN cũng cho phép chọn PCA/TruncatedSVD 8 chiều;
+Random/Popularity không dùng reducer. Các nhánh XGBoost, Funk SVD, NCF và Random Forest
+vẫn dùng biểu diễn gốc theo preset. Mỗi lần chạy chỉ dùng biểu diễn đã chọn.
+PCA/TruncatedSVD fit bằng dữ liệu Train; mỗi fold CV fit reducer riêng.
+Trang “Dimensionality Reduction” cũ chỉ còn để đọc lịch sử đã lưu.
+
+Kết quả hiện theo thứ tự: tóm tắt giảm chiều, bảng theo nhóm, biểu đồ so sánh và 3-fold theo thời
+gian trên Train (chỉ hồi quy/phân loại). Metadata và biểu đồ chẩn đoán nằm trong phần chi tiết.
+Thiếu trường của báo cáo cũ hiển thị “Không có dữ liệu”; không suy ra kết luận tăng tốc khi thiếu
+đối chứng.
+
 ## Kiểm chứng
 
 ```powershell
@@ -281,10 +308,11 @@ npm run build
 npm run test:experiments
 ```
 
-Đã xác nhận bộ tests toàn dự án, TypeScript/Vite build và Playwright với năm nhóm
-chính chạy MovieLens thật, chọn riêng/nhiều thuật toán, giảm chiều theo nhóm,
-lưu và mở lại lịch sử, xuất CSV/XLSX/JSON, bố cục 390px ở dark/light, cùng khôi
-phục sau lỗi API. PCA cũ được kiểm tra riêng ở trang history-only.
+Playwright hiện kiểm tra catalog preset thật của backend, payload nhóm/thuật toán/preset gửi từ UI,
+trạng thái hai thẻ reducer, cấu hình chỉ đọc, thứ tự kết quả, báo cáo lịch sử thiếu trường và bố cục
+390px. Request tạo job được chặn trong bài kiểm tra trình duyệt để không khởi chạy một loạt thí
+nghiệm MovieLens kéo dài; backend có test riêng cho việc xác thực preset và dispatch reducer.
+PCA cũ được kiểm tra ở trang history-only.
 Các phép kiểm tra chống rò rỉ xác nhận đặc trưng fold không nhận dòng giữ lại,
 thay nhãn Test không thay cấu hình được chọn, và refit dùng đúng Train + Validation.
 Fixtures sinh trong tests chỉ dùng kiểm tra công thức, không đưa vào báo cáo UI.
@@ -296,3 +324,25 @@ ghi các run ID và kiểm chứng mới. Artifact runtime và ảnh trình duy�
 Tham khảo phương pháp: [scikit-learn — data leakage](https://scikit-learn.org/stable/common_pitfalls.html),
 [cross-validation](https://scikit-learn.org/stable/modules/cross_validation.html),
 [DBSCAN core samples](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.DBSCAN.html).
+
+## Dừng và tiếp tục hồi quy/phân loại
+
+Các run mới lưu kết quả riêng cho từng biến thể giảm chiều, thuật toán, cấu hình Validation,
+fold CV và refit/Test trong `progress.json`. Chọn run đã dừng trong lịch sử rồi nhấn **Tiếp tục
+từ checkpoint**. Kết quả được lưu giữ theo run ID; `result.json`, CSV/Excel và báo cáo chỉ có
+sau khi mọi đơn vị công việc hoàn tất.
+
+NCF lưu model, optimizer, epoch kế tiếp, trạng thái early stopping, trọng số tốt nhất, đường học
+và RNG sau mỗi epoch. NCF hybrid lưu riêng checkpoint của embedding/MLP nền và correction branch.
+Các fit không có checkpoint epoch, như XGBoost hoặc SVD, chạy lại riêng fit đang dở. Ứng dụng
+kiểm tra hash dữ liệu/split, request (gồm seed và tham số), code và phiên bản thư viện; nếu không
+khớp, không dùng lại tiến độ đó. Lần chạy cũ không có progress/checkpoint không thể khôi phục.
+Nút tiếp tục hiện được cung cấp cho hồi quy và phân loại; các nhóm phân cụm, association, PCA
+lịch sử và RL chưa có cơ chế tiếp tục theo từng đơn vị công việc.
+
+Với XGBoost, cấu hình CPU threads nhận 2, 4 hoặc 8; mặc định là 4 theo benchmark cohort
+4.904 user trên máy phát triển. `n_jobs` của estimator và native threadpool limit dùng cùng giá
+trị. Bộ giới hạn sửa đường dẫn DLL Unicode trên Windows và nạp XGBoost trước khi dò OpenMP.
+Benchmark đo feature/cache, fit, tổng thời gian và RSS trên cùng cohort user, split, seed và tham
+số. Bảng, số đo lặp lại và giới hạn mẫu được ghi trong `docs/xgboost-thread-benchmark.md`;
+benchmark không fit toàn bộ MovieLens 25M.

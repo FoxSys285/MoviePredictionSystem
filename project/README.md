@@ -1,6 +1,6 @@
 # Ứng dụng học máy dự đoán đánh giá phim — MovieLens 25M
 
-Trang **Thực nghiệm** có sidebar sáu nhóm, chạy thuật toán thật trên MovieLens: Regression, Classification, Clustering, Association Rules, Dimensionality Reduction và Reinforcement Learning. Pipeline v3 dùng chia thời gian trong từng user và 3 lượt CV thời gian cho Regression/Classification, chọn cấu hình trên Validation, refit Train + Validation, lịch sử và xuất CSV/Excel/JSON. Thực nghiệm lớn có giới hạn RAM và đặc trưng theo batch; xem [vận hành và bộ nhớ](docs/personalized-experiments.md). Xem [hướng dẫn Experiment Studio](docs/experiment-studio.md) và [kết quả xác nhận](docs/experiment-studio-results.md).
+Trang **Thực nghiệm** có sidebar sáu nhóm, chạy thuật toán thật trên MovieLens: Regression, Classification, Clustering, Association Rules, Dimensionality Reduction và Reinforcement Learning. Năm nhóm chạy dùng preset cố định do backend xác thực; tham số chỉ đọc, còn chọn nhóm/thuật toán, hủy chạy, lịch sử và export vẫn có. Pipeline v3 dùng chia thời gian trong từng user và 3 lượt CV thời gian cho Regression/Classification, chọn cấu hình trên Validation, refit Train + Validation. Thực nghiệm lớn có giới hạn RAM và đặc trưng theo batch; xem [vận hành và bộ nhớ](docs/personalized-experiments.md), [hướng dẫn Experiment Studio](docs/experiment-studio.md) và [kết quả xác nhận](docs/experiment-studio-results.md).
 
 Login có 5 tài khoản demo lấy lịch sử từ MovieLens, hiển thị email/mật khẩu và nút
 điền nhanh. [Luồng tài khoản mới và hồ sơ dataset](docs/user-profiles.md) mô tả cách
@@ -201,3 +201,46 @@ chạy `prepare`, `train` và `evaluate`. Thống kê hiển thị trên website
 
 Nguồn dữ liệu và cách trích dẫn:
 [MovieLens 25M README — GroupLens](https://files.grouplens.org/datasets/movielens/ml-25m-README.html).
+
+## CUDA cho NCF
+
+`scripts/setup.ps1` cài PyTorch 2.14.1 CUDA 13.2 theo `requirements-torch-cuda.txt`. Wheel này
+cũng giữ tensor CPU và fallback `cuda` → `cpu`; máy chỉ dùng CPU có thể chọn bản CPU-only bằng
+`.\scripts\setup.ps1 -TorchBuild cpu`. Không cài lại PyTorch bằng `pip install -e .` riêng lẻ
+nếu muốn giữ build đã chọn; dùng script setup để khôi phục đúng build.
+
+Build được đối chiếu với [bảng cài PyTorch 2.14.1 chính thức](https://pytorch.org/get-started/previous-versions/)
+(Windows, CUDA 13.2). [Bảng tương thích NVIDIA](https://docs.nvidia.com/deploy/cuda-compatibility/620/minor-version-compatibility.html)
+ghi CUDA 13.x cần driver từ nhánh 580 trở lên; máy này dùng 621.24.
+RTX 3050 Laptop được PyTorch nhận ở compute capability 8.6. Python 3.12 wheel đã được cài và
+kiểm tra trong `.venv`.
+
+NCF chạy embedding và MLP trên CUDA khi `torch.cuda.is_available()` đúng. Bias baseline, mã hóa
+ID và chuẩn bị mảng vẫn ở CPU. Với NCF hybrid giảm chiều, mạng NCF nền chạy theo thiết bị đó;
+PCA/TruncatedSVD, tạo feature và nhánh correction MLP chạy CPU.
+
+## Tiếp tục thực nghiệm đã dừng
+
+Thực nghiệm hồi quy/phân loại mới lưu `progress.json` sau mỗi cấu hình Validation, mỗi fold CV
+và mỗi refit/Test hoàn tất. NCF còn ghi checkpoint atomic theo epoch, gồm optimizer, early
+stopping, trọng số tốt nhất và trạng thái RNG. Khi dừng hoặc worker bị gián đoạn, chọn lần chạy
+trong lịch sử rồi nhấn **Tiếp tục từ checkpoint**. Báo cáo và file export chỉ xuất hiện sau khi
+tất cả biến thể/thuật toán hoàn tất.
+
+Trước khi dùng lại tiến độ, ứng dụng so khớp dữ liệu/split, seed, tham số, code và phiên bản thư
+viện. Nếu khác, tiến độ cũ được giữ nguyên nhưng không tái sử dụng được; hãy tạo run mới. Các run
+cũ không có `progress.json` hoặc checkpoint epoch không được khôi phục hồi tố. XGBoost và các fit
+không có checkpoint epoch sẽ chạy lại riêng fit đang dở; các cấu hình, fold và refit đã lưu vẫn
+được giữ.
+
+Trong Experiment Studio, chọn XGBoost rồi đặt **Số luồng CPU** thành 2, 4 hoặc 8. Mặc định là 4
+theo benchmark cohort 4.904 user; `threadpool_limits` được đặt cùng `n_jobs`.
+Chạy benchmark có giới hạn user bằng:
+
+```powershell
+\.venv\Scripts\python.exe scripts\benchmark_xgboost_threads.py --users 5000
+```
+
+Benchmark giữ seed 42, giao thức thời gian từng user, 150 cây, depth 6 và learning rate 0.05.
+Nó ghi feature/cache time, fit time, tổng thời gian và RSS đỉnh vào thư mục benchmark mới dưới
+`artifacts/benchmarks/`; không chạy toàn bộ MovieLens 25M.

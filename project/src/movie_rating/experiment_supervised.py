@@ -3,9 +3,11 @@
 import copy
 import gc
 import json
+import random
 import shutil
 import time
 from contextlib import nullcontext
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -25,6 +27,7 @@ from sklearn.preprocessing import StandardScaler
 from torch import nn
 
 from movie_rating.data.temporal import temporal_folds
+from movie_rating.experiment_config import RANDOM_FOREST_N_JOBS, preset_reduction_plan
 from movie_rating.experiment_reduction import FeatureReducer, ReductionSpec, reduction_variants
 from movie_rating.lab import LinearRating, chart, measured, series
 from movie_rating.lab_compact import regression_scores
@@ -36,6 +39,13 @@ from movie_rating.models.regression import (
     XGBoostRegression,
     _BoosterPredictor,
 )
+
+
+def _checkpoint_variant(path, name):
+    if path is None:
+        return None
+    path = Path(path)
+    return path.with_name(f"{path.stem}-{name}{path.suffix}")
 
 NAMES = {
     "linear": "Linear Regression",
@@ -109,7 +119,7 @@ def rating_model(algorithm, config, request, epochs=None):
     if algorithm == "linear":
         return LinearRating()
     if algorithm == "xgboost":
-        return XGBoostRegression(**config, n_jobs=2, seed=42)
+        return XGBoostRegression(**config, n_jobs=request.parameters.xgb_n_jobs, seed=42)
     if algorithm == "svd":
         return SVD(**config, epochs=epochs or request.epochs, seed=42)
     return NeuralCF(**config, epochs=epochs or request.epochs, patience=request.patience, seed=42)
@@ -165,7 +175,9 @@ class ReducedFeatureRating:
         return self
 
     def _fit_xgboost(self, raw, train, batches, progress, report):
-        model = XGBoostRegression(**self.config, n_jobs=2, seed=42)
+        model = XGBoostRegression(
+            **self.config, n_jobs=self.request.parameters.xgb_n_jobs, seed=42
+        )
         self.estimator = None
         output_dimensions = self.base_dimensions + self.reducer.output_dimensions
         if len(train) < 250_000:
@@ -211,7 +223,7 @@ class ReducedFeatureRating:
                 matrix_type = getattr(xgb, "ExtMemQuantileDMatrix", xgb.QuantileDMatrix)
                 if matrix_type is xgb.QuantileDMatrix:
                     iterator.cache_prefix = None
-                data = matrix_type(iterator, nthread=2)
+                data = matrix_type(iterator, nthread=model.n_jobs)
                 self.estimator = _BoosterPredictor(
                     xgb.train(model._estimator().get_xgb_params(), data,
                               num_boost_round=self.config["n_estimators"])
@@ -250,16 +262,22 @@ class ReducedFeatureRating:
 class HybridRatingAdapter:
     """Funk-SVD/NCF plus a learned correction from reduced profile interactions."""
 
-    def __init__(self, algorithm, config, request, variant, fit_scope, epochs=None, side_epochs=None):
+    def __init__(
+        self, algorithm, config, request, variant, fit_scope, epochs=None, side_epochs=None,
+        checkpoint_path=None, checkpoint_key=None,
+    ):
         self.algorithm, self.config, self.request = algorithm, config, request
         self.variant, self.fit_scope = variant, fit_scope
         self.epochs = epochs or request.epochs
         self.side_epochs = side_epochs or self.epochs
+        self.checkpoint_path, self.checkpoint_key = checkpoint_path, checkpoint_key
 
     def fit(self, train, movies, validation=None, progress=None, report=None):
         self.base_model = fit_rating(
             self.algorithm, self.config, self.request, train, movies, validation,
             epochs=self.epochs, progress=progress, log=report,
+            checkpoint_path=_checkpoint_variant(self.checkpoint_path, "base"),
+            checkpoint_key=f"{self.checkpoint_key}:base" if self.checkpoint_key else None,
         )
         self.base_best_epoch = getattr(self.base_model, "best_epoch", self.epochs)
         self.best_epoch = self.base_best_epoch
@@ -294,7 +312,16 @@ class HybridRatingAdapter:
                     self.side_model = Ridge(alpha=10.0).fit(profile_features, residual)
                     self.best_side_epoch = None
                 else:
-                    self._fit_neural_side(profile_features, residual, validation, progress, report)
+                    if report:
+                        report(
+                            "NCF hybrid · reducer, feature generation và correction branch dùng CPU; "
+                            "embedding/MLP nền dùng device NCF đã báo ở trên."
+                        )
+                    self._fit_neural_side(
+                        profile_features, residual, validation, progress, report,
+                        checkpoint_path=_checkpoint_variant(self.checkpoint_path, "side"),
+                        checkpoint_key=f"{self.checkpoint_key}:side" if self.checkpoint_key else None,
+                    )
                     if report:
                         report(
                             f"Epoch đã khóa cho refit Train + Validation · base NCF="
@@ -312,7 +339,10 @@ class HybridRatingAdapter:
                 axis=0,
             )
 
-    def _fit_neural_side(self, features, residual, validation, progress, report):
+    def _fit_neural_side(
+        self, features, residual, validation, progress, report, checkpoint_path=None,
+        checkpoint_key=None,
+    ):
         torch.manual_seed(42)
         self.side_model = nn.Sequential(
             nn.Linear(self.reducer.output_dimensions, self.config["hidden_size"]),
@@ -332,7 +362,26 @@ class HybridRatingAdapter:
         best, stale, snapshot = float("inf"), 0, None
         self.best_side_epoch = self.side_epochs
         self.learning_curve = []
-        for epoch in range(self.side_epochs):
+        first_epoch = 0
+        if checkpoint_path is not None and checkpoint_path.is_file():
+            saved = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+            if saved.get("checkpoint_key") != checkpoint_key:
+                raise ValueError("NCF hybrid checkpoint belongs to a different fit unit.")
+            self.side_model.load_state_dict(saved["model_state"])
+            optimizer.load_state_dict(saved["optimizer_state"])
+            first_epoch = int(saved["next_epoch"])
+            best, stale = saved["best_validation_rmse"], saved["stale_epochs"]
+            snapshot = saved["best_model_state"]
+            self.best_side_epoch = saved["best_epoch"]
+            self.learning_curve = saved["learning_curve"]
+            rng.bit_generator.state = saved["numpy_rng_state"]
+            torch.set_rng_state(saved["torch_cpu_rng_state"].cpu())
+            random.setstate(saved["python_rng_state"])
+            if report:
+                report(f"Tiếp tục nhánh correction NCF hybrid từ epoch {first_epoch + 1}.")
+        for epoch in range(first_epoch, self.side_epochs):
+            if stale >= self.request.patience:
+                break
             self.side_model.train()
             order = rng.permutation(len(features))
             total = 0.0
@@ -365,6 +414,27 @@ class HybridRatingAdapter:
                 curve_row["validation_correction_rmse"] = score
                 curve_row["validation_correction_mse"] = score**2
             self.learning_curve.append(curve_row)
+            if checkpoint_path is not None:
+                from movie_rating.models.neural import _save_training_checkpoint
+
+                _save_training_checkpoint(
+                    checkpoint_path,
+                    {
+                        "checkpoint_key": checkpoint_key,
+                        "next_epoch": epoch + 1,
+                        "model_state": copy.deepcopy(self.side_model.state_dict()),
+                        "optimizer_state": copy.deepcopy(optimizer.state_dict()),
+                        "stale_epochs": stale,
+                        "best_validation_rmse": best,
+                        "best_epoch": self.best_side_epoch,
+                        "best_model_state": copy.deepcopy(snapshot),
+                        "learning_curve": copy.deepcopy(self.learning_curve),
+                        "numpy_rng_state": copy.deepcopy(rng.bit_generator.state),
+                        "torch_cpu_rng_state": torch.get_rng_state().clone(),
+                        "torch_cuda_rng_states": [],
+                        "python_rng_state": random.getstate(),
+                    },
+                )
             if progress:
                 progress(epoch + 1, self.side_epochs)
             if report:
@@ -396,7 +466,8 @@ class HybridRatingAdapter:
 
 def fit_rating(
     algorithm, config, request, train, movies, validation=None, epochs=None, progress=None, log=None,
-    reduction_variant=None, fit_scope="train", side_epochs=None,
+    reduction_variant=None, fit_scope="train", side_epochs=None, checkpoint_path=None,
+    checkpoint_key=None,
 ):
     if reduction_variant is not None:
         if algorithm in ("linear", "xgboost"):
@@ -405,7 +476,8 @@ def fit_rating(
             return model
         model = HybridRatingAdapter(
             algorithm, config, request, reduction_variant, fit_scope, epochs=epochs,
-            side_epochs=side_epochs,
+            side_epochs=side_epochs, checkpoint_path=checkpoint_path,
+            checkpoint_key=checkpoint_key,
         )
         model.fit(train, movies, validation=validation, progress=progress, report=log)
         return model
@@ -413,7 +485,10 @@ def fit_rating(
     if hasattr(model, "set_movie_metadata"):
         model.set_movie_metadata(movies)
     if algorithm == "ncf":
-        model.fit(train, validation=validation, progress=progress, report=log)
+        model.fit(
+            train, validation=validation, progress=progress, report=log,
+            checkpoint_path=checkpoint_path, checkpoint_key=checkpoint_key,
+        )
     elif algorithm == "svd":
         model.fit(train, progress=progress, report=log)
     elif algorithm == "xgboost":
@@ -428,7 +503,7 @@ def fit_rating(
 def classifier(algorithm, config):
     if algorithm == "logistic":
         return LogisticRegression(**config, solver="saga", tol=1e-3, random_state=42)
-    return RandomForestClassifier(**config, n_jobs=1, random_state=42)
+    return RandomForestClassifier(**config, n_jobs=RANDOM_FOREST_N_JOBS, random_state=42)
 
 
 def _reduction_for(request):
@@ -523,14 +598,17 @@ def feature_fit(train, targets, movies, algorithm, config, report=None,
                     f"tối đa {config['max_iter']} vòng."
                     if algorithm == "logistic"
                     else f"Bắt đầu Random Forest · {config['n_estimators']} cây · "
-                    f"depth={config['max_depth']} · min_samples_leaf={config['min_samples_leaf']}."
+                    f"depth={config['max_depth']} · min_samples_leaf={config['min_samples_leaf']} · "
+                    f"{estimator.n_jobs} luồng CPU."
                 )
+            fit_started = time.perf_counter()
             estimator.fit(model_features, (train.rating >= 3.5).to_numpy(dtype=np.int8))
             if report:
                 report(
                     f"Đã fit Logistic · {int(estimator.n_iter_.max())} vòng tối ưu."
                     if algorithm == "logistic"
-                    else f"Đã fit xong {len(estimator.estimators_)} cây Random Forest."
+                    else f"Đã fit xong {len(estimator.estimators_)} cây Random Forest · "
+                    f"{time.perf_counter() - fit_started:.1f} giây."
                 )
     adapter = ClassificationAdapter(estimator, scaler, reducer, base_dimensions)
     adapter.reduction_metadata = reducer.metadata() if reducer is not None else None
@@ -560,7 +638,10 @@ def numeric_summary(folds):
     }
 
 
-def _supervised_single(splits, movies, request, update, reduction_variant=None, variant_id=None):
+def _supervised_single(
+    splits, movies, request, update, reduction_variant=None, variant_id=None,
+    progress_store=None,
+):
     train, validation, test = [splits[s] for s in ("train", "validation", "test")]
     binary = request.group == "classification"
     rows, charts, cv, best_configs, tuning = [], [], {}, {}, []
@@ -568,15 +649,30 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
     total_work = all_candidates + len(request.algorithms) * (CV_FOLDS + 1)
     step = 0
     reduction_kwargs = {"reduction_variant": reduction_variant} if reduction_variant else {}
+    variant_key = variant_id or "raw"
+    score_name = "F1" if binary else "RMSE"
     for algorithm in request.algorithms:
         label = f"{NAMES[algorithm]}" + (f" · {variant_id}" if variant_id else "")
         unit = "cây" if algorithm == "xgboost" else "rating" if algorithm == "linear" else "epoch"
         update(None, f"Bắt đầu {label} · {len(train):,} rating Train.")
-        options = []
-        for config in candidates(algorithm, request):
+        saved_unit = (
+            progress_store.get_unit(variant_key, algorithm) if progress_store else {}
+        )
+        options = list(saved_unit.get("options", []))
+        candidate_configs = candidates(algorithm, request)
+        if len(options) > len(candidate_configs):
+            raise ValueError("Saved validation work does not match the current candidate list.")
+        for config_index, config in enumerate(candidate_configs):
+            fit_key = f"{variant_key}/{algorithm}/validation-{config_index}"
+            if config_index < len(options):
+                if options[config_index].get("config") != config:
+                    raise ValueError("Saved validation configuration differs from this run.")
+                update(None, f"Đã nạp kết quả Validation đã lưu · {label} · cấu hình {config_index + 1}.")
+                step += 1
+                continue
             update(
                 None,
-                f"{label} · cấu hình {len(options) + 1}: "
+                f"{label} · cấu hình {config_index + 1}: "
                 f"{json.dumps(config, ensure_ascii=False, sort_keys=True)}",
             )
             update(8 + 85 * step / total_work, f"{label} · lựa chọn trên Validation")
@@ -616,6 +712,11 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
                     ),
                     log=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
                     **reduction_kwargs,
+                    checkpoint_path=(
+                        progress_store.checkpoint_path(fit_key)
+                        if progress_store and algorithm == "ncf" else None
+                    ),
+                    checkpoint_key=fit_key if algorithm == "ncf" else None,
                 )
                 val_scores = regression_scores(
                     validation.rating, model.predict(validation.userId, validation.movieId)
@@ -635,7 +736,10 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
                     "reduction": getattr(model, "reduction_metadata", None),
                 }
             )
-            score_name = "F1" if binary else "RMSE"
+            saved_unit["options"] = options
+            if progress_store:
+                progress_store.save_unit(variant_key, algorithm, saved_unit)
+                progress_store.clear_fit_checkpoints(fit_key)
             score_value = val_scores["f1" if binary else "rmse"]
             update(
                 None,
@@ -657,8 +761,15 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
             f"bắt đầu {CV_FOLDS} lượt CV thời gian.",
         )
         # Select on Validation first; CV is diagnostic, not another candidate search.
-        fold_rows = []
+        fold_rows = list(saved_unit.get("folds", []))
+        if len(fold_rows) > CV_FOLDS:
+            raise ValueError("Saved CV work contains folds outside the current protocol.")
         for index, (fit_idx, score_idx) in enumerate(temporal_folds(train, CV_FOLDS)):
+            fit_key = f"{variant_key}/{algorithm}/fold-{index + 1}"
+            if index < len(fold_rows):
+                update(None, f"Đã nạp kết quả CV fold {index + 1}/{CV_FOLDS} · {label}.")
+                step += 1
+                continue
             update(
                 8 + 85 * step / total_work,
                 f"{label} · CV thời gian {index + 1}/{CV_FOLDS}",
@@ -693,6 +804,11 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
                         **({"reduction_variant": reduction_variant,
                             "fit_scope": f"train_fold_{index + 1}"} if reduction_variant else {}),
                         **({"side_epochs": selected.get("side_epochs")} if selected.get("side_epochs") else {}),
+                        checkpoint_path=(
+                            progress_store.checkpoint_path(fit_key)
+                            if progress_store and algorithm == "ncf" else None
+                        ),
+                        checkpoint_key=fit_key if algorithm == "ncf" else None,
                     )
             start = time.perf_counter()
             prediction = (
@@ -717,6 +833,10 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
                     "reduction": getattr(model, "reduction_metadata", None),
                 }
             )
+            saved_unit["folds"] = fold_rows
+            if progress_store:
+                progress_store.save_unit(variant_key, algorithm, saved_unit)
+                progress_store.clear_fit_checkpoints(fit_key)
             update(
                 None,
                 f"{label} · xong CV {index + 1}/{CV_FOLDS} · "
@@ -748,59 +868,71 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
                 **selected["validation"],
             }
         )
-        update(
-            8 + 85 * step / total_work,
-            f"{NAMES[algorithm]} · refit Train + Validation và đánh giá Test",
-        )
-        combined = pd.concat([train, validation], ignore_index=True)
-        update(None, f"{NAMES[algorithm]} · refit {len(combined):,} rating Train + Validation.")
-        with measured() as timing:
-            if binary:
-                builder, final_model, xs = feature_fit(
-                    combined,
-                    [test],
-                    movies,
-                    algorithm,
-                    selected["config"],
-                    report=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
-                    **({"reduction_variant": reduction_variant,
-                        "fit_scope": "train_plus_validation"} if reduction_variant else {}),
-                )
-            else:
-                final_model = fit_rating(
-                    algorithm,
-                    selected["config"],
-                    request,
-                    combined,
-                    movies,
-                    epochs=selected["epochs"],
-                    progress=lambda epoch, total: update(
-                        8 + 85 * (step + epoch / total) / total_work,
-                        f"{NAMES[algorithm]} · refit Train + Validation · {unit} {epoch}/{total}",
-                    ),
-                    log=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
-                    **({"reduction_variant": reduction_variant,
-                        "fit_scope": "train_plus_validation"} if reduction_variant else {}),
-                    **({"side_epochs": selected.get("side_epochs")}
-                       if selected.get("side_epochs") else {}),
-                )
-        if reduction_variant is not None:
-            best_configs[algorithm]["reduction"] = final_model.reduction_metadata
-        start = time.perf_counter()
-        predicted = (
-            classification_predict(builder, final_model, test)
-            if binary
-            else final_model.predict(test.userId, test.movieId)
-        )
-        inference = time.perf_counter() - start
-        scores = (
-            classification_scores(test.rating >= 3.5, predicted, selected["threshold"])
-            if binary
-            else regression_scores(test.rating, predicted)
-        )
-        artifact = (builder, final_model) if binary else final_model
-        rows.append(
-            {
+        refit_key = f"{variant_key}/{algorithm}/refit"
+        final_info = saved_unit.get("final")
+        restored_final = final_info is not None
+        if restored_final:
+            final_row = final_info["row"]
+            roc_info = final_info.get("roc")
+            rows.append(final_row)
+            step += 1
+            update(None, f"Đã nạp kết quả refit/Test đã lưu · {label}.")
+        else:
+            update(
+                8 + 85 * step / total_work,
+                f"{NAMES[algorithm]} · refit Train + Validation và đánh giá Test",
+            )
+            combined = pd.concat([train, validation], ignore_index=True)
+            update(None, f"{NAMES[algorithm]} · refit {len(combined):,} rating Train + Validation.")
+            with measured() as timing:
+                if binary:
+                    builder, final_model, xs = feature_fit(
+                        combined,
+                        [test],
+                        movies,
+                        algorithm,
+                        selected["config"],
+                        report=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
+                        **({"reduction_variant": reduction_variant,
+                            "fit_scope": "train_plus_validation"} if reduction_variant else {}),
+                    )
+                else:
+                    final_model = fit_rating(
+                        algorithm,
+                        selected["config"],
+                        request,
+                        combined,
+                        movies,
+                        epochs=selected["epochs"],
+                        progress=lambda epoch, total: update(
+                            8 + 85 * (step + epoch / total) / total_work,
+                            f"{NAMES[algorithm]} · refit Train + Validation · {unit} {epoch}/{total}",
+                        ),
+                        log=lambda message: update(None, f"{NAMES[algorithm]} · {message}"),
+                        **({"reduction_variant": reduction_variant,
+                            "fit_scope": "train_plus_validation"} if reduction_variant else {}),
+                        **({"side_epochs": selected.get("side_epochs")}
+                           if selected.get("side_epochs") else {}),
+                        checkpoint_path=(
+                            progress_store.checkpoint_path(refit_key)
+                            if progress_store and algorithm == "ncf" else None
+                        ),
+                        checkpoint_key=refit_key if algorithm == "ncf" else None,
+                    )
+            start = time.perf_counter()
+            predicted = (
+                classification_predict(builder, final_model, test)
+                if binary
+                else final_model.predict(test.userId, test.movieId)
+            )
+            inference = time.perf_counter() - start
+            scores = (
+                classification_scores(test.rating >= 3.5, predicted, selected["threshold"])
+                if binary
+                else regression_scores(test.rating, predicted)
+            )
+            artifact = (builder, final_model) if binary else final_model
+            final_row = {
                 "algorithm": algorithm,
                 "name": NAMES[algorithm],
                 "split": "test",
@@ -813,18 +945,27 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
                 "model_bytes": serialized_size(artifact),
                 "refit_ratings": len(combined),
             }
-        )
-        step += 1
-        update(
-            None,
-            f"{NAMES[algorithm]} · Test {score_name}="
-            f"{scores['f1' if binary else 'rmse']:.6f} · "
-            f"fit cuối {timing['fit_seconds']:.2f}s · "
-            f"RSS đỉnh {timing['peak_rss_mb']:.1f} MiB.",
-        )
-        if binary and len(np.unique(test.rating >= 3.5)) == 2:
-            fpr, tpr, _ = roc_curve(test.rating >= 3.5, predicted)
-            stride = max(1, len(fpr) // 300)
+            roc_info = None
+            if binary and len(np.unique(test.rating >= 3.5)) == 2:
+                fpr, tpr, _ = roc_curve(test.rating >= 3.5, predicted)
+                stride = max(1, len(fpr) // 300)
+                roc_info = {"fpr": fpr[::stride].tolist(), "tpr": tpr[::stride].tolist()}
+            rows.append(final_row)
+            step += 1
+            saved_unit["final"] = {"row": final_row, "roc": roc_info}
+            if progress_store:
+                progress_store.save_unit(variant_key, algorithm, saved_unit)
+                progress_store.clear_fit_checkpoints(refit_key)
+            update(
+                None,
+                f"{NAMES[algorithm]} · Test {score_name}="
+                f"{scores['f1' if binary else 'rmse']:.6f} · "
+                f"fit cuối {timing['fit_seconds']:.2f}s · "
+                f"RSS đỉnh {timing['peak_rss_mb']:.1f} MiB.",
+            )
+        if reduction_variant is not None:
+            best_configs[algorithm]["reduction"] = final_row.get("reduction")
+        if binary and roc_info:
             charts.append(
                 chart(
                     -1,
@@ -832,7 +973,7 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
                     "line",
                     "False Positive Rate",
                     "True Positive Rate",
-                    [series(label, fpr[::stride], tpr[::stride])],
+                    [series(label, roc_info["fpr"], roc_info["tpr"])],
                     "test",
                 )
             )
@@ -884,9 +1025,10 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
                     "validation",
                 )
             )
-        del final_model, artifact, combined, predicted
-        if binary:
-            del builder, xs
+        if not restored_final:
+            del final_model, artifact, combined, predicted
+            if binary:
+                del builder, xs
         gc.collect()
     winner = min(
         [r for r in rows if r["split"] == "validation"], key=lambda r: -r[key] if binary else r[key]
@@ -937,6 +1079,7 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
         "nếu cần tối ưu tài nguyên, xác nhận lại ứng viên nhỏ/nhanh trên một thí nghiệm mới. "
         "Không chọn lại bằng Test.",
     }
+    result["selected_variant_id"] = winner["algorithm"]
     if binary:
         result["class_balance"] = {
             s: {
@@ -949,17 +1092,12 @@ def _supervised_single(splits, movies, request, update, reduction_variant=None, 
     return result
 
 
-def supervised(splits, movies, request, update):
-    if request.reduction_mode == "off":
-        return _supervised_single(splits, movies, request, update)
+def supervised(splits, movies, request, update, progress_store=None):
+    if request.reduction_mode == "off" and request.preset_id is None:
+        return _supervised_single(
+            splits, movies, request, update, progress_store=progress_store
+        )
 
-    spec = ReductionSpec(
-        mode=request.reduction_mode,
-        methods=tuple(request.reduction_methods),
-        components=tuple(request.components),
-        seed=request.seed,
-        scale=True,
-    )
     combined = {
         "cv_protocol": "per_user_expanding_time_v1",
         "cv_folds": CV_FOLDS,
@@ -970,17 +1108,48 @@ def supervised(splits, movies, request, update):
         "tuning": [],
         "notes": [],
     }
-    variants = reduction_variants(spec)
-    for descriptor in variants:
+    if request.preset_id:
+        grouped_plans = {}
+        for algorithm in request.algorithms:
+            plan = preset_reduction_plan(request.group, algorithm, request.reduction_choice)
+            descriptor = (
+                {"variant_id": f"{plan['method']}_{plan['components']}", **plan}
+                if plan else {"variant_id": "raw", "method": None, "components": None}
+            )
+            grouped_plans.setdefault(
+                descriptor["variant_id"], {"descriptor": descriptor, "algorithms": []}
+            )["algorithms"].append(algorithm)
+        planned_runs = list(grouped_plans.values())
+    else:
+        spec = ReductionSpec(
+            mode=request.reduction_mode,
+            methods=tuple(request.reduction_methods),
+            components=tuple(request.components),
+            seed=request.seed,
+            scale=True,
+        )
+        planned_runs = [
+            {"descriptor": descriptor, "algorithms": request.algorithms}
+            for descriptor in reduction_variants(spec)
+        ]
+
+    reduction_variants_used = []
+    for planned in planned_runs:
+        descriptor = planned["descriptor"]
         descriptor_id = descriptor["variant_id"]
         reducer = ({"method": descriptor["method"],
                     "components": descriptor["components"]}
                    if descriptor["method"] else None)
         update(None, f"Biểu diễn {descriptor_id} · cohort và folds giữ cố định.")
+        subrequest = (
+            request.model_copy(update={"algorithms": planned["algorithms"]})
+            if request.preset_id else request
+        )
         result = _supervised_single(
-            splits, movies, request, update,
+            splits, movies, subrequest, update,
             reduction_variant=reducer,
             variant_id=descriptor_id,
+            progress_store=progress_store,
         )
         for row in result["rows"]:
             variant_id = f"{row['algorithm']}_{descriptor_id}"
@@ -1034,6 +1203,11 @@ def supervised(splits, movies, request, update):
         combined["rows"].extend(result["rows"])
         combined["notes"].extend(result["notes"])
         combined.setdefault("class_balance", result.get("class_balance"))
+        reduction_variants_used.extend(
+            {"variant_id": f"{algorithm}_{descriptor_id}", "algorithm": algorithm,
+             "method": descriptor["method"], "components": descriptor["components"]}
+            for algorithm in planned["algorithms"]
+        )
 
     binary = request.group == "classification"
     metric = "f1" if binary else "rmse"
@@ -1045,13 +1219,10 @@ def supervised(splits, movies, request, update):
         f"({metric}={winner[metric]:.4f}). Test của từng biến thể được báo riêng; "
         "Test không tham gia chọn cấu hình, method hoặc số components."
     )
+    combined["selected_variant_id"] = winner["variant_id"]
     combined["reduction"] = {
         "mode": request.reduction_mode,
-        "variants": [
-            {"variant_id": descriptor["variant_id"], "method": descriptor["method"],
-             "components": descriptor["components"]}
-            for descriptor in variants
-        ],
+        "variants": reduction_variants_used,
         "selection_metric": metric,
         "selected_variant_id": winner["variant_id"],
         "feature_family": "user_preference_movie_genre_interactions",

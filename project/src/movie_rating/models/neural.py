@@ -1,6 +1,11 @@
 """Neural collaborative filtering adapted to explicit 0.5–5 ratings."""
 
 import copy
+import os
+import random
+import time
+from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 import torch
@@ -8,6 +13,27 @@ from torch import nn
 
 from movie_rating.memory import BATCH_ROWS
 from movie_rating.models.baseline import BiasBaseline
+
+
+def _save_training_checkpoint(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.stem}.{uuid4().hex[:8]}.tmp")
+    try:
+        with temporary.open("wb") as stream:
+            torch.save(value, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        for attempt in range(8):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt == 7:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 class RatingNetwork(nn.Module):
@@ -66,7 +92,10 @@ class NeuralCF(BiasBaseline):
         self.learning_rate, self.dropout, self.patience = learning_rate, dropout, patience
         self.profile_steps, self.seed = profile_steps, seed
 
-    def fit(self, ratings, validation=None, progress=None, report=None):
+    def fit(
+        self, ratings, validation=None, progress=None, report=None,
+        checkpoint_path=None, checkpoint_key=None,
+    ):
         if report:
             report("Đang fit bias baseline trước khi học embedding/MLP.")
         super().fit(ratings)
@@ -104,9 +133,32 @@ class NeuralCF(BiasBaseline):
             best, stale, checkpoint = float("inf"), 0, None
             self.learning_curve = []
             self.best_epoch = self.epochs
+            first_epoch = 0
+            if checkpoint_path is not None and Path(checkpoint_path).is_file():
+                saved = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+                if saved.get("checkpoint_key") != checkpoint_key:
+                    raise ValueError("NCF checkpoint belongs to a different fit unit.")
+                self.network.load_state_dict(saved["model_state"])
+                optimizer.load_state_dict(saved["optimizer_state"])
+                first_epoch = int(saved["next_epoch"])
+                best, stale = saved["best_validation_rmse"], saved["stale_epochs"]
+                checkpoint = saved["best_model_state"]
+                self.best_epoch = saved["best_epoch"]
+                self.learning_curve = saved["learning_curve"]
+                rng.bit_generator.state = saved["numpy_rng_state"]
+                torch.set_rng_state(saved["torch_cpu_rng_state"].cpu())
+                if self.device.type == "cuda":
+                    torch.cuda.set_rng_state_all(
+                        [state.cpu() for state in saved["torch_cuda_rng_states"]]
+                    )
+                random.setstate(saved["python_rng_state"])
+                if report:
+                    report(f"Tiếp tục NCF từ epoch {first_epoch + 1} sau checkpoint an toàn.")
             metric_rows = np.linspace(0, len(ratings) - 1, min(50_000, len(ratings)), dtype=int)
             metric_sample = ratings.iloc[metric_rows]
-            for epoch in range(self.epochs):
+            for epoch in range(first_epoch, self.epochs):
+                if stale >= self.patience:
+                    break
                 self.network.train()
                 total = 0.0
                 order = rng.permutation(len(values))
@@ -135,6 +187,27 @@ class NeuralCF(BiasBaseline):
                     else:
                         stale += 1
                 self.learning_curve.append(row)
+                if checkpoint_path is not None:
+                    _save_training_checkpoint(
+                        checkpoint_path,
+                        {
+                            "checkpoint_key": checkpoint_key,
+                            "next_epoch": epoch + 1,
+                            "model_state": copy.deepcopy(self.network.state_dict()),
+                            "optimizer_state": copy.deepcopy(optimizer.state_dict()),
+                            "stale_epochs": stale,
+                            "best_validation_rmse": best,
+                            "best_epoch": self.best_epoch,
+                            "best_model_state": copy.deepcopy(checkpoint),
+                            "learning_curve": copy.deepcopy(self.learning_curve),
+                            "numpy_rng_state": copy.deepcopy(rng.bit_generator.state),
+                            "torch_cpu_rng_state": torch.get_rng_state().clone(),
+                            "torch_cuda_rng_states": [
+                                state.clone() for state in torch.cuda.get_rng_state_all()
+                            ] if self.device.type == "cuda" else [],
+                            "python_rng_state": random.getstate(),
+                        },
+                    )
                 if report:
                     message = f"Epoch {epoch + 1}/{self.epochs} · Train MSE={row['train_mse']:.6f}"
                     if "validation_rmse" in row:

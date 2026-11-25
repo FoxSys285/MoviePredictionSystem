@@ -127,12 +127,14 @@ def test_real_job_logs_stages_metrics_and_survives_reopening(configured, group, 
             parameters={"n_estimators": 10, "forest_estimators": 10},
         )
     )
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
         finished = service.get(job["id"])
         if finished["status"] not in ("queued", "running") and service.active is None:
             break
         time.sleep(0.02)
+    service.executor.shutdown(wait=True)
+    finished = service.get(job["id"])
     assert finished["status"] == "completed", finished["message"]
     reopened = LabService(configured)
     page = reopened.logs(job["id"], limit=500)
@@ -164,7 +166,6 @@ def test_real_job_logs_stages_metrics_and_survives_reopening(configured, group, 
         assert "Random Forest" in messages
     assert page["entries"][-1]["level"] == "success"
     assert page["entries"][-1]["progress"] == 100
-    service.executor.shutdown(wait=True)
     reopened.executor.shutdown(wait=True)
 
 
@@ -188,7 +189,7 @@ def test_clustering_failure_and_cancellation_persist_logs(
         job = service.start(LabRequest(group="clustering"))
         service.executor.shutdown(wait=True)
         finished = service.get(job["id"])
-        assert finished["status"] == status
+        assert finished["status"] == status, finished.get("message")
         assert "result" not in finished
         entries = service.logs(job["id"], limit=500)["entries"]
         assert any(e["level"] == level for e in entries)

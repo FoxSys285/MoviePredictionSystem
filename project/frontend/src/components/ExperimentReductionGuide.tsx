@@ -1,121 +1,82 @@
-import type { ExperimentConfigValue } from "./ExperimentConfig";
-import type { LabGroup } from "../lib/lab";
-import { usePreferences } from "../lib/preferences";
+import type { LabGroup, LabPreset } from "../lib/lab";
 
-const groupExplanation: Record<string, string> = {
-  rating: "Dự đoán rating: Linear/XGBoost nén block tương tác sở thích user × thể loại phim; Funk SVD và NCF giữ latent factors/embeddings rồi cộng nhánh hiệu chỉnh từ hồ sơ nén. TruncatedSVD là reducer, khác Funk SVD.",
-  classification: "Phân loại sở thích: nén block tương tác user × thể loại trước Logistic Regression hoặc Random Forest; giữ đặc trưng nền, chọn mô hình và threshold Logistic bằng Validation.",
-  clustering: "Phân cụm: nén sở thích thể loại tương đối và tần suất của user; chọn K hoặc tìm lại eps trong không gian đó. Tên/mô tả cụm vẫn lấy từ thể loại gốc.",
-  association: "Luật kết hợp: nén hồ sơ user Train để tạo nhóm rồi chạy Apriori trên transaction phim boolean ban đầu. Apriori toàn cục vẫn là baseline; không nén transaction và không dùng Validation/Test để fit reducer.",
-  reinforcement: "Học tăng cường: chỉ nén profile sở thích và tần suất đưa vào DQN; giữ nguyên action mask, số bước còn lại và cờ phản hồi. Random/Popularity không cần reducer; giảm chiều không khử được thiên lệch reward offline.",
+export type ReductionChoice = "off" | "pca" | "truncated_svd";
+
+const descriptions: Record<string, string> = {
+  rating: "Nén đặc trưng tương tác cho Linear khi phù hợp.",
+  classification: "Nén đặc trưng tương tác cho Logistic khi phù hợp.",
+  clustering: "Nén hồ sơ người dùng trước khi phân cụm.",
+  association: "Nén hồ sơ để phân nhóm trước Apriori.",
+  reinforcement: "Có thể nén hồ sơ đầu vào của DQN.",
+  pca: "Đối chiếu PCA và TruncatedSVD trên hồ sơ Train.",
 };
 
-const methodDetails: Record<"pca" | "truncated_svd", { summary: string }> = {
-  pca: {
-    summary: "PCA trừ trung bình của đặc trưng đã scale, sau đó giữ các hướng có phương sai lớn nhất.",
-  },
-  truncated_svd: {
-    summary: "TruncatedSVD chiếu không trừ trung bình. Explained variance là phương sai thực tế của thành phần chiếu chia tổng phương sai đầu vào đã scale; đây không phải tỷ lệ năng lượng.",
-  },
-};
-
-const groupApplications: Record<string, Record<"pca" | "truncated_svd", string>> = {
-  rating: {
-    pca: "PCA thay block tương tác nén cho Linear/XGBoost; SVD/NCF nhận profile nén ở nhánh hiệu chỉnh, còn bias và latent factors/embeddings được giữ.",
-    truncated_svd: "TruncatedSVD thay block tương tác cho Linear/XGBoost hoặc cấp profile cho nhánh hybrid SVD/NCF; không thay Funk SVD Collaborative Filtering.",
-  },
-  classification: {
-    pca: "Vector PCA ghép với đặc trưng nền trước Logistic/Random Forest; scaler và reducer fit riêng trong Train và từng fold, threshold Logistic chọn bằng Validation.",
-    truncated_svd: "Vector TruncatedSVD ghép với đặc trưng nền trước Logistic/Random Forest; scaler và reducer fit riêng trong Train và từng fold, threshold Logistic chọn bằng Validation.",
-  },
-  clustering: {
-    pca: "Fit scaler và PCA trên user fit, dùng không gian mới để chọn K-Means hoặc tìm eps/min_samples cho DBSCAN; mô tả cụm vẫn tính từ genre gốc.",
-    truncated_svd: "Fit scaler và TruncatedSVD trên user fit, rồi khảo sát lại K-Means/DBSCAN trong không gian chiếu; mô tả cụm vẫn tính từ genre gốc.",
-  },
-  association: {
-    pca: "PCA profile user Train để tạo nhóm; Apriori mỗi nhóm đọc transaction boolean ban đầu và giữ Apriori toàn cục làm baseline.",
-    truncated_svd: "TruncatedSVD profile user Train để tạo nhóm; Apriori mỗi nhóm đọc transaction boolean ban đầu và giữ Apriori toàn cục làm baseline.",
-  },
-  reinforcement: {
-    pca: "PCA chỉ nén profile sở thích/tần suất đưa vào DQN; action mask, bước còn lại và cờ feedback được nối nguyên trạng.",
-    truncated_svd: "TruncatedSVD chỉ nén profile sở thích/tần suất đưa vào DQN; action mask, bước còn lại và cờ feedback được nối nguyên trạng.",
-  },
-};
+const methodDescriptions = {
+  pca: "Nén hồ sơ sở thích, giữ các hướng biến thiên chính.",
+  truncated_svd: "Nén đặc trưng bằng phép chiếu không trừ trung bình.",
+} as const;
 
 export function ExperimentReductionGuide({
   group,
-  config,
-  onToggleMethod,
+  preset,
+  algorithms,
+  choice,
+  onChange,
   disabled,
 }: {
   group: LabGroup;
-  config: ExperimentConfigValue;
-  onToggleMethod: (method: "pca" | "truncated_svd") => void;
+  preset?: LabPreset;
+  algorithms: string[];
+  choice: ReductionChoice;
+  onChange: (choice: ReductionChoice) => void;
   disabled: boolean;
 }) {
-  const { t } = usePreferences();
-  const modes: Record<ExperimentConfigValue["reduction_mode"], string> = {
-    off: "Tắt · giữ biểu diễn gốc",
-    enabled: "Chỉ biểu diễn giảm chiều",
-    compare: "So sánh gốc và giảm chiều",
-  };
-  const components = config.components.join(", ");
-
+  const methods = ["off", "pca", "truncated_svd"] as const;
   return (
     <section
       className="lab-section lab-reduction-guide"
       aria-labelledby="lab-reduction-guide-title"
       data-testid="lab-reduction-guide"
       data-group-id={group.id}
-      data-mode={config.reduction_mode}
     >
-      <div className="lab-section-heading">
+      <div className="lab-reduction-heading">
         <div>
-          <span className="lab-kicker">{t("THÀNH PHẦN DÙNG CHUNG")}</span>
-          <h2 id="lab-reduction-guide-title">{t("Giảm chiều dữ liệu")}</h2>
+          <h2 id="lab-reduction-guide-title">Giảm chiều dữ liệu</h2>
+          <p>{descriptions[group.id] ?? "Giảm chiều theo preset của nhóm."}</p>
         </div>
-        <span className="lab-badge" data-testid="reduction-mode">
-          {t(modes[config.reduction_mode])}
-        </span>
       </div>
-      <p className="lab-reduction-context">{t(groupExplanation[group.id])}</p>
-      <p className="lab-muted">
-        {t("Mặc định đã chọn cả PCA và TruncatedSVD. Chọn phương pháp ngay trên thẻ; chế độ chạy và components được chỉnh trong cấu hình.")}
-      </p>
-      <div className="lab-reduction-grid">
-        {(["pca", "truncated_svd"] as const).map((method) => {
-          const selected = config.reduction_methods.includes(method);
-          const active = config.reduction_mode !== "off" && selected;
+      <div className="lab-reduction-grid" role="radiogroup" aria-label="Phương pháp giảm chiều">
+        {methods.map((method) => {
+          const appliedTo = algorithms.filter(
+            (algorithm) => preset?.algorithms[algorithm]?.reduction?.method === method,
+          );
+          const selected = choice === method;
+          const state = selected ? "Đã chọn" : "Chưa chọn";
+          const dimension = appliedTo
+            .map((algorithm) => `${group.algorithms.find((item) => item.id === algorithm)?.name ?? algorithm} · ${preset?.algorithms[algorithm]?.reduction?.components} chiều`)
+            .join(", ");
           return (
             <article
-              className={`lab-reduction-card${active ? " active" : ""}`}
+              className={`lab-reduction-card${selected ? " active" : ""}`}
               key={method}
               data-testid={`reduction-card-${method}`}
               data-method={method}
-              data-active={active}
-              data-selected={selected}
+              data-active={appliedTo.length > 0}
             >
               <div className="lab-reduction-card-heading">
-                <h3>{method === "pca" ? "PCA" : "TruncatedSVD"}</h3>
-                <span className={`lab-reduction-status${active ? " active" : ""}`}>
-                  {t(active ? "Đang dùng" : selected ? "Đã chọn · đang tắt" : "Không chọn")}
+                <h3>{method === "off" ? "Không giảm chiều" : method === "pca" ? "PCA" : "TruncatedSVD"}</h3>
+                <span className={`lab-reduction-status${selected ? " active" : ""}`}>
+                  {state}
                 </span>
               </div>
-              <p>{t(methodDetails[method].summary)}</p>
-              <div className="lab-reduction-application">
-                <strong>{t("Trong nhóm này")}</strong>
-                <p>{t(groupApplications[group.id][method])}</p>
-              </div>
-              <small>{t("Components đang chọn: {components}", { components })}</small>
-              <button
-                className="lab-reduction-toggle"
-                type="button"
-                aria-pressed={selected}
-                disabled={disabled || (selected && config.reduction_methods.length === 1)}
-                onClick={() => onToggleMethod(method)}
-              >
-                {t(selected ? "Bỏ chọn" : "Chọn phương pháp")}
-              </button>
+              <p>{method === "off" ? "Dùng đặc trưng gốc, bỏ qua bước giảm chiều." : methodDescriptions[method]}</p>
+              {appliedTo.length > 0 && <small>{dimension}</small>}
+              {selected && method !== "off" && !appliedTo.length && <small>Không áp dụng cho các thuật toán đang chọn.</small>}
+              <label className="lab-reduction-toggle">
+                <input type="radio" name="reduction-choice" value={method} checked={selected}
+                  disabled={disabled} onChange={() => onChange(method)}/>{" "}
+                {method === "off" ? "Bỏ giảm chiều" : `Chọn ${method === "pca" ? "PCA" : "TruncatedSVD"}`}
+              </label>
             </article>
           );
         })}

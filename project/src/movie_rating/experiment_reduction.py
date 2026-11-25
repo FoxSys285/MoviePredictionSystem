@@ -46,6 +46,8 @@ class FeatureReducer:
         self.scale = bool(scale)
         self.batch_rows = int(batch_rows)
         self.fitted = False
+        self.transform_seconds = 0.0
+        self.transform_calls = 0
 
     @staticmethod
     def _batch(x, start, stop):
@@ -137,6 +139,7 @@ class FeatureReducer:
     def transform(self, X):
         if not self.fitted:
             raise RuntimeError("Reducer chưa được fit.")
+        started = time.perf_counter()
         if len(X.shape) != 2 or X.shape[1] != self.input_dimensions:
             raise ValueError(
                 f"Input có shape {X.shape}; cần (n, {self.input_dimensions})."
@@ -147,6 +150,8 @@ class FeatureReducer:
             block = self._batch(X, start, stop)
             block = (block - self.input_mean_) / self.input_scale_
             output[start:stop] = (block - self.center_) @ self.components_.T
+        self.transform_seconds += time.perf_counter() - started
+        self.transform_calls += 1
         return output
 
     def inverse_transform(self, Z):
@@ -177,6 +182,8 @@ class FeatureReducer:
             "fit_scope": self.fit_scope,
             "scale": self.scale,
             "fit_seconds": self.fit_seconds,
+            "transform_seconds": self.transform_seconds,
+            "transform_calls": self.transform_calls,
             "fingerprint": self.fingerprint,
         }
 

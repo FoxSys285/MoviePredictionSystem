@@ -4,7 +4,9 @@ export type Criterion = { key: string; name: string; definition: string; interpr
 export type ChartGuide = { name: string; axes: string; question: string };
 export type LabGroup = { id: LabGroupId; title: string; question: string; algorithms: { id: string; name: string; description: string; output: string }[]; metrics: Criterion[]; charts: ChartGuide[] };
 export type DatasetStats = { ratings:number; users:number; movies:number; catalog_movies:number; genres:number; rating_min:number; rating_max:number; rating_mean:number; sparsity:number };
-export type LabCatalog = { version: number; source: string; groups: LabGroup[]; data_ready: boolean; statistics?:DatasetStats; dataset?:{splits?:Record<string,{ratings:number;users:number;movies:number}>;settings?:{data?:{user_sample_fraction?:number}}} };
+export type PresetSetting = { label:string; value:string };
+export type LabPreset = { id:string; version:number; label:string; common:PresetSetting[]; algorithms:Record<string,{settings:PresetSetting[];reduction:{method:"pca"|"truncated_svd";components:number}|null}>; tuning:boolean };
+export type LabCatalog = { version: number; source: string; groups: LabGroup[]; presets?:Partial<Record<LabGroupId,LabPreset>>; data_ready: boolean; statistics?:DatasetStats; dataset?:{splits?:Record<string,{ratings:number;users:number;movies:number}>;settings?:{data?:{user_sample_fraction?:number}}} };
 export type LabPoint = { x: string | number; y: number | null };
 export type LabChart = { index: number; metric_key?: string; title: string; kind: "bar" | "line" | "scatter"; x_label: string; y_label: string; series: { label: string; points: LabPoint[] }[]; split: string };
 export type LabRow = { algorithm: string; name: string; split: string; [key: string]: unknown };
@@ -12,7 +14,7 @@ export type LabRule = { antecedents:string[]; consequents:string[]; support:numb
 export type ReductionVariant = { variant_id:string; method:string|null; components:number|null; [key:string]:unknown };
 export type GroupedAprioriVariant = { variant_id:string; k:number; rule_summary:{rules:number;support_in_group_mean:number|null;support_global_mean:number|null;fallback_groups:number;empty_transactions:number}; groups:{group:number;users:number;status:string;rule_count:number;itemsets?:number}[]; validation_ndcg:number|null; validation_coverage:number; model_bytes:number; fit_metadata:Record<string,unknown> };
 export type LabResult = {
-  schema_version: number; group: LabGroupId; rows: LabRow[]; charts: LabChart[]; notes: string[]; selection?:string;
+  schema_version: number; group: LabGroupId; rows: LabRow[]; charts: LabChart[]; notes: string[]; selection?:string; selected_variant_id?:string; pipeline_timings?:Record<string,number|null>; config?:Record<string,unknown>;
   reduction?:{mode:string;variants:ReductionVariant[];selected_variant_id?:string|null;selection_metric?:string;feature_family?:string;transaction_reduction?:boolean;reason?:string};
   rl_protocol?:{name:string;training_split:string;evaluation:string;checkpoint_selection:string;checkpoint_step:number;test_used_for_selection:boolean;action_limit_requested:number;action_limit_actual:number;horizon:number;train_support_query_users:number;train_excluded_support_query_users:number;train_sweeps_requested:number;train_steps_budget:number;train_steps_actual:number;validation_sampled_users:number;test_sampled_users:number;training_user_limit:number;validation_cohort?:Record<string,number>;test_cohort?:Record<string,number>};
   paired_test_uncertainty?:{reference_policy:string;policies:Record<string,{users:number;mean_delta:number|null;ci95:number[]|null;reason?:string|null}>};
@@ -27,10 +29,10 @@ export type LabResult = {
   class_balance?:Record<string,{positive:number;negative:number;positive_fraction:number}>;
   rules?:LabRule[]; search?:Record<string,unknown>[];
   clusters?:{algorithm:string;variant_id?:string;qualified?:boolean;stability?:{adjusted_rand_mean:number|null;joint_coverage_mean:number;comparisons:number};profiles:{cluster:number;users:number;genre_means:Record<string,number>}[]}[];
-  runtime?:{isolated_process?:boolean;automatic_memory_limit?:boolean;memory_budget_mb?:number;worker_peak_private_mb?:number;system_min_available_mb?:number;processor:string;cpu_count:number;ram_bytes:number;device:string;python:string;platform:string};
+  runtime?:{isolated_process?:boolean;automatic_memory_limit?:boolean;memory_budget_mb?:number;worker_peak_private_mb?:number;system_min_available_mb?:number;processor:string;cpu_count:number;ram_bytes:number;device:string;python:string;platform:string;xgb_n_jobs?:number|null;threadpool_limit?:number;torch_cuda_runtime?:string|null};
   provenance: { split_files?:Record<string,string>|null;source_prepared_files?:Record<string,string>;metadata_file?:string; association_source?:{mode:"full_prepared_train";train_file:string;movies_file:string;heldout_files:string[];prepared_user_sample_fraction:number|null}; exclusions?:{excluded_users:number;excluded_ratings:number}; protocol?: string; sampled_ratings: number; sampled_users: number; sample?:DatasetStats; prepared?:DatasetStats; splits: Record<string, { ratings: number }> };
 };
-export type LabJob = { id: string; group: LabGroupId; status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted"; progress: number; message: string; created_at: string; finished_at?: string; cancel_requested?: boolean; result?: LabResult };
+export type LabJob = { id: string; group: LabGroupId; status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted"; progress: number; message: string; created_at: string; finished_at?: string; cancel_requested?: boolean; resume_available?:boolean; completed_work_units?:number; epoch_checkpoint_available?:boolean; request?:{algorithms?:string[];reduction_choice?:"off"|"pca"|"truncated_svd"|null;reduction_mode?:"off"|"enabled"|"compare";reduction_methods?:("pca"|"truncated_svd")[]}; result?: LabResult };
 export const busy = (job: LabJob) => ["queued", "running"].includes(job.status);
 export const metricNumber = (value: unknown, language = "vi") => {
   if (typeof value !== "number" || !Number.isFinite(value)) return "N/A";

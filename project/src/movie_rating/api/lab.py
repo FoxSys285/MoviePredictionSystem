@@ -42,6 +42,15 @@ def lab_router(settings):
         except FileNotFoundError as error:
             raise HTTPException(404, str(error)) from error
 
+    @router.post('/runs/{run_id}/resume', status_code=202)
+    def resume(run_id: str):
+        try:
+            return service.resume(run_id)
+        except FileNotFoundError as error:
+            raise HTTPException(404, str(error)) from error
+        except RuntimeError as error:
+            raise HTTPException(409, str(error)) from error
+
     @router.get('/runs/{run_id}/logs')
     def logs(run_id: str, cursor: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=500)):
         try:

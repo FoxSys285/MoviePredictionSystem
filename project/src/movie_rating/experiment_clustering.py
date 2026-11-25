@@ -407,9 +407,12 @@ def evaluate_ranking(splits, profiles, assignments, request, update):
 
 
 def _clustering_single(splits, movies, request, update, reduction_variant=None):
+    pipeline_started = time.perf_counter()
+    feature_started = time.perf_counter()
     profiles = taste_profiles(
         splits["train"], movies, request.min_user_ratings, request.cluster_shrinkage, update
     )
+    feature_creation_seconds = time.perf_counter() - feature_started
     raw = profiles.features
     update(
         None,
@@ -425,6 +428,7 @@ def _clustering_single(splits, movies, request, update, reduction_variant=None):
     selection_scale = TasteScale.fit(raw[fit_indices])
     selection_x = selection_scale.transform(raw)
     selection_reducer = None
+    selection_reducer_fit_seconds = 0.0
     if reduction_variant is not None:
         selection_reducer = FeatureReducer(
             reduction_variant["method"], reduction_variant["components"], seed=request.seed,
@@ -435,9 +439,13 @@ def _clustering_single(splits, movies, request, update, reduction_variant=None):
                             "genres": profiles.genres},
             fit_scope="train_user_fit_selection",
         )
+        selection_reducer_fit_seconds = selection_reducer.fit_seconds
         update(None, f"Reducer {selection_reducer.method} · {selection_reducer.input_dimensions}→"
                f"{selection_reducer.output_dimensions} · fit {len(fit_indices):,} Train users for tuning.")
         selection_x = selection_reducer.transform(selection_x)
+    selection_transform_seconds = (
+        selection_reducer.transform_seconds if selection_reducer is not None else 0.0
+    )
     fit_x = selection_x[fit_indices]
     neighborhoods = None
     if "dbscan" in request.algorithms:
@@ -449,7 +457,32 @@ def _clustering_single(splits, movies, request, update, reduction_variant=None):
         )
         neighborhoods = Neighborhoods(fit_x)
         neighborhoods.prepare([m for m in request.min_samples_values if m <= len(fit_x)], update)
+
+    # The selected algorithms share the same frozen Train profiles and preset reducer.
+    final_scale = TasteScale.fit(raw)
+    final_scaled = final_scale.transform(raw)
+    final_reducer = None
+    final_reduction_metadata = None
+    if reduction_variant is not None:
+        final_reducer = FeatureReducer(
+            reduction_variant["method"], reduction_variant["components"], seed=request.seed,
+            scale=True,
+        ).fit(
+            final_scaled,
+            feature_schema={"family": "relative_genre_preference_and_frequency",
+                            "genres": profiles.genres},
+            fit_scope="train_all_eligible_users",
+        )
+        final_reducer_fit_seconds = final_reducer.fit_seconds
+        final_x = final_reducer.transform(final_scaled)
+        final_reduction_metadata = final_reducer.metadata()
+    else:
+        final_reducer_fit_seconds = 0.0
+        final_x = final_scaled
+
     rows, search, winners, charts, assignments = [], [], [], [], {}
+    model_training_seconds = 0.0
+    model_evaluation_seconds = 0.0
     for aid in request.algorithms:
         name = "K-Means" if aid == "kmeans" else "DBSCAN"
         update(
@@ -486,6 +519,7 @@ def _clustering_single(splits, movies, request, update, reduction_variant=None):
                     neighborhoods=neighborhoods,
                     update=update,
                 )
+            model_training_seconds += timing["fit_seconds"]
             train_labels = candidate.model.labels_ if aid == "dbscan" else candidate.predict(fit_x)
             train_score = scores(selection_x[fit_indices], train_labels)
             held_score = scores(selection_x[held_indices], candidate.predict(selection_x[held_indices]))
@@ -521,28 +555,10 @@ def _clustering_single(splits, movies, request, update, reduction_variant=None):
         )
         progress = 20 + 60 * (request.algorithms.index(aid) + 0.8) / len(request.algorithms)
         update(progress, f"{aid} · fit cấu hình đã chọn trên hồ sơ lịch sử Train")
-        # Final fit has its own frozen representation. It must not overwrite the
-        # selection-space arrays reused by the next algorithm's hyperparameter search.
-        final_scale = TasteScale.fit(raw)
-        final_scaled = final_scale.transform(raw)
-        final_reducer = None
-        final_reduction_metadata = None
-        if reduction_variant is not None:
-            final_reducer = FeatureReducer(
-                reduction_variant["method"], reduction_variant["components"], seed=request.seed,
-                scale=True,
-            ).fit(
-                final_scaled,
-                feature_schema={"family": "relative_genre_preference_and_frequency",
-                                "genres": profiles.genres},
-                fit_scope="train_all_eligible_users",
-            )
-            final_reduction_metadata = final_reducer.metadata()
-            final_x = final_reducer.transform(final_scaled)
-        else:
-            final_x = final_scaled
         with measured() as timing:
             model = fit_cluster(aid, best, final_x, seed=request.seed, update=update)
+        model_training_seconds += timing["fit_seconds"]
+        evaluation_started = time.perf_counter()
         labels = model.model.labels_.copy() if aid == "dbscan" else model.predict(final_x)
         inference_x = final_x[held_indices]
         start = time.perf_counter()
@@ -613,6 +629,17 @@ def _clustering_single(splits, movies, request, update, reduction_variant=None):
         charts.append(
             projected_chart(f"{aid} · hồ sơ lịch sử / PCA 2D", projection, labels[chosen])
         )
+        row_evaluation_seconds = time.perf_counter() - evaluation_started
+        model_evaluation_seconds += row_evaluation_seconds
+        rows[-1]["timings"] = {
+            "feature_creation_seconds": feature_creation_seconds,
+            "reducer_fit_seconds": selection_reducer_fit_seconds + final_reducer_fit_seconds,
+            "transform_seconds": selection_transform_seconds + (
+                final_reducer.transform_seconds if final_reducer is not None else 0.0
+            ),
+            "model_training_seconds": timing["fit_seconds"],
+            "evaluation_seconds": row_evaluation_seconds,
+        }
         del model
         update(None, f"Hoàn tất {name} · đã thu thập kết quả và giải phóng mô hình fit")
     update(
@@ -620,7 +647,9 @@ def _clustering_single(splits, movies, request, update, reduction_variant=None):
         f"Đánh giá Recall@10 / NDCG@10 trên sở thích tương lai · "
         f"cohort tối đa {request.cluster_eval_users:,} user · baseline Popularity",
     )
+    ranking_started = time.perf_counter()
     recommendation = evaluate_ranking(splits, profiles, assignments, request, update)
+    model_evaluation_seconds += time.perf_counter() - ranking_started
     eligible = {w["algorithm"] for w in winners if w["qualified"]}
     validation = [
         r
@@ -670,8 +699,19 @@ def _clustering_single(splits, movies, request, update, reduction_variant=None):
             "train_history",
         )
     )
+    pipeline_timings = {
+        "feature_creation_seconds": feature_creation_seconds,
+        "reducer_fit_seconds": selection_reducer_fit_seconds + final_reducer_fit_seconds,
+        "transform_seconds": selection_transform_seconds + (
+            final_reducer.transform_seconds if final_reducer is not None else 0.0
+        ),
+        "model_training_seconds": model_training_seconds,
+        "evaluation_seconds": model_evaluation_seconds,
+        "total_pipeline_seconds": time.perf_counter() - pipeline_started,
+    }
     return {
         "rows": rows,
+        "pipeline_timings": pipeline_timings,
         "search": search,
         "clusters": winners,
         "charts": charts,
@@ -732,6 +772,7 @@ def _clustering_single(splits, movies, request, update, reduction_variant=None):
 
 
 def clustering(splits, movies, request, update):
+    pipeline_started = time.perf_counter()
     if request.reduction_mode == "off":
         return _clustering_single(splits, movies, request, update)
 
@@ -743,7 +784,14 @@ def clustering(splits, movies, request, update):
         scale=True,
     )
     output = {"rows": [], "search": [], "clusters": [], "charts": [],
-              "best_configs": {}, "notes": [], "recommendation": None}
+              "best_configs": {}, "notes": [], "recommendation": None,
+              "pipeline_timings": {
+                  "feature_creation_seconds": 0.0,
+                  "reducer_fit_seconds": 0.0,
+                  "transform_seconds": 0.0,
+                  "model_training_seconds": 0.0,
+                  "evaluation_seconds": 0.0,
+              }}
     baseline_rows = set()
     variants = reduction_variants(spec)
     for descriptor in variants:
@@ -752,6 +800,10 @@ def clustering(splits, movies, request, update):
                    if descriptor["method"] else None)
         update(None, f"Phân cụm · biểu diễn {descriptor_id} · giữ cùng hồ sơ Train và cohort.")
         result = _clustering_single(splits, movies, request, update, reducer)
+        for key in output["pipeline_timings"]:
+            output["pipeline_timings"][key] += float(
+                result.get("pipeline_timings", {}).get(key, 0.0) or 0.0
+            )
         representation = "raw" if not descriptor["method"] else "reduced_taste_profiles"
         for row in result["rows"]:
             aid = row["algorithm"]
@@ -865,4 +917,8 @@ def clustering(splits, movies, request, update):
         "selection_metric": "ndcg_at_10",
         "feature_family": "relative_genre_preference_and_frequency",
     }
+    output["selected_variant_id"] = winner["variant_id"] if winner else None
+    output["pipeline_timings"]["total_pipeline_seconds"] = (
+        time.perf_counter() - pipeline_started
+    )
     return output

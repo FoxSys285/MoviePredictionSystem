@@ -3,7 +3,7 @@
 from movie_rating.lab import CATALOG, chart, series
 
 
-def execute(splits, movies, request, update):
+def execute(splits, movies, request, update, progress_store=None):
     from movie_rating.experiment_clustering import clustering
     from movie_rating.experiment_reinforcement import reinforcement
     from movie_rating.experiment_supervised import supervised
@@ -17,7 +17,10 @@ def execute(splits, movies, request, update):
         "pca": reduction,
         "reinforcement": reinforcement,
     }[request.group]
-    result = handler(splits, movies, request, update)
+    if request.group in ("rating", "classification"):
+        result = handler(splits, movies, request, update, progress_store=progress_store)
+    else:
+        result = handler(splits, movies, request, update)
     metrics = next(g["metrics"] for g in CATALOG["groups"] if g["id"] == request.group)
     comparisons = []
     for metric in metrics:

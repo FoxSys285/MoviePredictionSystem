@@ -1,11 +1,9 @@
 import { useState } from "react";
-import { Activity, ChartPie, Database, Download, Film, Layers, Star, Tags, Users } from "lucide-react";
+import { Activity, Database, Download, Film, Tags, Users } from "lucide-react";
 import { LabChartFigure } from "./LabChart";
-import { MetricAssessment } from "./MetricReferences";
 import { AssociationTrainingSummary } from "./AssociationDataSource";
-import type { ReferenceValues } from "../lib/metric-references";
 import { apiResourceUrl } from "../lib/api";
-import { metricNumber, type DatasetStats, type LabGroup, type LabJob, type LabResult, type LabRule } from "../lib/lab";
+import { metricNumber, type DatasetStats, type LabGroup, type LabJob, type LabResult, type LabRow, type LabRule } from "../lib/lab";
 import { usePreferences } from "../lib/preferences";
 
 function ExperimentPipeline({group,result}:{group:LabGroup;result:LabJob["result"]}) {
@@ -53,12 +51,11 @@ export function DatasetSummary({stats,label}:{stats?:DatasetStats;label:string})
   if(!stats)return null;
   const cells:[[string,unknown],...[string,unknown][]]=[
     ["Ratings",stats.ratings],["Users",stats.users],["Movies có ratings",stats.movies],["Genres",stats.genres],
-    ["Rating min / max",`${stats.rating_min} / ${stats.rating_max}`],["Rating mean",metricNumber(stats.rating_mean)],
-    ["Sparsity",`${(stats.sparsity*100).toFixed(3)}%`],["Movies trong catalog",stats.catalog_movies],
+    ["Movies trong catalog",stats.catalog_movies],
   ];
-  const icons=[Activity,Users,Film,Tags,Star,ChartPie,Layers,Database];
+  const icons=[Activity,Users,Film,Tags,Database];
   return <section className="lab-section lab-dataset-summary"><div className="lab-section-heading"><div className="lab-section-title"><span className="lab-section-icon"><Database size={21}/></span><div><h2>{t(label)}</h2><p>{t("Thống kê được tính từ dữ liệu MovieLens đã chuẩn bị.")}</p></div></div><span className="lab-badge">MovieLens 25M</span></div>
-    <div className="lab-stat-grid">{cells.map(([name,value],index)=>{const Icon=icons[index];return <div className={`lab-stat-card tone-${index%4}`} key={name}><span className="lab-stat-icon"><Icon size={19}/></span><div><span>{t(name)}</span><strong>{typeof value==="number"?value.toLocaleString("vi-VN"):String(value)}</strong></div></div>;})}</div></section>;
+    <div className="lab-stat-grid">{cells.map(([name,value],index)=>{const Icon=icons[index];return <div className={`lab-stat-card tone-${index%4}`} key={name}><span className="lab-stat-icon"><Icon size={19}/></span><div><span>{t(name)}</span><strong>{typeof value==="number"?value.toLocaleString("vi-VN"):"Không có dữ liệu"}</strong></div></div>;})}</div></section>;
 }
 
 function Rules({rules}:{rules:LabRule[]}) {
@@ -71,39 +68,390 @@ function Rules({rules}:{rules:LabRule[]}) {
   </section>;
 }
 
-export function ExperimentResults({job,group,references={}}:{job:LabJob;group:LabGroup;references?:ReferenceValues}) {
-  const {t}=usePreferences();
-  const sourceResult=job.result!;
-  const associationRecommendation=group.id==="association"?sourceResult.recommendation:undefined;
-  const result={...sourceResult,recommendation:group.id==="clustering"?sourceResult.recommendation:undefined};
-  const cv=result.cv;
-  return <section id="lab-results" className="lab-section lab-results" data-lab-group={group.id} aria-label={t("Kết quả thực nghiệm")}>
-    <div className="lab-section-heading"><div><span className="lab-kicker">EXPERIMENT REPORT</span><h2>{t("Kết quả thực nghiệm")}</h2></div><div className="lab-downloads">{["csv","xlsx","json"].map(format=><a className="lab-outline" key={format} href={apiResourceUrl(`/experiment-lab/runs/${job.id}/export/${format}`)}><Download size={14}/>{format.toUpperCase()}</a>)}</div></div>
-    <p className="lab-muted">{result.provenance.sampled_users.toLocaleString("vi-VN")} users · {result.provenance.sampled_ratings.toLocaleString("vi-VN")} ratings thật · Seed 42</p>
-    <div className="lab-split-cards">{Object.entries(result.provenance.splits).map(([s,f])=><div key={s}><span>{s}</span><strong>{f.ratings.toLocaleString("vi-VN")}</strong><small>ratings</small></div>)}</div>
-    <DatasetSummary stats={result.provenance.sample} label={t("Dataset của lần chạy")}/>
-    <ExperimentPipeline group={group} result={result}/>
-    {group.id==="clustering"&&result.training&&<div className="lab-insight lab-cluster-training"><strong>Dữ liệu huấn luyện phân cụm</strong><p>Train: {result.training.ratings.toLocaleString("vi-VN")} ratings · {result.training.eligible_users.toLocaleString("vi-VN")} user đủ lịch sử. Fit cuối: {result.rows.map(r=>`${r.name} ${Number(r.fit_users).toLocaleString("vi-VN")} / ${result.training!.eligible_users.toLocaleString("vi-VN")} user`).join(" · ")}.</p><details className="lab-detail-panel"><summary>Các file dữ liệu đang dùng</summary><p>{result.provenance.split_files?"train.parquet: tạo hồ sơ và huấn luyện · movies.parquet: thể loại phim · validation.parquet: đánh giá/chọn thuật toán · test.parquet: đánh giá cuối.":"Chế độ lấy mẫu: đọc lịch sử user từ các file nguồn rồi chia lại Train/Validation/Test theo thời gian từng user. movies.parquet cung cấp thể loại phim."}</p><pre>{JSON.stringify({...(result.provenance.split_files||result.provenance.source_prepared_files),movies:result.provenance.metadata_file},null,2)}</pre></details></div>}
-    {group.id==="association"&&<AssociationTrainingSummary result={result}/>}
-    {group.id==="association"&&associationRecommendation&&<AprioriRanking recommendation={associationRecommendation}/>}
-    {result.selection&&<div className="lab-insight"><strong>Nhận xét & lựa chọn mô hình</strong><p>{result.selection}</p></div>}
-    {group.id==="clustering"&&<p className="lab-muted">{result.clustering_protocol?"Hình học cụm đo trên hồ sơ lịch sử Train. Rating tương lai chỉ dùng cho bảng gợi ý bên dưới; số điểm Silhouette/DBI không phải độ chính xác gợi ý.":"Kết quả lịch sử dùng hồ sơ và cách đánh giá cũ; không so trực tiếp với giao thức phân cụm mới. Đọc Silhouette/DBI cùng tỷ lệ noise."}</p>}
-    {result.rl_protocol&&<div className="lab-insight"><strong>{t("RL protocol · {name}",{name:result.rl_protocol.name})}</strong><p>{t("Train support/query đủ điều kiện: {eligible} · bị loại do lịch sử/timestamp: {excluded} · giới hạn user Train: {limit} · steps thực học: {actual}/{budget}.",{eligible:result.rl_protocol.train_support_query_users.toLocaleString("vi-VN"),excluded:result.rl_protocol.train_excluded_support_query_users.toLocaleString("vi-VN"),limit:result.rl_protocol.training_user_limit.toLocaleString("vi-VN"),actual:result.rl_protocol.train_steps_actual.toLocaleString("vi-VN"),budget:metricNumber(result.rl_protocol.train_steps_budget)})}</p><p>{t("Catalog action: {actual}/{requested} · horizon: {horizon} · Validation/Test users có action: {validation} / {test} · checkpoint step: {checkpoint} · Test dùng chọn: {used}.",{actual:result.rl_protocol.action_limit_actual,requested:result.rl_protocol.action_limit_requested,horizon:result.rl_protocol.horizon,validation:result.rl_protocol.validation_sampled_users.toLocaleString("vi-VN"),test:result.rl_protocol.test_sampled_users.toLocaleString("vi-VN"),checkpoint:result.rl_protocol.checkpoint_step.toLocaleString("vi-VN"),used:result.rl_protocol.test_used_for_selection?"có":"không"})}</p>{result.paired_test_uncertainty&&<p>{t("Bootstrap ghép cặp theo user so với {policy}: {values}",{policy:result.paired_test_uncertainty.reference_policy,values:Object.entries(result.paired_test_uncertainty.policies).map(([policy,value])=>`${policy} Δ=${metricNumber(value.mean_delta)} · CI95 ${value.ci95?`${metricNumber(value.ci95[0])}–${metricNumber(value.ci95[1])}`:value.reason}`).join("; ")})}</p>}</div>}
-    <div className="lab-table-scroll lab-comparison"><table><caption>{t("So sánh chất lượng và chi phí tính toán")}</caption><thead><tr><th>{t("Thuật toán / cấu hình")}</th><th>{t("Variant ID")}</th><th>{t("Biểu diễn")}</th><th>{t("Giảm chiều / k")}</th><th>{t("Fit scope")}</th><th>{t("Tập đánh giá")}</th>{group.metrics.map(m=><th key={m.key}>{m.name}</th>)}<th>Model size (KiB)</th>{group.id==="clustering"&&<><th>Số cụm</th><th>Noise</th><th>User được gán / đủ lịch sử</th><th>Cụm nhỏ nhất</th><th>Điều kiện chọn</th></>}</tr></thead>
-      <tbody>{result.rows.map((r,i)=><tr key={String(r.variant_id||r.algorithm)+"/"+r.split+"/"+i}><th scope="row">{r.name}</th><td>{String(r.variant_id||r.algorithm)}</td><td>{String(r.representation||"raw")}</td><td>{r.reduction_method?`${String(r.reduction_method)} / ${String(r.components)}`:"—"}</td><td>{r.split==="train_history"?"Lịch sử Train":r.split}</td>{group.metrics.map(m=><td key={m.key} data-split={r.split} data-metric={m.key}>{metricNumber(r[m.key])}<MetricAssessment metric={m} row={r} result={result} values={references} metrics={group.metrics}/></td>)}<td>{typeof r.model_bytes==="number"?metricNumber(r.model_bytes/1024):"N/A"}</td>{group.id==="clustering"&&<><td>{metricNumber(r.clusters)}</td><td>{typeof r.noise_fraction==="number"?`${(r.noise_fraction*100).toFixed(2)}%`:"N/A"}</td><td>{typeof r.assigned_users==="number"?`${r.assigned_users.toLocaleString("vi-VN")} / ${Number(r.evaluated_users).toLocaleString("vi-VN")}`:"N/A"}</td><td>{metricNumber(r.smallest_cluster)}</td><td>{typeof r.qualified==="boolean"?<span className={`lab-verdict lab-verdict-${r.qualified?"good":"caution"}`}>{r.qualified?"Đạt bao phủ và số cụm":"Chưa đạt điều kiện"}</span>:"Giao thức cũ"}</td></>}</tr>)}</tbody></table></div>
-    {result.recommendation&&<section className="lab-section lab-cluster-ranking"><h2>{t("Gợi ý phim từ cụm · rating tương lai")}</h2><p className="lab-muted">{t("Cohort cố định {users} user có lịch sử; so trên cùng user có phim tương lai thích và chưa xem trong Train. Ứng viên: {movies} phim Train. Noise dùng Popularity dự phòng; cột riêng user có cụm giúp thấy đóng góp thực của phân cụm.",{users:(result.recommendation.cohort_users??0).toLocaleString("vi-VN"),movies:result.recommendation.candidate_movies.toLocaleString("vi-VN")})}</p><div className="lab-table-scroll"><table><thead><tr><th>Thuật toán</th><th>{t("Tập tương lai")}</th><th>{t("Users đánh giá")}</th><th>Recall@10 ↑</th><th>NDCG@10 ↑</th><th>{t("Δ NDCG so Popularity")}</th><th>{t("Users có cụm")}</th><th>{t("Recall@10 riêng có cụm")}</th><th>{t("NDCG@10 riêng có cụm")}</th></tr></thead><tbody>{result.recommendation.rows.map(r=>{const base=result.recommendation!.rows.find(b=>b.algorithm==="popularity"&&b.split===r.split);const delta=r.ndcg_at_10!==null&&base?.ndcg_at_10!=null?r.ndcg_at_10-base.ndcg_at_10:null;return <tr key={`${r.variant_id||r.algorithm}/${r.split}`}><th>{r.algorithm==="popularity"?"Popularity (baseline)":group.algorithms.find(a=>a.id===r.algorithm)?.name||r.algorithm}</th><td>{r.split}</td><td>{r.evaluated_users.toLocaleString("vi-VN")}</td><td>{metricNumber(r.recall_at_10)}</td><td>{metricNumber(r.ndcg_at_10)}</td><td>{r.algorithm==="popularity"?"—":metricNumber(delta)}</td><td>{r.algorithm==="popularity"?"—":(r.clustered_users??0).toLocaleString("vi-VN")}</td><td>{metricNumber(r.clustered_recall_at_10)}</td><td>{metricNumber(r.clustered_ndcg_at_10)}</td></tr>;})}</tbody></table></div></section>}
-    {["rating","classification","clustering"].includes(group.id)&&<p className="lab-muted">{result.provenance.protocol==="per_user_temporal_70_15_15_v2"?"Chia theo thời gian trong từng user (khoảng 70/15/15).":"Kết quả lịch sử dùng cách chia cũ; không so trực tiếp với giao thức mới."}{result.provenance.exclusions&&` Loại ${result.provenance.exclusions.excluded_users.toLocaleString("vi-VN")} user / ${result.provenance.exclusions.excluded_ratings.toLocaleString("vi-VN")} rating không đủ lịch sử hoặc không tách được timestamp.`}</p>}
-    {cv&&<section className="lab-section"><h2>{result.cv_folds||Object.values(cv)[0]?.folds.length||3}-Fold Cross Validation · Mean ± Std</h2><p className="lab-muted">{result.cv_protocol==="per_user_expanding_time_v1"?"Lịch sử mở rộng theo thời gian trong từng user, chỉ trên Train.":"Kết quả lịch sử: CV theo giao thức của lần chạy."} F1 dùng lớp Thích, ngưỡng CV = 0,5.</p><div className="lab-table-scroll"><table><thead><tr><th>Thuật toán / variant</th>{group.metrics.map(m=><th key={m.key}>{m.name}</th>)}</tr></thead><tbody>{Object.entries(cv).map(([a,data])=><tr key={a}><th>{String(result.rows.find(row=>row.variant_id===a)?.name||group.algorithms.find(x=>x.id===a)?.name||a)}</th>{group.metrics.map(m=><td key={m.key}>{data.metrics[m.key]?`${metricNumber(data.metrics[m.key].mean)} ± ${metricNumber(data.metrics[m.key].std)}`:"N/A"}</td>)}</tr>)}</tbody></table></div></section>}
-    {result.class_balance&&<section className="lab-section"><h2>Phân bố nhãn & Confusion Matrix</h2><div className="lab-balance-grid">{Object.entries(result.class_balance).map(([s,b])=><div key={s}><strong>{s}</strong><p>Không thích: {b.negative.toLocaleString("vi-VN")} · Thích: {b.positive.toLocaleString("vi-VN")}</p><progress max={1} value={b.positive_fraction}/><small>Lớp Thích: {(b.positive_fraction*100).toFixed(1)}%</small></div>)}</div>
-      <div className="lab-table-scroll"><table><thead><tr><th>Thuật toán</th><th>Tập</th><th>Precision</th><th>Recall</th><th>TN</th><th>FP</th><th>FN</th><th>TP</th></tr></thead><tbody>{result.rows.map((r,i)=>{const cm=r.confusion_matrix as number[][]|undefined;return <tr key={i}><th>{r.name}</th><td>{r.split}</td><td>{metricNumber(r.precision)}</td><td>{metricNumber(r.recall)}</td>{[cm?.[0]?.[0],cm?.[0]?.[1],cm?.[1]?.[0],cm?.[1]?.[1]].map((v,j)=><td key={j}>{metricNumber(v)}</td>)}</tr>;})}</tbody></table></div></section>}
-    {result.rules&&<Rules rules={result.rules}/>}
-    <GroupedAprioriDetails result={sourceResult}/>
-    {result.clusters&&<section className="lab-section"><h2>Đặc trưng Genre từng cụm</h2>{result.profile_kind&&<p className="lab-muted">Điểm dương: thể loại được chấm cao hơn mức trung bình của user sau làm trơn. Thể loại chưa xem có điểm 0; điểm không khẳng định user thích hay không thích tuyệt đối.</p>}<div className="lab-table-scroll"><table><thead><tr><th>Thuật toán</th><th>Cụm</th><th>Users Train</th><th>{result.profile_kind?"Genres có mức ưa thích tương đối cao nhất":"Genres có rating trung bình cao nhất"}</th></tr></thead><tbody>{result.clusters.flatMap(c=>c.profiles.map(p=><tr key={`${c.variant_id||c.algorithm}/${p.cluster}`}><th>{c.variant_id||c.algorithm}</th><td>{p.cluster<0?"Noise":p.cluster}</td><td>{p.users}</td><td>{Object.entries(p.genre_means).map(([g,v])=>`${g}: ${v.toFixed(2)}`).join(" · ")}</td></tr>))}</tbody></table></div>{result.clusters.some(c=>c.stability)&&<><h3>Độ ổn định khi fit lại</h3><p className="lab-muted">ARI gần 1: nhãn cụm nhất quán hơn. Chỉ tính trên user cùng được gán cụm; đọc cùng tỷ lệ bao phủ chung. So với hai mẫu 80%, seed 43 và 44.</p><div className="lab-table-scroll"><table><thead><tr><th>Thuật toán</th><th>ARI trung bình ↑</th><th>Bao phủ chung</th><th>Lượt so hợp lệ</th></tr></thead><tbody>{result.clusters.filter(c=>c.stability).map(c=><tr key={c.algorithm}><th>{c.algorithm}</th><td>{metricNumber(c.stability!.adjusted_rand_mean)}</td><td>{(c.stability!.joint_coverage_mean*100).toFixed(1)}%</td><td>{c.stability!.comparisons} / 2</td></tr>)}</tbody></table></div></>}</section>}
-    {result.search&&<details className="lab-detail-panel lab-cluster-search"><summary>Kết quả tìm kiếm K / eps / min_samples</summary><p className="lab-muted">Cột giữ lại đo trên các user dành riêng từ hồ sơ Train, cùng cách tạo lịch sử. Không dùng rating tương lai để dựng đặc trưng.</p><div className="lab-table-scroll"><table><thead><tr><th>Thuật toán</th><th>Cấu hình</th><th>Silhouette Train</th><th>DBI Train</th><th>Noise Train</th><th>Silhouette giữ lại</th><th>Bao phủ giữ lại</th><th>Đủ điều kiện chọn</th></tr></thead><tbody>{result.search.map((s,i)=><tr key={i}><td>{String(s.algorithm)}</td><td>{JSON.stringify(s.config)}</td><td>{metricNumber(s.silhouette)}</td><td>{metricNumber(s.dbi)}</td><td>{typeof s.noise_fraction==="number"?`${(s.noise_fraction*100).toFixed(2)}%`:"N/A"}</td><td>{metricNumber(s.validation_silhouette)}</td><td>{typeof s.validation_coverage==="number"?`${(s.validation_coverage*100).toFixed(1)}%`:"N/A"}</td><td>{typeof s.qualified==="boolean"?(s.qualified?"Đạt":"Chưa đạt"):"Giao thức cũ"}</td></tr>)}</tbody></table></div></details>}
-    <div className="lab-section-heading lab-figures-heading"><h2>Biểu đồ đánh giá</h2><span className="lab-badge">{result.charts.length} biểu đồ</span></div><div className="lab-charts">{result.charts.map(c=><LabChartFigure key={c.index} chart={c}/>)}</div>
-    <details className="lab-detail-panel"><summary>Cấu hình được chọn</summary><pre>{JSON.stringify(result.best_configs,null,2)}</pre></details>
-    <section className="lab-section"><h2>Phương pháp & giới hạn đánh giá</h2>{result.notes.map(n=><p className="lab-muted lab-result-note" key={n}>{n}</p>)}{group.id==="reinforcement"&&<p className="lab-muted">Tỷ lệ hành động có phản hồi quan sát trên Test: {result.rows.filter(r=>r.split==="test").map(r=>`${r.name}: ${typeof r.observed_feedback_fraction==="number"?(r.observed_feedback_fraction*100).toFixed(2):"N/A"}%`).join(" · ")}</p>}
-    {result.runtime?.isolated_process&&<p className="lab-muted">{result.runtime.automatic_memory_limit===false?"Worker không tự dừng theo ngưỡng RAM · ":`Ngân sách RAM worker: ${metricNumber(result.runtime.memory_budget_mb)} MiB · `}Bộ nhớ riêng cao nhất: {metricNumber(result.runtime.worker_peak_private_mb)} MiB · RAM khả dụng thấp nhất của máy: {metricNumber(result.runtime.system_min_available_mb)} MiB.</p>}
-    {result.runtime&&<p className="lab-muted">{result.runtime.device} · {result.runtime.processor||result.runtime.platform} · {result.runtime.cpu_count} logical CPUs · RAM {(result.runtime.ram_bytes/2**30).toFixed(1)} GiB · Python {result.runtime.python}. Thời gian: giây; RSS là bộ nhớ toàn tiến trình.</p>}</section>
-  </section>;
+type ResultRecord = Record<string, unknown>;
+
+function numericValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function shownValue(value: unknown, language = "vi"): string {
+  return numericValue(value) === null ? "Không có dữ liệu" : metricNumber(value, language);
+}
+
+function variantId(row: LabRow): string {
+  return String(row.variant_id || row.algorithm || "Không có dữ liệu");
+}
+
+function baseAlgorithm(row: LabRow): string {
+  return String(row.base_algorithm || row.algorithm || "");
+}
+
+function representation(row: LabRow): string {
+  const method = row.reduction_method;
+  const components = numericValue(row.components);
+  if (typeof method === "string") {
+    return `${method === "pca" ? "PCA" : "TruncatedSVD"}${components ? ` · ${components} chiều` : ""}`;
+  }
+  return row.representation && row.representation !== "raw" && row.representation !== "not_applicable"
+    ? String(row.representation)
+    : "Biểu diễn gốc";
+}
+
+function algorithmName(id: string, group: LabGroup, fallback?: string): string {
+  return group.algorithms.find((item) => item.id === id)?.name || fallback || id || "Không có dữ liệu";
+}
+
+function MiniBars({
+  title,
+  unit,
+  items,
+  lowerIsBetter = false,
+}: {
+  title: string;
+  unit: string;
+  items: { label: string; value: number | null }[];
+  lowerIsBetter?: boolean;
+}) {
+  const valid = items.filter((item) => item.value !== null);
+  if (valid.length < 2) return null;
+  const values = valid.map((item) => item.value as number);
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const span = high - low;
+  return (
+    <article className="lab-result-chart">
+      <h4>{title}</h4>
+      <p>{unit}{lowerIsBetter ? " · thấp hơn tốt hơn" : " · cao hơn tốt hơn"}</p>
+      {valid.map((item) => {
+        const value = item.value as number;
+        const width = span < 1e-12 ? 100 : lowerIsBetter
+          ? 100 * (high - value) / span
+          : 100 * (value - low) / span;
+        return (
+          <div className="lab-bar-row" key={item.label}>
+            <span title={item.label}>{item.label}</span>
+            <span className="lab-bar-track"><i style={{ width: `${Math.max(2, width)}%` }}/></span>
+            <strong>{metricNumber(value)}</strong>
+          </div>
+        );
+      })}
+    </article>
+  );
+}
+
+function ReductionSummary({ result, group }: { result: LabResult; group: LabGroup }) {
+  const selectedId = String(result.selected_variant_id || result.reduction?.selected_variant_id || "");
+  const relevantRows = result.rows.filter((row) =>
+    ["test", "train_history", "train"].includes(row.split),
+  );
+  const reduced = new Map<string, LabRow>();
+  const raw = new Set<string>();
+  for (const row of relevantRows) {
+    const meta = row.reduction as ResultRecord | undefined;
+    const method = row.reduction_method || meta?.method;
+    const owner = baseAlgorithm(row);
+    if (method === "pca" || method === "truncated_svd") {
+      if (!reduced.has(variantId(row))) reduced.set(variantId(row), row);
+    } else if (row.representation === "raw" || row.representation === "raw_profile") {
+      raw.add(owner);
+    }
+  }
+  const variants = [...reduced.values()];
+  if (!variants.length) {
+    return (
+      <div className="lab-reduction-results">
+        <article className="lab-reduction-result-card">
+          <h4>Nhóm này đang dùng biểu diễn gốc</h4>
+          <p>{relevantRows.length
+            ? [...new Set(relevantRows.map((row) => algorithmName(baseAlgorithm(row), group, String(row.name))))].join(" · ")
+            : "Không có dữ liệu giảm chiều trong báo cáo này."}</p>
+        </article>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="lab-reduction-results">
+        {variants.map((row) => {
+          const meta = (row.reduction || {}) as ResultRecord;
+          const method = String(row.reduction_method || meta.method || "");
+          const input = numericValue(meta.input_dimensions);
+          const output = numericValue(meta.output_dimensions) ?? numericValue(row.components);
+          const percent = input !== null && output !== null && input > 0
+            ? 100 * (input - output) / input
+            : null;
+          const variance = numericValue(meta.explained_variance_ratio_train);
+          const fitSeconds = numericValue(meta.fit_seconds) ?? numericValue(row.reduction_fit_seconds);
+          const transformSeconds = numericValue(meta.transform_seconds);
+          const owner = baseAlgorithm(row);
+          const selected = selectedId === variantId(row);
+          const competing = raw.has(owner) || variants.some(
+            (item) => baseAlgorithm(item) === owner && variantId(item) !== variantId(row),
+          );
+          const status = selected || !competing ? "Đang dùng" : "Chỉ đối chứng";
+          const featureLabel = String(row.feature_family || meta.feature_family || "hồ sơ sở thích");
+          return (
+            <article className="lab-reduction-result-card" key={variantId(row)}>
+              <header>
+                <h4>{row.name ? String(row.name) : algorithmName(owner, group)}</h4>
+                <span className={`lab-reduction-status${selected ? " active" : ""}`}>{status}</span>
+              </header>
+              <p>{method === "pca" ? "PCA" : "TruncatedSVD"} · {featureLabel}</p>
+              <p>{input !== null && output !== null
+                ? `${input.toLocaleString("vi-VN")} → ${output.toLocaleString("vi-VN")} chiều · giảm ${percent?.toFixed(1)}%`
+                : `Không có dữ liệu chiều đầu vào → đầu ra · preset ${output ?? "Không có dữ liệu"} chiều`}</p>
+              <p>Phương sai giữ lại: {variance === null ? "Không có dữ liệu" : `${(variance * 100).toFixed(2)}%`}</p>
+              <p>Fit + transform reducer: {fitSeconds === null && transformSeconds === null
+                ? "Không có dữ liệu"
+                : `${metricNumber((fitSeconds ?? 0) + (transformSeconds ?? 0))} giây`}</p>
+              <p>{competing
+                ? "Đối chiếu cùng thuật toán; kết quả được chọn bằng Validation."
+                : "Chưa có đối chứng cùng thuật toán để kết luận tăng tốc hoặc tăng chất lượng."}</p>
+            </article>
+          );
+        })}
+      </div>
+      {raw.size > 0 && <p className="lab-result-selection">
+        Giữ biểu diễn gốc: {[...raw].map((id) => algorithmName(id, group)).join(" · ")}.
+      </p>}
+    </>
+  );
+}
+
+function PerformanceTable({
+  result,
+  group,
+  selectedId,
+  language,
+}: {
+  result: LabResult;
+  group: LabGroup;
+  selectedId: string;
+  language: string;
+}) {
+  const rows = result.rows ?? [];
+  const ids = [...new Set(rows.map(variantId))];
+  if (!ids.length) return <p className="lab-muted">Không có dữ liệu kết quả.</p>;
+  const find = (id: string, split: string) => rows.find((row) => variantId(row) === id && row.split === split);
+  const recommendation = result.recommendation?.rows ?? [];
+  const rec = (id: string, split: string) => recommendation.find((row) => row.variant_id === id && row.split === split);
+  const selected = (id: string) => id === selectedId;
+  const resultMetricKeys = group.id === "rating" ? ["rmse", "mae"]
+    : group.id === "classification" ? ["f1", "precision", "recall"] : [];
+
+  if (resultMetricKeys.length) {
+    const label = (key: string) => ({ rmse: "RMSE", mae: "MAE", f1: "F1", precision: "Precision", recall: "Recall" }[key] || key);
+    return (
+      <div className="lab-table-scroll">
+        <table className="lab-result-table"><thead>
+          <tr><th rowSpan={2}>Thuật toán / biến thể</th><th rowSpan={2}>Biểu diễn</th>
+            {resultMetricKeys.map((key) => <th key={key} colSpan={2}>{label(key)}</th>)}
+            <th rowSpan={2}>Fit / xử lý (s)</th><th rowSpan={2}>Model (KiB)</th></tr>
+          <tr>{resultMetricKeys.flatMap((key) => ["Validation", "Test"].map((split) => <th key={`${key}/${split}`}>{split}</th>))}</tr>
+        </thead><tbody>
+          {ids.map((id) => {
+            const validation = find(id, "validation");
+            const test = find(id, "test");
+            const sample = validation || test || rows.find((row) => variantId(row) === id)!;
+            return <tr key={id} className={selected(id) ? "is-selected" : ""}>
+              <th>{algorithmName(baseAlgorithm(sample), group, String(sample.name))}
+                {selected(id) && <span className="selected-label">Validation chọn</span>}</th>
+              <td>{representation(sample)}</td>
+              {resultMetricKeys.flatMap((key) => [validation, test].map((row, index) =>
+                <td key={`${key}/${index}`}>{shownValue(row?.[key], language)}</td>))}
+              <td>{shownValue(test?.fit_seconds, language)}</td>
+              <td>{test ? shownValue(numericValue(test.model_bytes) === null ? null : Number(test.model_bytes) / 1024, language) : "Không có dữ liệu"}</td>
+            </tr>;
+          })}
+        </tbody></table>
+      </div>
+    );
+  }
+
+  if (group.id === "clustering") {
+    const models = rows.filter((row) => row.split === "train_history");
+    return <div className="lab-table-scroll"><table className="lab-result-table"><thead><tr>
+      <th>Thuật toán / biểu diễn</th><th>Silhouette</th><th>Số cụm</th><th>Coverage</th><th>Noise</th>
+      <th>Validation NDCG@10</th><th>Test NDCG@10</th><th>Fit model (s)</th><th>Model (KiB)</th>
+    </tr></thead><tbody>{models.map((row) => {
+      const id = variantId(row); const val = rec(id, "validation"); const test = rec(id, "test");
+      return <tr key={id} className={selected(id) ? "is-selected" : ""}>
+        <th>{algorithmName(baseAlgorithm(row), group, String(row.name))}{selected(id) && <span className="selected-label">Validation chọn</span>}</th>
+        <td>{shownValue(row.silhouette, language)}</td><td>{shownValue(row.clusters, language)}</td>
+        <td>{shownValue(row.coverage, language)}</td><td>{numericValue(row.noise_fraction) === null ? "Không có dữ liệu" : `${(Number(row.noise_fraction) * 100).toFixed(1)}%`}</td>
+        <td>{shownValue(val?.ndcg_at_10, language)}</td><td>{shownValue(test?.ndcg_at_10, language)}</td>
+        <td>{shownValue(row.fit_seconds, language)}</td><td>{numericValue(row.model_bytes) === null ? "Không có dữ liệu" : metricNumber(Number(row.model_bytes) / 1024, language)}</td>
+      </tr>;
+    })}</tbody></table></div>;
+  }
+
+  if (group.id === "association") {
+    return <div className="lab-table-scroll"><table className="lab-result-table"><thead><tr>
+      <th>Thuật toán / biểu diễn</th><th>Số luật</th><th>Validation NDCG@10</th><th>Test NDCG@10</th><th>Coverage</th><th>Huấn luyện (s)</th><th>Model (KiB)</th>
+    </tr></thead><tbody>{rows.map((row) => {
+      const id = variantId(row); const val = rec(id, "validation"); const test = rec(id, "test");
+      return <tr key={id} className={selected(id) ? "is-selected" : ""}>
+        <th>{String(row.name || id)}{selected(id) && <span className="selected-label">Validation chọn</span>}</th>
+        <td>{shownValue(row.rule_count, language)}</td><td>{shownValue(val?.ndcg_at_10, language)}</td>
+        <td>{shownValue(test?.ndcg_at_10, language)}</td>
+        <td>{shownValue(val?.recommendation_coverage ?? val?.group_coverage, language)}</td>
+        <td>{shownValue(row.model_training_seconds, language)}</td>
+        <td>{numericValue(row.model_bytes) === null ? "Không có dữ liệu" : metricNumber(Number(row.model_bytes) / 1024, language)}</td>
+      </tr>;
+    })}</tbody></table></div>;
+  }
+
+  if (group.id === "reinforcement") {
+    const metric = "average_reward";
+    return <div className="lab-table-scroll"><table className="lab-result-table"><thead><tr>
+      <th>Chính sách</th><th>Biểu diễn</th><th>Reward Validation</th><th>Reward Test</th><th>Coverage Test</th><th>Training (s)</th><th>Model (KiB)</th>
+    </tr></thead><tbody>{ids.map((id) => {
+      const validation = find(id, "validation"); const test = find(id, "test"); const sample = validation || test!;
+      return <tr key={id} className={selected(id) ? "is-selected" : ""}>
+        <th>{String(sample.name || id)}{selected(id) && <span className="selected-label">Validation chọn</span>}</th>
+        <td>{representation(sample)}</td><td>{shownValue(validation?.[metric], language)}</td><td>{shownValue(test?.[metric], language)}</td>
+        <td>{shownValue(test?.user_coverage ?? test?.observed_feedback_fraction, language)}</td><td>{shownValue(test?.fit_seconds, language)}</td>
+        <td>{numericValue(test?.model_bytes) === null ? "Không có dữ liệu" : metricNumber(Number(test?.model_bytes) / 1024, language)}</td>
+      </tr>;
+    })}</tbody></table></div>;
+  }
+
+  return <div className="lab-table-scroll"><table className="lab-result-table"><thead><tr>
+    <th>Thuật toán</th><th>Tập</th>{group.metrics.slice(0, 3).map((metric) => <th key={metric.key}>{metric.name}</th>)}<th>Fit (s)</th>
+  </tr></thead><tbody>{rows.map((row, index) => <tr key={`${variantId(row)}/${row.split}/${index}`}>
+    <th>{String(row.name || variantId(row))}</th><td>{row.split}</td>
+    {group.metrics.slice(0, 3).map((metric) => <td key={metric.key}>{shownValue(row[metric.key], language)}</td>)}
+    <td>{shownValue(row.fit_seconds, language)}</td>
+  </tr>)}</tbody></table></div>;
+}
+
+function CrossValidation({ result, group, language }: { result: LabResult; group: LabGroup; language: string }) {
+  if (!["rating", "classification"].includes(group.id)) return null;
+  const entries = Object.entries(result.cv ?? {});
+  const metricKeys = group.id === "rating" ? ["rmse", "mae"] : ["f1", "precision", "recall"];
+  const metricNames: Record<string, string> = { rmse: "RMSE", mae: "MAE", f1: "F1", precision: "Precision", recall: "Recall" };
+  const chartValues: { label: string; value: number | null }[] = [];
+  const temporal = result.cv_protocol === "per_user_expanding_time_v1";
+  return (
+    <section className="lab-result-row" aria-labelledby="lab-cv-title">
+      <h3 id="lab-cv-title">{temporal ? "3-fold theo thời gian trên Train" : "3-fold Cross Validation"}</h3>
+      <p>{temporal ? "3-fold theo thời gian trên Train." : "Không có metadata CV; giao thức lịch sử cần được kiểm tra trong chi tiết."}</p>
+      {entries.length ? <div className="lab-table-scroll"><table className="lab-result-table"><thead><tr>
+        <th>Thuật toán / biến thể</th>{metricKeys.flatMap((key) => ["Fold 1", "Fold 2", "Fold 3", "Trung bình ± độ lệch chuẩn"].map((label) => <th key={`${key}/${label}`}>{metricNames[key]} · {label}</th>))}
+      </tr></thead><tbody>{entries.map(([id, data]) => {
+        const folds = (data.folds ?? []) as ResultRecord[];
+        return <tr key={id}><th>{id}</th>{metricKeys.flatMap((key) => {
+          const values = [0, 1, 2].map((index) => numericValue(folds[index]?.[key]));
+          const summary = data.metrics[key];
+          if (key === (group.id === "rating" ? "rmse" : "f1")) {
+            values.forEach((value, index) => chartValues.push({ label: `${id} · Fold ${index + 1}`, value }));
+          }
+          return [
+            ...values.map((value, index) => <td key={`${key}/${index}`}>{shownValue(value, language)}</td>),
+            <td key={`${key}/mean`}>{summary
+              ? `${metricNumber(summary.mean, language)} ± ${metricNumber(summary.std, language)}`
+              : "Không có dữ liệu"}</td>,
+          ];
+        })}</tr>;
+      })}</tbody></table></div> : <p className="lab-muted">Không có dữ liệu CV.</p>}
+      {chartValues.filter((item) => item.value !== null).length > 1 && (
+        <div className="lab-cv-chart"><MiniBars
+          title={group.id === "rating" ? "RMSE theo fold" : "F1 theo fold"}
+          unit={group.id === "rating" ? "RMSE · thấp hơn tốt hơn" : "F1 · cao hơn tốt hơn"}
+          items={chartValues.filter((item) => item.value !== null)}
+          lowerIsBetter={group.id === "rating"}
+        /></div>
+      )}
+    </section>
+  );
+}
+
+export function ExperimentResults({ job, group }: { job: LabJob; group: LabGroup }) {
+  const { t, language } = usePreferences();
+  const result = job.result!;
+  const selectedId = String(result.selected_variant_id || result.reduction?.selected_variant_id || "");
+  const recommendations = result.recommendation?.rows ?? [];
+  let qualityItems: { label: string; value: number | null }[] = [];
+  let qualityTitle = "Chất lượng trên Validation";
+  let qualityUnit = "Validation";
+  let qualityLower = false;
+  if (group.id === "rating" || group.id === "classification") {
+    const key = group.id === "rating" ? "rmse" : "f1";
+    qualityItems = result.rows.filter((row) => row.split === "validation").map((row) => ({ label: variantId(row), value: numericValue(row[key]) }));
+    qualityTitle = group.id === "rating" ? "RMSE Validation" : "F1 Validation";
+    qualityUnit = group.id === "rating" ? "RMSE" : "F1";
+    qualityLower = group.id === "rating";
+  } else if (group.id === "clustering" || group.id === "association") {
+    qualityItems = recommendations.filter((row) => row.split === "validation").map((row) => ({ label: row.variant_id, value: numericValue(row.ndcg_at_10) }));
+    qualityTitle = "NDCG@10 Validation";
+    qualityUnit = "NDCG@10";
+  } else if (group.id === "reinforcement") {
+    qualityItems = result.rows.filter((row) => row.split === "validation").map((row) => ({ label: variantId(row), value: numericValue(row.average_reward) }));
+    qualityTitle = "Reward Validation";
+    qualityUnit = "Reward trung bình";
+  }
+  const timeSplit = group.id === "clustering" ? "train_history"
+    : group.id === "association" ? "train"
+      : group.id === "pca" ? "validation" : "test";
+  const timeRows = result.rows.filter((row) => row.split === timeSplit);
+  const fitItems = timeRows.map((row) => ({ label: variantId(row), value: numericValue(row.fit_seconds) }));
+  const sizeItems = timeRows.map((row) => ({ label: variantId(row), value: numericValue(row.model_bytes) === null ? null : Number(row.model_bytes) / 1024 }));
+  const splitSummary = Object.entries(result.provenance?.splits ?? {})
+    .map(([split, data]) => `${split}: ${shownValue(data.ratings, language)} ratings`).join(" · ");
+  const detailedTimings = result.pipeline_timings;
+  const hasTimings = detailedTimings && Object.keys(detailedTimings).length > 0;
+
+  return (
+    <section id="lab-results" className="lab-section lab-results" data-lab-group={group.id} aria-label={t("Kết quả thực nghiệm")}>
+      <div className="lab-section-heading">
+        <div><span className="lab-kicker">EXPERIMENT REPORT</span><h2>{t("Kết quả thực nghiệm")}</h2></div>
+        <div className="lab-downloads">{["csv", "xlsx", "json"].map((format) => <a className="lab-outline" key={format} href={apiResourceUrl(`/experiment-lab/runs/${job.id}/export/${format}`)}><Download size={14}/>{format.toUpperCase()}</a>)}</div>
+      </div>
+      <p className="lab-muted">
+        {shownValue(result.provenance?.sampled_users, language)} users · {shownValue(result.provenance?.sampled_ratings, language)} ratings · Seed {shownValue(result.config?.seed, language)}
+        {splitSummary ? ` · ${splitSummary}` : ""}
+      </p>
+
+      <section className="lab-result-row" aria-labelledby="lab-reduction-results-title">
+        <h3 id="lab-reduction-results-title">Kết quả giảm chiều và kết luận</h3>
+        <ReductionSummary result={result} group={group}/>
+        {result.selection && <p className="lab-result-selection">{result.selection}</p>}
+      </section>
+
+      <section className="lab-result-row" aria-labelledby="lab-training-results-title">
+        <h3 id="lab-training-results-title">Kết quả huấn luyện</h3>
+        <p>Validation dùng chọn mô hình; Test chỉ báo cáo cuối. Thời gian fit không phải tổng thời gian toàn pipeline.</p>
+        <PerformanceTable result={result} group={group} selectedId={selectedId} language={language}/>
+      </section>
+
+      <section className="lab-result-row" aria-labelledby="lab-comparison-charts-title">
+        <h3 id="lab-comparison-charts-title">Biểu đồ so sánh</h3>
+        <div className="lab-result-charts">
+          <MiniBars title={qualityTitle} unit={qualityUnit} items={qualityItems} lowerIsBetter={qualityLower}/>
+          <MiniBars title="Thời gian fit" unit={group.id === "association" ? "Khai phá luật · giây" : "Giây"} items={fitItems} lowerIsBetter/>
+          {sizeItems.some((item) => item.value !== null) && <MiniBars title="Kích thước mô hình" unit="KiB" items={sizeItems} lowerIsBetter/>}
+          {qualityItems.filter((item) => item.value !== null).length < 2 && fitItems.filter((item) => item.value !== null).length < 2 && <p className="lab-muted">Cần ít nhất hai kết quả có số đo để vẽ biểu đồ so sánh.</p>}
+        </div>
+      </section>
+
+      <CrossValidation result={result} group={group} language={language}/>
+
+      <details className="lab-detail-panel lab-result-details">
+        <summary>Chi tiết protocol và chẩn đoán</summary>
+        <ExperimentPipeline group={group} result={result}/>
+        {group.id === "clustering" && result.training && <div className="lab-insight lab-cluster-training"><strong>Dữ liệu huấn luyện phân cụm</strong><p>Train: {result.training.ratings.toLocaleString("vi-VN")} ratings · {result.training.eligible_users.toLocaleString("vi-VN")} user đủ lịch sử.</p></div>}
+        {group.id === "association" && <AssociationTrainingSummary result={result}/>}
+        {group.id === "association" && result.recommendation && <AprioriRanking recommendation={result.recommendation}/>}
+        {result.rules && <Rules rules={result.rules}/>}
+        <GroupedAprioriDetails result={result}/>
+        {result.clusters && <section className="lab-section"><h3>Hồ sơ genre theo cụm</h3><div className="lab-table-scroll"><table><thead><tr><th>Thuật toán</th><th>Cụm</th><th>Users Train</th><th>Genres nổi bật</th></tr></thead><tbody>{result.clusters.flatMap((cluster) => cluster.profiles.map((profile) => <tr key={`${cluster.variant_id || cluster.algorithm}/${profile.cluster}`}><th>{cluster.variant_id || cluster.algorithm}</th><td>{profile.cluster < 0 ? "Noise" : profile.cluster}</td><td>{profile.users}</td><td>{Object.entries(profile.genre_means).map(([genre, score]) => `${genre}: ${score.toFixed(2)}`).join(" · ")}</td></tr>))}</tbody></table></div></section>}
+        {result.search && <details className="lab-detail-panel"><summary>Kết quả tìm kiếm cấu hình</summary><div className="lab-table-scroll"><table><thead><tr><th>Thuật toán</th><th>Cấu hình</th><th>Train</th><th>Validation giữ lại</th><th>Bao phủ</th></tr></thead><tbody>{result.search.map((row, index) => <tr key={index}><th>{String(row.algorithm || "Không có dữ liệu")}</th><td>{JSON.stringify(row.config || "Không có dữ liệu")}</td><td>{shownValue(row.silhouette, language)}</td><td>{shownValue(row.validation_silhouette, language)}</td><td>{shownValue(row.validation_coverage, language)}</td></tr>)}</tbody></table></div></details>}
+        {result.class_balance && <section className="lab-section"><h3>Phân bố nhãn</h3>{Object.entries(result.class_balance).map(([split, balance]) => <p key={split}>{split}: Không thích {balance.negative.toLocaleString("vi-VN")} · Thích {balance.positive.toLocaleString("vi-VN")} · {shownValue(balance.positive_fraction * 100, language)}%</p>)}</section>}
+        {hasTimings && <section className="lab-section"><h3>Thời gian pipeline (giây)</h3><div className="lab-preset-common">{Object.entries(detailedTimings!).map(([key, value]) => <div key={key}><dt>{({feature_creation_seconds:"Tạo đặc trưng",reducer_fit_seconds:"Fit reducer",transform_seconds:"Transform",model_training_seconds:"Huấn luyện mô hình",evaluation_seconds:"Đánh giá",total_pipeline_seconds:"Tổng pipeline"} as Record<string,string>)[key] || key}</dt><dd>{shownValue(value, language)}</dd></div>)}</div></section>}
+        <details className="lab-detail-panel"><summary>Các biểu đồ chẩn đoán</summary><div className="lab-charts">{result.charts.map((chart) => <LabChartFigure key={chart.index} chart={chart}/>)}</div></details>
+        <details className="lab-detail-panel"><summary>Cấu hình và metadata</summary><pre>{JSON.stringify({config: result.config, best_configs: result.best_configs, provenance: result.provenance, runtime: result.runtime, protocol: result.rl_protocol, notes: result.notes}, null, 2)}</pre></details>
+      </details>
+    </section>
+  );
 }

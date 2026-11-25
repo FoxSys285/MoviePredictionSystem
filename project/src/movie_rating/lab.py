@@ -22,7 +22,7 @@ import psutil
 import torch
 from sklearn.preprocessing import StandardScaler
 
-from movie_rating.experiment_config import ALGORITHMS, ExperimentRequest
+from movie_rating.experiment_config import ALGORITHMS, ExperimentRequest, preset_catalog
 from movie_rating.experiment_data import ExperimentData
 from movie_rating.experiment_logs import LOGGED_GROUPS, RunLogger, log_page
 from movie_rating.models.regression import FeatureRegression, StreamingLinearRegression
@@ -32,6 +32,7 @@ enable_unicode_dll_paths()
 
 GROUPS = tuple(ALGORITHMS)
 CATALOG = json.loads(Path(__file__).with_name('lab_catalog.json').read_text(encoding='utf-8'))
+PRESETS = preset_catalog()
 
 
 LabRequest = ExperimentRequest
@@ -226,7 +227,7 @@ class LabService:
         data = self.settings.artifacts_dir / 'data'
         manifest = data / 'manifest.json'
         ready = all((data / f'{s}.parquet').is_file() for s in ['train', 'validation', 'test', 'movies'])
-        return {**CATALOG, 'data_ready': ready,
+        return {**CATALOG, 'data_ready': ready, 'presets': PRESETS,
                 'statistics': self.data.catalog_statistics() if ready else None,
                 'dataset': json.loads(manifest.read_text(encoding='utf-8')) if manifest.is_file() else None}
 
@@ -254,11 +255,31 @@ class LabService:
         if not path.is_file():
             raise FileNotFoundError('Không tìm thấy lần chạy.')
         job = read_json(path)
+        if job['status'] in ('queued', 'running') and job.get('process_id') != os.getpid():
+            job.update(status='interrupted', message='Máy chủ đã khởi động lại. Hãy chạy lại thực nghiệm.')
         result = path.with_name('result.json')
         if result.is_file():
             job['result'] = read_json(result)
-        if job['status'] in ('queued', 'running') and job.get('process_id') != os.getpid():
-            job.update(status='interrupted', message='Máy chủ đã khởi động lại. Hãy chạy lại thực nghiệm.')
+        from movie_rating.experiment_resume import ProgressStore
+
+        # The progress snapshot is atomically replaced by the worker. Reading it
+        # from every UI poll can keep the destination open on Windows and block
+        # os.replace; only terminal runs need resume metadata.
+        progress = (
+            ProgressStore.summary(path.parent)
+            if job["status"] in ("cancelled", "failed", "interrupted", "completed")
+            else None
+        )
+        if progress:
+            job['completed_work_units'] = progress['completed_work_units']
+            job['epoch_checkpoint_available'] = progress['active_fit_checkpoint']
+        job['resume_available'] = bool(
+            progress
+            and job.get('group') in ('rating', 'classification')
+            and job.get('status') in ('cancelled', 'failed', 'interrupted')
+            and not job.get('resume_blocked')
+            and not result.exists()
+        )
         return job
 
     def start(self, request):
@@ -273,12 +294,45 @@ class LabService:
             folder.mkdir(parents=True)
             job = {'id': run_id, 'group': request.group, 'schema_version': 4, 'status': 'queued', 'progress': 0,
                    'message': 'Đang chuẩn bị dữ liệu', 'created_at': requested_at,
-                   'request': request.model_dump(), 'process_id': os.getpid(), 'cancel_requested': False}
+                   'request': request.model_dump(), 'process_id': os.getpid(), 'cancel_requested': False,
+                   'resume_count': 0}
             save_json(folder / 'job.json', job)
             if request.group in LOGGED_GROUPS:
                 RunLogger(folder).write(
                     f"Đã tạo thực nghiệm {request.group} · thuật toán: {', '.join(request.algorithms)}",
                     progress=0)
+            self.active = run_id
+            self.cancel_event.clear()
+            self.executor.submit(self._run, job, request)
+            return job
+
+    def resume(self, run_id):
+        with self.lock:
+            job = self.get(run_id)
+            if self.active is not None:
+                raise RuntimeError('Đang có một thực nghiệm chạy. Hãy đợi hoàn tất trước khi tiếp tục.')
+            if job.get('group') not in ('rating', 'classification'):
+                raise RuntimeError('Chỉ thực nghiệm hồi quy/phân loại hiện hỗ trợ tiếp tục từ checkpoint.')
+            if job.get('status') not in ('cancelled', 'failed', 'interrupted'):
+                raise RuntimeError('Chỉ có thể tiếp tục lần chạy đã dừng, lỗi hoặc bị gián đoạn.')
+            if not job.get('resume_available'):
+                raise RuntimeError(
+                    'Lần chạy này không có checkpoint tương thích. Hãy tạo một thực nghiệm mới; '
+                    'các lần chạy cũ không có checkpoint không thể khôi phục.'
+                )
+            folder = self.directory / run_id
+            if (folder / 'result.json').exists():
+                raise RuntimeError('Lần chạy đã có báo cáo hoàn tất và không cần tiếp tục.')
+            request = ExperimentRequest.model_validate(job['request'])
+            job.update(
+                status='queued',
+                message='Đang xác minh dữ liệu và tiếp tục từ các checkpoint đã lưu',
+                cancel_requested=False,
+                process_id=os.getpid(),
+                resume_count=job.get('resume_count', 0) + 1,
+            )
+            job.pop('finished_at', None)
+            save_json(folder / 'job.json', job)
             self.active = run_id
             self.cancel_event.clear()
             self.executor.submit(self._run, job, request)
@@ -380,8 +434,34 @@ class LabService:
                     update(None, 'Lưu ý: dùng hết Train đã chuẩn bị, nhưng dữ liệu nguồn '
                            'đã được lấy mẫu ở bước chuẩn bị; xem tỷ lệ nguồn trong báo cáo.')
             from movie_rating.experiment_pipeline import execute
+            progress_store = None
+            if request.group in ('rating', 'classification'):
+                from movie_rating.experiment_resume import ProgressStore, resume_fingerprint
 
-            result = execute(splits, movies, request, update)
+                fingerprint = resume_fingerprint(request, splits, movies, provenance)
+                progress_store = ProgressStore(path, fingerprint)
+                if job.get('resume_count', 0):
+                    update(None, 'Đã xác minh dữ liệu, split, tham số, seed, thư viện và code để tiếp tục.')
+
+            from movie_rating.native_threads import limit_native_threadpools
+
+            thread_limit = (
+                request.parameters.xgb_n_jobs
+                if request.group == 'rating' and 'xgboost' in request.algorithms
+                else 2
+            )
+            with limit_native_threadpools(
+                thread_limit,
+                include_xgboost=(
+                    request.group == 'rating' and 'xgboost' in request.algorithms
+                ),
+            ):
+                if progress_store is None:
+                    result = execute(splits, movies, request, update)
+                else:
+                    result = execute(
+                        splits, movies, request, update, progress_store=progress_store
+                    )
             update(98, 'Lưu bảng tiêu chí, số liệu biểu đồ và dấu vết lần chạy')
             data_note = (
                 'Kết quả dùng toàn bộ dữ liệu đã chuẩn bị.'
@@ -442,6 +522,11 @@ class LabService:
                                  'platform': platform.platform(), 'processor': platform.processor(),
                                  'cpu_count': os.cpu_count(), 'ram_bytes': psutil.virtual_memory().total,
                                  'device': device, 'time_unit': 'seconds',
+                                 'xgb_n_jobs': request.parameters.xgb_n_jobs
+                                 if request.group == 'rating' and 'xgboost' in request.algorithms
+                                 else None,
+                                 'threadpool_limit': thread_limit,
+                                 'torch_cuda_runtime': torch.version.cuda,
                                  'measurement': 'perf_counter; fit includes preprocessing; RSS process-wide',
                                  'libraries': {name: version(name) for name in ['numpy', 'pandas', 'scikit-learn', 'torch', 'xgboost', 'mlxtend']},
                                  'code_sha256': hashlib.sha256(b''.join(p.read_bytes() for p in sorted(Path(__file__).parent.rglob('*.py'))) + Path(__file__).with_name('lab_catalog.json').read_bytes()).hexdigest()}
@@ -454,7 +539,13 @@ class LabService:
             if logger:
                 logger.write(job['message'], 'warning')
         except Exception as error:
-            job.update(status='failed', message=f'{type(error).__name__}: {error}', finished_at=datetime.now(UTC).isoformat())
+            from movie_rating.experiment_resume import ResumeStateMismatch
+
+            job.update(
+                status='failed', message=f'{type(error).__name__}: {error}',
+                finished_at=datetime.now(UTC).isoformat(),
+                resume_blocked=isinstance(error, ResumeStateMismatch),
+            )
             if logger:
                 logger.write(job['message'], 'error')
                 logger.write(traceback.format_exc(limit=8), 'error')

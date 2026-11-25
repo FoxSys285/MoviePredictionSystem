@@ -193,7 +193,10 @@ class XGBoostRegression(FeatureRegression):
             ) as features:
                 self.estimator = self._estimator()
                 self.estimator.set_params(callbacks=[IterationProgress()])
-                emit(f"Bắt đầu học {self.n_estimators} cây · depth={self.max_depth}.")
+                emit(
+                    f"Bắt đầu học {self.n_estimators} cây · depth={self.max_depth} · "
+                    f"n_jobs={self.n_jobs}."
+                )
                 try:
                     self.estimator.fit(features, ratings.rating.to_numpy() - self.global_mean)
                 finally:

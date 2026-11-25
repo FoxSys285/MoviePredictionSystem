@@ -56,7 +56,7 @@ try{
     await page.locator(".lab-sidebar nav button").last().waitFor();
     assert.equal(await page.locator(".lab-sidebar nav button").count(),5);
     for(const [id,icon] of Object.entries(iconByGroup)){
-      assert.ok((await page.locator(`.lab-sidebar nav button[data-group-id="${id}"] svg`).getAttribute("class")).includes(`lucide-${icon}`),`Icon for ${id} must be keyed by group ID`);
+      assert.ok((await page.locator(`.lab-sidebar nav button[data-group-id="${id}"] svg`).first().getAttribute("class")).includes(`lucide-${icon}`),`Icon for ${id} must be keyed by group ID`);
     }
     assert.equal(await page.locator(".lab-algorithms article").count(),group.algorithms.length);
     const guide=page.locator('.lab-reduction-guide');
@@ -86,7 +86,7 @@ try{
       await page.getByLabel("Epochs SVD / NCF",{exact:true}).fill("2");
       await page.getByLabel("XGBoost · Trees",{exact:true}).fill("10");
       await page.getByLabel("XGBoost · Max depth",{exact:true}).fill("2");
-      await page.locator(".lab-config select").first().selectOption("compare");
+      await page.locator('.lab-config label').filter({hasText:"Giảm chiều hỗ trợ thuật toán"}).locator("select").selectOption("compare");
       await page.locator(".lab-config label").filter({hasText:"Components cần thử"}).locator("input").fill("1");
     }
     if(["rating","classification"].includes(group.id)){
@@ -99,7 +99,7 @@ try{
       await page.getByLabel("DQN · User Train tối đa",{exact:true}).fill("40");
     }
     if(group.id==="clustering"){
-      await page.locator(".lab-config select").first().selectOption("compare");
+      await page.locator('.lab-config label').filter({hasText:"Giảm chiều hỗ trợ thuật toán"}).locator("select").selectOption("compare");
       await page.locator(".lab-config label").filter({hasText:"Components cần thử"}).locator("input").fill("1");
       await page.locator(".lab-config label").filter({hasText:"K-Means · Danh sách K"}).locator("input").fill("2");
       await page.locator(".lab-config label").filter({hasText:"DBSCAN · Danh sách min_samples"}).locator("input").fill("5");
@@ -143,7 +143,10 @@ try{
     assert.equal(await page.locator(".lab-results .lab-comparison tbody tr").count(),finished.result.rows.length);
     assert.ok(await page.locator(".lab-stat-grid").count()>=2);
     if(["rating","classification"].includes(group.id)){
-      assert.equal(Object.keys(finished.result.cv).length,group.algorithms.length);
+      const variants=finished.request.reduction_mode==="off"?1:
+        finished.request.reduction_methods.length*finished.request.components.length+
+        Number(finished.request.reduction_mode==="compare");
+      assert.equal(Object.keys(finished.result.cv).length,group.algorithms.length*variants);
       assert.ok(Object.values(finished.result.cv).every(c=>c.folds.length===3));
       assert.ok((await page.locator(".lab-results").innerText()).includes("Mean ± Std"));
     }
@@ -154,6 +157,7 @@ try{
     }
     if(group.id==="classification")assert.ok((await page.locator(".lab-results").innerText()).includes("Confusion Matrix"));
     if(group.id==="classification"){
+      await page.locator(".lab-reference-toggle").click();
       const name=`Mốc ${group.metrics.find(m=>m.key==='accuracy').name}`;
       await page.getByLabel(name,{exact:true}).fill('1');
       await page.getByLabel(name,{exact:true}).press('Tab');

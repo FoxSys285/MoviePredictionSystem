@@ -21,6 +21,9 @@ cd ../..
 .\run_project.bat
 ```
 
+`setup.ps1` cài PyTorch CUDA 13.2 mặc định. Để chọn bản PyTorch CPU-only, chạy
+`.\scripts\setup.ps1 -TorchBuild cpu` trong thư mục `project`.
+
 Giao diện/API: <http://127.0.0.1:8000>. Swagger: <http://127.0.0.1:8000/docs>.
 
 ## Dữ liệu và mô hình

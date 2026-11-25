@@ -1,3 +1,7 @@
+param(
+    [ValidateSet('cuda', 'cpu')]
+    [string]$TorchBuild = 'cuda'
+)
 $ErrorActionPreference = 'Stop'
 $taskProjectRoot = Split-Path -Parent $PSScriptRoot
 $taskVenvPython = Join-Path $taskProjectRoot '.venv/Scripts/python.exe'
@@ -48,6 +52,9 @@ try {
         & $taskVenvPython -X utf8 -m pip install -r $taskLock
         if ($LASTEXITCODE -ne 0) { throw 'Cannot install locked dependencies.' }
     }
+    $taskTorchRequirements = Join-Path $taskProjectRoot "requirements-torch-$TorchBuild.txt"
+    & $taskVenvPython -X utf8 -m pip install -r $taskTorchRequirements
+    if ($LASTEXITCODE -ne 0) { throw "Cannot install the selected PyTorch build: $TorchBuild." }
     & $taskVenvPython -X utf8 -m pip install -e '.[dev]'
     if ($LASTEXITCODE -ne 0) { throw 'Cannot install project dependencies.' }
     Write-Output 'Ready. Run .\.venv\Scripts\movie-rating.exe serve from project/.'

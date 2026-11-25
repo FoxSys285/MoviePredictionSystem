@@ -102,6 +102,12 @@ def test_bounded_baskets_preserve_original_metrics_empty_users_and_catalog(max_l
     assert summary["train_users"] == 300 and summary["candidate_movies"] == 10
     assert summary["empty_transactions"] == int((~original.any(axis=1)).sum())
     assert summary["transaction_bytes"] == 300 * 10
+    assert result["rows"][0]["feature_creation_seconds"] >= 0
+    assert result["rows"][0]["model_training_seconds"] >= 0
+    assert result["pipeline_timings"]["total_pipeline_seconds"] >= 0
+    assert result["pipeline_timings"]["model_training_seconds"] == pytest.approx(
+        result["rows"][0]["model_training_seconds"]
+    )
     assert "Transactions" in "\n".join(messages) and "min_confidence" in "\n".join(messages)
 
 
@@ -170,6 +176,11 @@ def test_grouped_apriori_reduces_user_profiles_not_transactions_and_reports_fall
     assert all(row["candidate_pool_size"] == 6 for row in recommendation_rows)
     assert all("candidate_positive_coverage" in row for row in recommendation_rows)
     assert result["reduction"]["transaction_reduction"] is False
+    assert result["pipeline_timings"]["reducer_fit_seconds"] >= 0
+    assert result["pipeline_timings"]["total_pipeline_seconds"] >= 0
+    assert all(
+        "model_training_seconds" in row for row in result["rows"]
+    )
     assert "NDCG@10 Validation" in result["selection"]
     json.dumps(native(result), ensure_ascii=False, allow_nan=False)
 

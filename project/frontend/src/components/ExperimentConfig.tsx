@@ -1,47 +1,92 @@
-import type { LabGroup } from "../lib/lab";
-import { usePreferences } from "../lib/preferences";
+import type { LabGroup, LabPreset } from "../lib/lab";
 
-export const experimentDefaults={max_users:150,use_all_data:true,seed:42,epochs:15,patience:3,tune:false,
-  k_values:[2,3,4,6,8,10],eps_values:[1,1.5,2],min_samples_values:[5,10],min_user_ratings:5,
-  cluster_auto_eps:true,cluster_min_coverage:.8,cluster_shrinkage:10,cluster_eval_users:2000,
-  max_items:80,min_support:.08,min_confidence:.3,max_rule_length:2,components:[2,4,8],
-  episodes:500,learning_rate:.001,discount_factor:.9,exploration_rate:.2,
-  training_sweeps:1,max_training_steps:100000,training_user_limit:5000,action_limit:30,horizon:5,evaluation_users:1000,
-  replay_capacity:50000,dqn_batch_size:128,checkpoint_interval_steps:5000,replay_warmup:500,target_update_steps:250,
-  epsilon_start:.9,epsilon_end:.05,epsilon_decay_steps:10000,hidden_sizes:[64,64],
-  reduction_mode:"enabled" as "off"|"enabled"|"compare",reduction_methods:["pca","truncated_svd"] as ("pca"|"truncated_svd")[],
-  parameters:{factors:32,hidden_size:32,learning_rate:.005,xgb_learning_rate:.05,ncf_learning_rate:.003,regularization:.02,n_estimators:150,max_depth:6,forest_estimators:100,forest_depth:8,c:1,max_iter:600,min_samples_leaf:5,dropout:.1,batch_size:2048}};
-export type ExperimentConfigValue=typeof experimentDefaults;
-
-function ListInput({label,value,min,max,integer=true,onChange}:{label:string;value:number[];min:number;max:number;integer?:boolean;onChange:(v:number[])=>void}) {
-  // Keep an editing draft so trailing commas do not disappear while typing.
-  return <label>{label}<input defaultValue={value.join(", ")} required onChange={e=>{const values=e.target.value.split(",").map(s=>s.trim());const numbers=values.map(Number);const valid=values.every(Boolean)&&numbers.every(n=>Number.isFinite(n)&&n>=min&&n<=max&&(!integer||Number.isInteger(n)));e.target.setCustomValidity(valid?"":`Nhập danh sách phân cách bằng dấu phẩy, từ ${min} đến ${max}.`);if(valid)onChange(numbers);}}/></label>;
+export function AlgorithmSelection({
+  group,
+  selected,
+  onChange,
+  disabled,
+}: {
+  group: LabGroup;
+  selected: string[];
+  onChange: (value: string[]) => void;
+  disabled: boolean;
+}) {
+  return (
+    <fieldset className="lab-algorithm-picker" disabled={disabled}>
+      <legend>Thuật toán chạy</legend>
+      <div>
+        {group.algorithms.map((algorithm) => (
+          <label key={algorithm.id} className={selected.includes(algorithm.id) ? "selected" : ""}>
+            <input
+              type="checkbox"
+              checked={selected.includes(algorithm.id)}
+              onChange={(event) => onChange(
+                event.target.checked
+                  ? [...selected, algorithm.id]
+                  : selected.filter((id) => id !== algorithm.id),
+              )}
+            />
+            <span>{algorithm.name}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 
-export function ExperimentConfiguration({group,value,onChange,disabled,algorithms,setAlgorithms}:{group:LabGroup;value:ExperimentConfigValue;onChange:(v:ExperimentConfigValue)=>void;disabled:boolean;algorithms:string[];setAlgorithms:(v:string[])=>void}) {
-  const {t}=usePreferences();
-  const set=(key:keyof ExperimentConfigValue,v:unknown)=>onChange({...value,[key]:v});
-  const field=(key:keyof ExperimentConfigValue,label:string,min:number,max:number,step=1)=><label key={key}>{label}<input type="number" required min={min} max={max} step={step} value={value[key] as number} onChange={e=>set(key,e.target.value===""?"":Number(e.target.value))}/></label>;
-  const param=(key:keyof typeof value.parameters,label:string,min:number,max:number,step=1)=><label key={key}>{label}<input type="number" required min={min} max={max} step={step} value={value.parameters[key]} onChange={e=>set("parameters",{...value.parameters,[key]:e.target.value===""?"":Number(e.target.value)})}/></label>;
-  const list=(key:"k_values"|"eps_values"|"min_samples_values"|"components",label:string,min:number,max:number,integer=true)=><ListInput key={`${group.id}/${key}`} label={label} value={value[key]} min={min} max={max} integer={integer} onChange={v=>set(key,v)}/>;
-  return <fieldset className="lab-config-wrapper" disabled={disabled}><legend className="sr-only">Cấu hình thực nghiệm</legend>
-    <div className="lab-algorithm-select">{group.algorithms.map(a=><label className={algorithms.includes(a.id)?"selected":""} key={a.id}><input type="checkbox" checked={algorithms.includes(a.id)} onChange={e=>setAlgorithms(e.target.checked?[...algorithms,a.id]:algorithms.filter(id=>id!==a.id))}/><span>{a.name}</span></label>)}</div>
-    <details className="lab-parameter-details"><summary><span><strong>Cấu hình thông số</strong><small>Ngân sách dữ liệu, hyperparameters và các thiết lập của nhóm</small></span><span className="lab-collapse-label"><span className="lab-when-closed">Mở rộng</span><span className="lab-when-open">Thu gọn</span><span className="lab-collapse-arrow" aria-hidden="true">⌄</span></span></summary>
-    <div className="lab-config">{group.id==="association"?<label>Phạm vi khai phá<input value="Toàn bộ tập Train đã chuẩn bị" readOnly/></label>:<><label className="lab-check-label"><input type="checkbox" checked={value.use_all_data} onChange={e=>set("use_all_data",e.target.checked)}/>Dùng toàn bộ dữ liệu đã chuẩn bị</label>{!value.use_all_data&&field("max_users","Số user tối đa",10,5000)}</>}
-      <label>Random Seed<input value="42" readOnly/></label><label>Train / Validation / Test<input value="70% / 15% / 15%" readOnly/></label>
-      {["rating","classification"].includes(group.id)&&<><label>Cross Validation<input value="3 lượt CV thời gian trên Train" readOnly/></label><label className="lab-check-label"><input type="checkbox" checked={value.tune} onChange={e=>set("tune",e.target.checked)}/>Tuning cấu hình nhẹ / mặc định / mạnh hơn</label><small className="lab-muted">{t("Với mô hình có tham số hỗ trợ, thử các cấu hình nhẹ hơn, mặc định và mạnh hơn. Validation chọn một cấu hình cho từng thuật toán; 3-Fold CV chạy trên cấu hình được chọn trong mỗi biểu diễn.")}</small></>}
-      {group.id==="rating"&&<>{field("epochs","Epochs SVD / NCF",2,100)}{field("patience","NCF · Early Stopping patience",1,20)}{param("factors","SVD / NCF · Factors",2,128)}{param("hidden_size","NCF · Hidden size",4,256)}{param("dropout","NCF · Dropout",0,.9,.05)}{param("batch_size","NCF · Batch size",32,16384)}{param("learning_rate","SVD · Learning rate",.0001,.1,.0001)}{param("ncf_learning_rate","NCF · Learning rate",.0001,.1,.0001)}{param("xgb_learning_rate","XGBoost · Learning rate",.001,.3,.001)}{param("regularization","SVD / NCF · Regularization",0,10,.01)}</>}
-      {group.id==="rating"&&<>{param("n_estimators","XGBoost · Trees",10,500)}{param("max_depth","XGBoost · Max depth",1,20)}</>}{group.id==="classification"&&<>{param("forest_estimators","Forest · Trees",10,500)}{param("forest_depth","Forest · Max depth",1,20)}</>}
-      {group.id==="classification"&&<><label>Ngưỡng rating Thích<input value="rating ≥ 3,5" readOnly/></label>{param("c","Logistic · C",.001,100,.001)}{param("max_iter","Logistic · Max iterations",50,2000)}{param("min_samples_leaf","Forest · Min samples leaf",1,50)}</>}
-      {group.id==="clustering"&&<>{list("k_values","K-Means · Danh sách K",2,30)}<label className="lab-check-label"><input type="checkbox" checked={value.cluster_auto_eps} onChange={e=>set("cluster_auto_eps",e.target.checked)}/>DBSCAN · Tự chọn eps theo khoảng cách lịch sử</label>{!value.cluster_auto_eps&&list("eps_values","DBSCAN · Danh sách eps",.1,20,false)}{list("min_samples_values","DBSCAN · Danh sách min_samples",2,100)}{field("cluster_min_coverage","Tỷ lệ bao phủ cụm tối thiểu",.1,1,.05)}{field("cluster_shrinkage","Làm trơn sở thích thể loại",1,100)}{field("cluster_eval_users","Số user tối đa đánh giá gợi ý",10,5000)}<small className="lab-muted">K-Means và DBSCAN fit cuối trên toàn bộ user đủ lịch sử của Train. Đọc train.parquet và thể loại từ movies.parquet; validation.parquet/test.parquet dùng đánh giá. Giới hạn user đánh giá gợi ý không giới hạn dữ liệu train.</small></>}
-      {["clustering","pca"].includes(group.id)&&field("min_user_ratings","Số ratings Train tối thiểu / user",2,100)}
-      {group.id==="association"&&<><label>Ngưỡng phim yêu thích<input value="rating ≥ 4,0" readOnly/></label>{field("max_items","Giới hạn phim ứng viên",10,500)}{field("min_support","min_support",.001,1,.001)}{field("min_confidence","min_confidence",.01,1,.01)}{field("max_rule_length","Số phim tối đa trong itemset",2,3)}<small className="lab-muted">Quét toàn bộ ratings và users Train để chọn phim ứng viên. Giới hạn phim không phải lấy mẫu người dùng; chỉ phim rating ≥ 4,0 tạo mục trong transaction.</small></>}
-      {group.id==="pca"&&list("components","Danh sách Components",1,128)}
-      {group.id!=="pca"&&<><label>{t("Giảm chiều hỗ trợ thuật toán")}<select value={value.reduction_mode} onChange={e=>set("reduction_mode",e.target.value)}><option value="off">{t("Tắt · giữ biểu diễn gốc")}</option><option value="enabled">{t("Chỉ biểu diễn giảm chiều")}</option><option value="compare">{t("So sánh gốc và giảm chiều")}</option></select></label>{value.reduction_mode!=="off"&&<>{list("components",t("Components cần thử"),1,128)}{group.id==="association"&&<>{list("k_values",t("Apriori · K số nhóm user"),2,30)}<small className="lab-muted">{t("Mỗi giá trị K tạo thêm một biến thể nhóm; giảm số K thử nếu cần rút ngắn lần chạy.")}</small></>}</>}</>}
-      {group.id==="rating"&&<small className="lab-muted">{t("Linear/XGBoost chỉ nén block tương tác user-preference × genre phim; giữ bias và thống kê nền. SVD/NCF giữ latent factors/embeddings và thêm nhánh hybrid dùng profile nén.")}</small>}
-      {group.id==="classification"&&<small className="lab-muted">{t("Scaler và reducer fit lại riêng trong Train và từng fold. Chỉ nén block tương tác sở thích; Logistic/Random Forest giữ đặc trưng nền. Threshold Logistic chọn trên Validation.")}</small>}
-      {group.id==="clustering"&&<small className="lab-muted">{t("PCA/TruncatedSVD nén hồ sơ sở thích tương đối và tần suất. K-Means / DBSCAN được fit và tìm lại eps trong biểu diễn mới; mô tả cụm vẫn dùng genre gốc.")}</small>}
-      {group.id==="reinforcement"&&<>{field("training_sweeps",t("DQN · Số lượt duyệt Train user"),1,20)}{field("training_user_limit",t("DQN · User Train tối đa"),10,50000)}{field("max_training_steps",t("DQN · Giới hạn training steps"),1,2000000)}{field("action_limit",t("Catalog action tối đa (≤30 phim)"),5,30)}{field("horizon",t("Số hành động / episode"),1,30)}{field("evaluation_users",t("User Validation/Test tối đa"),10,5000)}{field("learning_rate",t("DQN · Adam learning rate"),.00001,.1,.00001)}{field("discount_factor",t("DQN · Gamma"),0,1,.01)}{field("epsilon_start",t("DQN · Epsilon đầu"),0,1,.01)}{field("epsilon_end",t("DQN · Epsilon cuối"),0,1,.01)}{field("epsilon_decay_steps",t("DQN · Epsilon decay steps"),1,2000000)}{field("replay_capacity",t("Replay capacity"),100,500000)}{field("dqn_batch_size",t("DQN · Batch size"),8,2048)}{field("replay_warmup",t("Replay warmup"),1,50000)}{field("target_update_steps",t("Target network update steps"),1,10000)}{field("checkpoint_interval_steps",t("Checkpoint Validation interval"),1,100000)}<small className="lab-muted">{t("DQN học từ feature dùng chung, không đưa userId vào mạng. Q-table q_learning trong lịch sử vẫn giữ giao thức cũ. Training sweep có giới hạn user/step và báo tỷ lệ bao phủ thực tế.")}</small></>}
-    </div></details>{group.id==="association"?<p className="lab-muted">{t("Apriori toàn cục dùng hết train.parquet đã chuẩn bị. Biến thể giảm chiều chỉ nén hồ sơ user Train để phân nhóm rồi khai phá Apriori trong từng nhóm; không nén transaction phim. Validation/Test được giữ riêng.")}</p>:group.id==="reinforcement"?<><p className="lab-muted">{t("RL dùng split theo thời gian trong từng user. Train episode tách support/query; Validation/Test dùng cùng hồ sơ Train đóng băng. Catalog ứng viên tối đa 30 phim.")}</p><p className="lab-muted">{t("DQN là Q-Learning xấp xỉ bằng mạng nhỏ, khác Q-table theo user trong báo cáo cũ. Reward thiếu phản hồi được quy ước bằng 0 và không phải đánh giá counterfactual.")}</p></>:<p className="lab-muted">Bỏ chọn toàn bộ dữ liệu để giới hạn user khi cần chạy thử. Kết quả ghi rõ số ratings thực tế đã dùng.</p>}<p className="lab-muted">Worker chạy tách biệt, không tự dừng theo thời gian hoặc ngưỡng RAM; có thể dừng thủ công nếu cần.</p>
-  </fieldset>;
+export function ExperimentConfiguration({
+  group,
+  preset,
+  algorithms,
+}: {
+  group: LabGroup;
+  preset?: LabPreset;
+  algorithms: string[];
+}) {
+  return (
+    <section className="lab-preset" aria-label="Cấu hình preset chỉ đọc">
+      <div className="lab-preset-heading">
+        <div>
+          <span className="lab-kicker">PRESET V{preset?.version ?? 1}</span>
+          <h3>{preset?.label ?? "Preset chuẩn"}</h3>
+        </div>
+        <span className="lab-badge">Tuning tắt</span>
+      </div>
+      <dl className="lab-preset-common">
+        {(preset?.common ?? []).map((setting) => (
+          <div key={setting.label}>
+            <dt>{setting.label}</dt>
+            <dd>{setting.value || "Không có dữ liệu"}</dd>
+          </div>
+        ))}
+      </dl>
+      {algorithms.length > 0 ? (
+        <div className="lab-preset-algorithms">
+          {algorithms.map((id) => {
+            const algorithm = group.algorithms.find((candidate) => candidate.id === id);
+            const settings = preset?.algorithms[id]?.settings ?? [];
+            return (
+              <article key={id}>
+                <h4>{algorithm?.name ?? id}</h4>
+                {settings.length > 0 ? (
+                  <dl>
+                    {settings.map((setting) => (
+                      <div key={setting.label}>
+                        <dt>{setting.label}</dt>
+                        <dd>{setting.value || "Không có dữ liệu"}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p>Không có tham số bổ sung.</p>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="lab-preset-empty">Chọn ít nhất một thuật toán để xem preset.</p>
+      )}
+    </section>
+  );
 }

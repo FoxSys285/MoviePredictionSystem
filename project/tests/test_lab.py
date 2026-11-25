@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import threading
 import time
 
@@ -391,6 +392,42 @@ def test_cancellation_does_not_publish_partial_results(configured, monkeypatch):
     assert service.active is None
 
 
+def test_resume_reuses_only_runs_with_a_progress_checkpoint(configured, tmp_path, monkeypatch):
+    from movie_rating.experiment_resume import ProgressStore
+    from movie_rating.lab import save_json
+
+    service = LabService(configured)
+    run_id = "20261121T000000-abcdef12"
+    folder = service.directory / run_id
+    folder.mkdir(parents=True)
+    request = LabRequest(group="rating", algorithms=["linear"])
+    save_json(folder / "job.json", {
+        "id": run_id, "group": "rating", "schema_version": 4, "status": "cancelled",
+        "progress": 30, "message": "stopped", "created_at": "2026-11-21T00:00:00+00:00",
+        "finished_at": "2026-11-21T00:01:00+00:00", "request": request.model_dump(),
+        "process_id": os.getpid(), "cancel_requested": True, "resume_count": 0,
+    })
+    ProgressStore(folder, {"sample": "saved"})
+    submitted = []
+    monkeypatch.setattr(service.executor, "submit", lambda *args: submitted.append(args))
+    old_id = "20261121T000001-abcdef13"
+    old_folder = service.directory / old_id
+    old_folder.mkdir(parents=True)
+    save_json(old_folder / "job.json", {
+        "id": old_id, "group": "rating", "schema_version": 4, "status": "cancelled",
+        "progress": 0, "message": "stopped", "created_at": "2026-11-21T00:00:00+00:00",
+        "request": request.model_dump(), "process_id": os.getpid(), "resume_count": 0,
+    })
+    with pytest.raises(RuntimeError, match="không có checkpoint"):
+        service.resume(old_id)
+
+    resumed = service.resume(run_id)
+    assert resumed["id"] == run_id
+    assert resumed["status"] == "queued"
+    assert resumed["resume_count"] == 1
+    assert len(submitted) == 1
+
+
 def test_preprocessing_cache_is_shared_across_groups(configured):
     prepare(configured)
     service = LabService(configured)
@@ -452,7 +489,7 @@ def test_failed_run_is_saved_without_results_and_releases_worker(configured, mon
     prepare(configured)
     service = LabService(configured)
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         raise ValueError("Expected training failure")
 
     monkeypatch.setattr(pipeline, "execute", fail)

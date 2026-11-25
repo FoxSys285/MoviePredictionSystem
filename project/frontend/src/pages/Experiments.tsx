@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, AlertCircle, CalendarDays, ChevronRight, Database, Download, FlaskConical, Layers, Loader2, Minimize2, Network, Play, RefreshCw, Target, type LucideIcon } from "lucide-react";
+import { Activity, AlertCircle, ChevronRight, Download, FlaskConical, GitCompare, Layers, Loader2, Minimize2, Network, Play, RefreshCw, Target, type LucideIcon } from "lucide-react";
 import { PageHero } from "../components/ui";
 import { LabChartFigure } from "../components/LabChart";
 import { ExperimentResults, DatasetSummary } from "../components/ExperimentResults";
-import { ExperimentConfiguration, experimentDefaults } from "../components/ExperimentConfig";
+import { AlgorithmSelection, ExperimentConfiguration } from "../components/ExperimentConfig";
 import { ExperimentLog } from "../components/ExperimentLog";
 import { ExperimentJobStatus } from "../components/ExperimentJobStatus";
 import { AssociationDataSource } from "../components/AssociationDataSource";
-import { ExperimentReductionGuide } from "../components/ExperimentReductionGuide";
+import { ExperimentReductionGuide, type ReductionChoice } from "../components/ExperimentReductionGuide";
+import { AlgorithmRunComparison } from "../components/AlgorithmRunComparison";
 import { MetricReferenceTable, useMetricReferenceSettings } from "../components/MetricReferences";
 import { api, apiResourceUrl } from "../lib/api";
 import { ExperimentSuccessSound } from "../lib/experiment-sound";
 import { busy, metricNumber, type LabCatalog, type LabGroup, type LabJob, type LabRow } from "../lib/lab";
+import { runAlgorithmTitle } from "../lib/experiment-runs";
 import { usePreferences } from "../lib/preferences";
 
 const icons:Record<string,LucideIcon>={rating:Activity,classification:Target,clustering:Layers,association:Network,pca:Minimize2,reinforcement:FlaskConical};
@@ -21,21 +23,23 @@ const statuses: Record<string,string>={queued:"Đang chờ",running:"Đang chạ
 function Results({job,group}:{job:LabJob;group:LabGroup}) {
   const {t,language}=usePreferences();
   const result=job.result!;
-  const historicMetrics=result.charts.filter(c=>c.metric_key).map(c=>({key:c.metric_key!,name:c.title,definition:"",interpretation:"",question:""}));
+  const rows=result.rows??[];const chartsData=result.charts??[];
+  const showValue=(value:unknown)=>typeof value==="number"&&Number.isFinite(value)?metricNumber(value,language):"Không có dữ liệu";
+  const historicMetrics=chartsData.filter(c=>c.metric_key).map(c=>({key:c.metric_key!,name:c.title,definition:"",interpretation:"",question:""}));
   if(historicMetrics.length)group={...group,metrics:historicMetrics};
   const identity=(row:LabRow)=>String(row.variant_id||row.algorithm);
-  const algorithms=[...new Map(result.rows.map(r=>[identity(r),r.name])).entries()];
-  const lookup=new Map(result.rows.map(r=>[`${identity(r)}/${r.split}`,r]));
-  const charts=group.metrics.map(metric=>result.charts.find(c=>c.metric_key===metric.key)).filter(c=>c!==undefined);
+  const algorithms=[...new Map(rows.map(r=>[identity(r),r.name||r.algorithm])).entries()];
+  const lookup=new Map(rows.map(r=>[`${identity(r)}/${r.split}`,r]));
+  const charts=group.metrics.map(metric=>chartsData.find(c=>c.metric_key===metric.key)).filter(c=>c!==undefined);
   return <section id="lab-results" className="lab-section lab-results" aria-label={t("Kết quả thực nghiệm")}>
     <div className="lab-section-heading"><h2>{t("Kết quả Validation và Test")}</h2><div className="lab-downloads">{["csv","xlsx","json"].map(format=><a key={format} className="lab-outline" href={apiResourceUrl(`/experiment-lab/runs/${job.id}/export/${format}`)}><Download size={14}/>{format.toUpperCase()}</a>)}</div></div>
-    <p className="lab-muted">{result.provenance.sampled_users.toLocaleString("vi-VN")} user · {result.provenance.sampled_ratings.toLocaleString("vi-VN")} rating. N/A: {t("không đủ dữ liệu hoặc chỉ số không xác định.")}</p>
-    {["rating","classification"].includes(group.id)&&<p className="lab-muted">{result.provenance.protocol==="global_temporal_70_15_15_v1"?"Giao thức: chia toàn cục theo thời gian (70/15/15).":result.provenance.protocol==="iid_rating_70_15_15_v3"?"Giao thức: chia IID theo từng rating (70/15/15).":"Kết quả lịch sử dùng giao thức cũ."}</p>}
+    <p className="lab-muted">{showValue(result.provenance?.sampled_users)} user · {showValue(result.provenance?.sampled_ratings)} rating · Seed {showValue(result.config?.seed)}</p>
+    {["rating","classification"].includes(group.id)&&<p className="lab-muted">{result.provenance?.protocol==="global_temporal_70_15_15_v1"?"Giao thức: chia toàn cục theo thời gian (70/15/15).":result.provenance?.protocol==="iid_rating_70_15_15_v3"?"Giao thức: chia IID theo từng rating (70/15/15).":"Kết quả lịch sử dùng giao thức cũ."}</p>}
     <div className="lab-table-scroll lab-comparison"><table><caption>{t("Bảng so sánh kết quả")} · Validation &amp; Test</caption><thead>
       <tr><th rowSpan={2}>{t("Thuật toán / cấu hình")}</th>{["Validation","Test"].map(split=><th key={split} colSpan={group.metrics.length} className={`lab-split-label lab-split-${split.toLowerCase()}`}>{split}</th>)}</tr>
       <tr>{["validation","test"].flatMap(split=>group.metrics.map(metric=><th key={`${split}/${metric.key}`}>{metric.name}</th>))}</tr>
-    </thead><tbody>{algorithms.map(([aid,name])=><tr key={aid}><th scope="row">{name}</th>{["validation","test"].flatMap(split=>group.metrics.map(metric=><td key={`${split}/${metric.key}`} data-split={split} data-metric={metric.key}>{metricNumber(lookup.get(`${aid}/${split}`)?.[metric.key],language)}</td>))}</tr>)}</tbody></table></div>
-    {result.notes.map(note=><p className="lab-muted lab-result-note" key={note}>{note}</p>)}
+    </thead><tbody>{algorithms.map(([aid,name])=><tr key={aid}><th scope="row">{String(name)}</th>{["validation","test"].flatMap(split=>group.metrics.map(metric=><td key={`${split}/${metric.key}`} data-split={split} data-metric={metric.key}>{showValue(lookup.get(`${aid}/${split}`)?.[metric.key])}</td>))}</tr>)}</tbody></table></div>
+    {(result.notes??[]).map(note=><p className="lab-muted lab-result-note" key={note}>{note}</p>)}
     <div className="lab-section-heading lab-figures-heading"><h2>{t("Biểu đồ so sánh")}</h2><span className="lab-badge">{group.metrics.length} {t("chỉ số")} · {group.metrics.length} {t("biểu đồ")}</span></div>
     <div className="lab-charts">{charts.map(c=><LabChartFigure key={c.metric_key} chart={c}/>)}</div>
   </section>;
@@ -47,22 +51,36 @@ export function Experiments() {
   const [params,setParams]=useSearchParams();
   const [catalog,setCatalog]=useState<LabCatalog|null>(null),[catalogError,setCatalogError]=useState("");
   const [runs,setRuns]=useState<LabJob[]>([]),[chosen,setChosen]=useState<Record<string,string>>({});
-  const [job,setJob]=useState<LabJob|null>(null),[config,setConfig]=useState(experimentDefaults);
+  const [job,setJob]=useState<LabJob|null>(null);
   const [algorithmChoices,setAlgorithmChoices]=useState<Record<string,string[]>>({});
+  const [reductionChoices,setReductionChoices]=useState<Record<string,ReductionChoice>>({});
   const referenceSettings=useMetricReferenceSettings();
   const [submitting,setSubmitting]=useState(false),[error,setError]=useState(""),[reload,setReload]=useState(0);
   const [submissionStartedAt,setSubmissionStartedAt]=useState<string|null>(null);
   const groupId=params.get("group")||"rating";
   const group=catalog?.groups.find(g=>g.id===groupId)||catalog?.groups[0];
   const primaryGroups=catalog?.groups.filter(g=>g.id!=="pca")||[];
+  const comparisonMode=params.get("view")==="compare";
+  const comparisonGroup=primaryGroups.find(g=>g.id===groupId)||primaryGroups[0];
   const legacyPca=group?.id==="pca";
   const groupRuns=runs.filter(r=>r.group===group?.id);
   const selectedId=group ? chosen[group.id]||groupRuns[0]?.id : undefined;
   const visibleJob=job?.group===group?.id ? job : null;
   const active=runs.find(busy);
   const algorithms=group ? algorithmChoices[group.id]??group.algorithms.map(a=>a.id) : [];
-  const crossValidated=group?.id==="rating"||group?.id==="classification";
-  const usesTemporalHoldout=group?.id!=="association";
+  const basePreset=group ? catalog?.presets?.[group.id] : undefined;
+  const reductionChoice:ReductionChoice=(group && reductionChoices[group.id]) ||
+    (basePreset && Object.values(basePreset.algorithms).some(a=>a.reduction) ? "pca" : "off");
+  const preset=basePreset ? {...basePreset,algorithms:Object.fromEntries(
+    Object.entries(basePreset.algorithms).map(([id,config])=>{
+      const eligible=!!config.reduction || (group?.id==="reinforcement" && id==="dqn");
+      const reduction=eligible && reductionChoice!=="off" ? {method:reductionChoice,components:8} : null;
+      const settings=config.settings.map(setting=>setting.label==="Biểu diễn" && eligible
+        ? {...setting,value:reduction ? `${reduction.method==="pca"?"PCA":"TruncatedSVD"} · 8 chiều` : "Gốc · không giảm chiều"}
+        : setting);
+      return [id,{...config,settings,reduction}];
+    })
+  )} : undefined;
   const statusJob:LabJob|null=submitting&&group&&submissionStartedAt?{
     id:"submitting",group:group.id,status:"queued",progress:0,
     message:"Đang gửi yêu cầu thực nghiệm…",created_at:submissionStartedAt,
@@ -104,55 +122,61 @@ export function Experiments() {
   async function start(){
     if(!group)return;setSubmissionStartedAt(new Date().toISOString());setSubmitting(true);setError("");
     successSound.arm();
-    try {const response=await api<LabJob>("/experiment-lab/runs",{method:"POST",body:JSON.stringify({...config,...(group.id==="association"?{use_all_data:true}:{}),group:group.id,algorithms})});successSound.track(response.id);setRuns(v=>[response,...v]);setChosen(v=>({...v,[group.id]:response.id}));setJob(response);}
+    try {
+      if(!preset)throw new Error("Chưa tải được preset chuẩn cho nhóm này.");
+      const response=await api<LabJob>("/experiment-lab/runs",{method:"POST",body:JSON.stringify({group:group.id,algorithms,preset_id:preset.id,reduction_choice:reductionChoice})});
+      successSound.track(response.id);setRuns(v=>[response,...v]);setChosen(v=>({...v,[group.id]:response.id}));setJob(response);
+    }
     catch(e){setError((e as Error).message);}finally{setSubmitting(false);setSubmissionStartedAt(null);}
   }
-  function toggleReductionMethod(method:"pca"|"truncated_svd"){
-    setConfig(current=>{
-      const selected=current.reduction_methods.includes(method);
-      if(selected&&current.reduction_methods.length===1)return current;
-      return {...current,reduction_methods:selected?current.reduction_methods.filter(item=>item!==method):[...current.reduction_methods,method]};
-    });
+  async function resumeRun(id:string){
+    setSubmitting(true);setError("");
+    try{const response=await api<LabJob>(`/experiment-lab/runs/${id}/resume`,{method:"POST"});successSound.track(response.id);setRuns(v=>[response,...v.filter(r=>r.id!==response.id)]);setChosen(v=>({...v,[response.group]:response.id}));setJob(response);}
+    catch(e){setError((e as Error).message);setReload(v=>v+1);}finally{setSubmitting(false);}
   }
   async function stop(id:string){try {await api(`/experiment-lab/runs/${id}/cancel`,{method:"POST"});setReload(v=>v+1);}catch(e){setError((e as Error).message);}}
   return <div className="lab-page"><PageHero title={t("THỰC NGHIỆM")} subtitle="MovieLens Research Studio · Huấn luyện thật. Đánh giá minh bạch." variant="experiments"/>
     <main id="main" className="container lab-layout"><aside className="lab-sidebar" aria-label={t("Danh mục nhóm thuật toán")}>
       <div className="lab-sidebar-heading"><FlaskConical size={20}/><div><strong>{t("Phòng thực nghiệm")}</strong><span>MovieLens 25M</span></div></div><p className="lab-sidebar-label">{t("NHÓM THUẬT TOÁN")}</p>
-      <nav>{primaryGroups.map(g=>{const Icon=icons[g.id];return <button type="button" key={g.id} data-group-id={g.id} className={group?.id===g.id?"selected":""} aria-current={group?.id===g.id?"page":undefined} onClick={()=>{setParams({group:g.id});requestAnimationFrame(()=>document.querySelector(".lab-content")?.scrollIntoView({block:"start",behavior:"instant"}));}}><Icon size={18}/><span>{t(g.title)}<small>{g.algorithms.length} {t("thuật toán")} · {g.metrics.length} {t("chỉ số")}</small></span><ChevronRight size={14}/></button>;})}</nav>
+      <nav>{primaryGroups.map(g=>{const Icon=icons[g.id];return <button type="button" key={g.id} data-group-id={g.id} className={!comparisonMode&&group?.id===g.id?"selected":""} aria-current={!comparisonMode&&group?.id===g.id?"page":undefined} onClick={()=>{setParams({group:g.id});requestAnimationFrame(()=>document.querySelector(".lab-content")?.scrollIntoView({block:"start",behavior:"instant"}));}}><Icon size={18}/><span>{t(g.title)}<small>{g.algorithms.length} {t("thuật toán")} · {g.metrics.length} {t("chỉ số")}</small></span><ChevronRight size={14}/></button>;})}</nav>
+      <button type="button" className={`lab-sidebar-comparison${comparisonMode?" selected":""}`} aria-current={comparisonMode?"page":undefined} disabled={!comparisonGroup} onClick={()=>{if(comparisonGroup)setParams({group:comparisonGroup.id,view:"compare"});}}><GitCompare size={18}/><span>{t("So sánh thuật toán")}<small>{t("Chọn lịch sử cùng nhóm")}</small></span><ChevronRight size={14}/></button>
     </aside><div className="lab-content">
-      {catalogError?<section className="lab-alert" role="alert"><AlertCircle/><div><h2>{t("Chưa tải được phần thực nghiệm")}</h2><p>{catalogError}</p><button className="lab-outline" onClick={()=>setReload(v=>v+1)}><RefreshCw size={15}/>{t("Thử lại")}</button></div></section>:!group?<div className="lab-loading" role="status"><Loader2 className="lab-spin"/>{t("Đang tải danh mục thuật toán…")}</div>:legacyPca?<>
+      {catalogError?<section className="lab-alert" role="alert"><AlertCircle/><div><h2>{t("Chưa tải được phần thực nghiệm")}</h2><p>{catalogError}</p><button className="lab-outline" onClick={()=>setReload(v=>v+1)}><RefreshCw size={15}/>{t("Thử lại")}</button></div></section>:!group?<div className="lab-loading" role="status"><Loader2 className="lab-spin"/>{t("Đang tải danh mục thuật toán…")}</div>:comparisonMode&&comparisonGroup?<AlgorithmRunComparison groups={primaryGroups} runs={runs} group={comparisonGroup} onGroupChange={groupId=>setParams({group:groupId,view:"compare"})}/>:legacyPca?<>
         <header className="lab-group-header" data-testid="legacy-pca-page"><span className="lab-kicker">LEGACY RESULTS / PCA</span><div><h1>{t("Lịch sử PCA cũ")}</h1><span className="lab-badge">{groupRuns.length} {t("lần chạy đã lưu")}</span></div></header>
         <section className="lab-legacy-pca" role="note"><h2>{t("Lịch sử PCA cũ")}</h2><p>{t("Đường dẫn PCA cũ được giữ để xem và xuất kết quả đã lưu. Để chạy PCA/TruncatedSVD trong một tác vụ, hãy chọn một trong năm nhóm chính và bật giảm chiều trong cấu hình.")}</p></section>
         <section className="lab-section lab-run-panel lab-legacy-history" aria-label={t("Lịch sử thực nghiệm")}>
-          {groupRuns.length>0?<label className="lab-history">{t("Lịch sử thực nghiệm")}<select value={selectedId||""} onChange={e=>setChosen(v=>({...v,[group.id]:e.target.value}))}>{groupRuns.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("vi-VN")} · {t(statuses[r.status])}</option>)}</select></label>:<p className="lab-muted">{t("Chưa có lịch sử PCA cũ. Chạy một nhóm chính để dùng PCA hoặc TruncatedSVD trong pipeline của thuật toán.")}</p>}
+          {groupRuns.length>0?<label className="lab-history">{t("Lịch sử thực nghiệm")}<select value={selectedId||""} onChange={e=>setChosen(v=>({...v,[group.id]:e.target.value}))}>{groupRuns.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("vi-VN")} · {runAlgorithmTitle(r,catalog?.groups||[],t)} · {t(statuses[r.status])}</option>)}</select></label>:<p className="lab-muted">{t("Chưa có lịch sử PCA cũ. Chạy một nhóm chính để dùng PCA hoặc TruncatedSVD trong pipeline của thuật toán.")}</p>}
           {statusJob&&<ExperimentJobStatus key={`status-${statusJob.id}`} job={statusJob} statusLabel={t(statuses[statusJob.status])} onCancel={!submitting?()=>void stop(statusJob.id):undefined}/>}
           {!submitting&&visibleJob&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
           {selectedId&&!visibleJob&&<div className="lab-loading" role="status"><Loader2 className="lab-spin"/>{t("Đang tải kết quả lịch sử…")}</div>}
         </section>
-        {visibleJob?.status==="completed"&&[3,4].includes(visibleJob.result?.schema_version||0)?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group} references={referenceSettings.settings[group.id]||{}}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:null}
+        {visibleJob?.status==="completed"&&[3,4].includes(visibleJob.result?.schema_version||0)?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:null}
       </>:<>
         <header className="lab-group-header"><span className="lab-kicker">RESEARCH WORKSPACE / {String(primaryGroups.indexOf(group)+1).padStart(2,"0")}</span><div><h1>{t(group.title)}</h1><span className="lab-badge">{group.algorithms.length} thuật toán</span></div><p className="lab-objective">{group.question}</p></header>
-        <div className="lab-protocol-strip" aria-label={t("Tóm tắt giao thức thực nghiệm")}>
-          <div className="lab-protocol-card"><span className="lab-protocol-icon"><Database size={20}/></span><div><strong>{catalog?.statistics?.ratings?.toLocaleString("vi-VN")??"MovieLens 25M"}</strong><small>{t(catalog?.statistics?"Ratings trong dữ liệu đã chuẩn bị":"Nguồn dữ liệu thực nghiệm")}</small></div></div>
-          <div className="lab-protocol-card"><span className="lab-protocol-icon"><CalendarDays size={20}/></span><div><strong>{usesTemporalHoldout?"70 / 15 / 15":t("Train đã chuẩn bị")}</strong><small>{t(usesTemporalHoldout?"Train / Validation / Test theo thời gian từng user":"Apriori chỉ khai phá trên tập Train")}</small></div></div>
-          <div className="lab-protocol-card"><span className="lab-protocol-icon"><Activity size={20}/></span><div><strong>{crossValidated?"3-Fold CV":t("Validation + Test")}</strong><small>{t(crossValidated?"CV chạy trên Train, giữ riêng Validation và Test":"Validation chọn cấu hình · Test đánh giá cuối")}</small></div></div>
-        </div>
         <DatasetSummary stats={catalog?.statistics} label="Dataset đã chuẩn bị"/>
         {group.id==="association"&&<AssociationDataSource catalog={catalog!}/>}
         <nav className="lab-jump-links" aria-label={t("Điều hướng trong nhóm")}><a href="#lab-run"><Play size={12}/>{t("Chạy thực nghiệm")}</a>{visibleJob?.status==="completed"&&<a href="#lab-results">{t("Kết quả thực nghiệm")}</a>}</nav>
-        <header className="lab-algorithm-heading"><div><span className="lab-kicker">{t("MÔ HÌNH TRONG THỰC NGHIỆM")}</span><h2>{t("Thuật toán trong nhóm này")}</h2><p>{t("Chọn một thuật toán để mở cấu hình chạy tương ứng.")}</p></div><span className="lab-badge">{group.algorithms.length} {t("thuật toán")}</span></header>
-        <div className="lab-algorithms">{group.algorithms.map((a,index)=>{const Icon=a.id.includes("forest")||a.id.includes("ncf")?Network:a.id.includes("svd")?Layers:Activity;return <article className={`lab-algorithm-card tone-${index%2}`} key={a.id}><span className="lab-algorithm-icon"><Icon size={28}/></span><div className="lab-algorithm-copy"><span className="lab-algorithm-label">{t("THUẬT TOÁN {number}",{number:String(index+1).padStart(2,"0")})}</span><h3>{a.name}</h3><p>{a.description}</p></div><button className="lab-algorithm-use" type="button" aria-label={t("Chọn {name} để chạy",{name:a.name})} aria-controls="lab-run" disabled={submitting||!!active} onClick={()=>{setAlgorithmChoices(previous=>({...previous,[group.id]:[a.id]}));requestAnimationFrame(()=>document.getElementById("lab-run")?.scrollIntoView({block:"start",behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}}>{t("Dùng thuật toán này")}<ChevronRight size={16}/></button></article>;})}</div>
-        <ExperimentReductionGuide group={group} config={config} onToggleMethod={toggleReductionMethod} disabled={submitting||!!active}/>
-        <MetricReferenceTable group={group} values={referenceSettings.settings[group.id]||{}} onChange={(key,value)=>referenceSettings.setValue(group.id,key,value)} onReset={()=>referenceSettings.reset(group.id)}/>
+        <AlgorithmSelection group={group} selected={algorithms} disabled={submitting||!!active}
+          onChange={value=>setAlgorithmChoices(previous=>({...previous,[group.id]:value}))}/>
+        <ExperimentReductionGuide group={group} preset={preset} algorithms={algorithms}
+          choice={reductionChoice} disabled={submitting||!!active}
+          onChange={choice=>setReductionChoices(previous=>({...previous,[group.id]:choice}))}/>
+        <details className="lab-detail-panel lab-reference-details"><summary>Mốc tham chiếu chỉ số</summary>
+          <MetricReferenceTable group={group} values={referenceSettings.settings[group.id]||{}} onChange={(key,value)=>referenceSettings.setValue(group.id,key,value)} onReset={()=>referenceSettings.reset(group.id)}/>
+        </details>
         <section id="lab-run" className="lab-section lab-run-panel" aria-label={t("Chạy thực nghiệm")}><div className="lab-section-heading"><h2>{t("Chạy thực nghiệm nhóm")}</h2><span className="lab-data-status"><i/>{t(catalog?.data_ready?"Dữ liệu đã sẵn sàng":"Chưa chuẩn bị dữ liệu")}</span></div>
-          <form onInvalidCapture={e=>{const details=(e.target as HTMLElement).closest("details");if(details)details.open=true;}} onSubmit={e=>{e.preventDefault();void start();}}><ExperimentConfiguration key={group.id} group={group} value={config} onChange={setConfig} disabled={submitting||!!active} algorithms={algorithms} setAlgorithms={v=>setAlgorithmChoices(previous=>({...previous,[group.id]:v}))}/><div className="lab-run-actions"><button className="lab-primary" type="submit" disabled={submitting||!!active||!catalog?.data_ready||!algorithms.length}><Play size={17}/>{algorithms.length===1?"Chạy thuật toán đã chọn":t("Chạy thực nghiệm nhóm")}</button><span className="lab-muted">{algorithms.length} thuật toán được chọn</span></div></form>
+          <form onSubmit={e=>{e.preventDefault();void start();}}>
+            <ExperimentConfiguration key={group.id} group={group} preset={preset} algorithms={algorithms}/>
+            <div className="lab-run-actions"><button className="lab-primary" type="submit" disabled={submitting||!!active||!catalog?.data_ready||!preset||!algorithms.length}><Play size={17}/>{algorithms.length===1?"Chạy thuật toán đã chọn":t("Chạy thực nghiệm nhóm")}</button><span className="lab-muted">{algorithms.length} thuật toán được chọn</span></div>
+          </form>
           {error&&<div className="lab-alert" role="alert"><AlertCircle size={18}/><p>{error}</p><button className="lab-outline" onClick={()=>{setError("");setReload(v=>v+1);}}>{t("Thử lại")}</button></div>}
           {active&&active.id!==visibleJob?.id&&<div className="lab-active-other" role="status"><Loader2 size={16} className="lab-spin"/><p>{t("Đang chạy nhóm")}: {catalog?.groups.find(g=>g.id===active.group)?.title}</p><button className="lab-outline" onClick={()=>void stop(active.id)}>{t("Dừng")}</button></div>}
-          {!!groupRuns.length&&<label className="lab-history">{t("Lịch sử thực nghiệm")}<select value={selectedId||""} onChange={e=>setChosen(v=>({...v,[group.id]:e.target.value}))}>{groupRuns.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("vi-VN")} · {t(statuses[r.status])}</option>)}</select></label>}
+          {!!groupRuns.length&&<label className="lab-history">{t("Lịch sử thực nghiệm")}<select value={selectedId||""} onChange={e=>setChosen(v=>({...v,[group.id]:e.target.value}))}>{groupRuns.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("vi-VN")} · {runAlgorithmTitle(r,catalog?.groups||[],t)} · {t(statuses[r.status])}</option>)}</select></label>}
           {statusJob&&<ExperimentJobStatus key={`status-${statusJob.id}`} job={statusJob} statusLabel={t(statuses[statusJob.status])} onCancel={!submitting?()=>void stop(statusJob.id):undefined}/>}
+          {!active&&visibleJob?.resume_available&&<div className="lab-run-actions"><button className="lab-primary" type="button" disabled={submitting} onClick={()=>void resumeRun(visibleJob.id)}><Play size={16}/>{t(visibleJob.epoch_checkpoint_available?"Tiếp tục từ checkpoint":"Chạy tiếp phần còn lại")}</button><span className="lab-muted">{t("Đã lưu {count} đơn vị công việc{epoch}; báo cáo hoàn tất chỉ xuất hiện sau khi chạy xong.",{count:String(visibleJob.completed_work_units||0),epoch:visibleJob.epoch_checkpoint_available?" và checkpoint NCF epoch":""})}</span></div>}
           {!submitting&&visibleJob&&["rating","classification","association","clustering","reinforcement","pca"].includes(visibleJob.group)&&<ExperimentLog key={visibleJob.id} job={visibleJob}/>}
         </section>
-        {visibleJob?.status==="completed"&&[3,4].includes(visibleJob.result?.schema_version||0)?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group} references={referenceSettings.settings[group.id]||{}}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ. Chạy lại để áp dụng pipeline hiện tại và 3-Fold CV.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:!visibleJob&&<section className="lab-empty" role="status"><FlaskConical size={28}/><h2>{t("Chưa có kết quả thực nghiệm")}</h2><p>Chọn thuật toán và chạy để tạo báo cáo từ dữ liệu MovieLens thật.</p></section>}
+        {visibleJob?.status==="completed"&&[3,4].includes(visibleJob.result?.schema_version||0)?<ExperimentResults key={visibleJob.id} job={visibleJob} group={group}/>:visibleJob?.status==="completed"&&visibleJob.result?.schema_version===2?<><p className="lab-alert">Kết quả lịch sử dùng giao thức cũ. Chạy lại để áp dụng pipeline hiện tại và 3-Fold CV.</p><Results key={visibleJob.id} job={visibleJob} group={group}/></>:!visibleJob&&<section className="lab-empty" role="status"><FlaskConical size={28}/><h2>{t("Chưa có kết quả thực nghiệm")}</h2><p>Chọn thuật toán và chạy để tạo báo cáo từ dữ liệu MovieLens thật.</p></section>}
       </>}
     </div></main>
   </div>;
