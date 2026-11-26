@@ -9,8 +9,9 @@ import { ExperimentLog } from "../components/ExperimentLog";
 import { ExperimentJobStatus } from "../components/ExperimentJobStatus";
 import { AssociationDataSource } from "../components/AssociationDataSource";
 import { ExperimentReductionGuide, type ReductionChoice } from "../components/ExperimentReductionGuide";
+import { ExperimentMetricGuide } from "../components/ExperimentMetricGuide";
+import { ExperimentConfigurationSummary } from "../components/ExperimentConfigurationSummary";
 import { AlgorithmRunComparison } from "../components/AlgorithmRunComparison";
-import { MetricReferenceTable, useMetricReferenceSettings } from "../components/MetricReferences";
 import { api, apiResourceUrl } from "../lib/api";
 import { ExperimentSuccessSound } from "../lib/experiment-sound";
 import { busy, metricNumber, type LabCatalog, type LabGroup, type LabJob, type LabRow } from "../lib/lab";
@@ -54,7 +55,6 @@ export function Experiments() {
   const [job,setJob]=useState<LabJob|null>(null);
   const [algorithmChoices,setAlgorithmChoices]=useState<Record<string,string[]>>({});
   const [reductionChoices,setReductionChoices]=useState<Record<string,ReductionChoice>>({});
-  const referenceSettings=useMetricReferenceSettings();
   const [submitting,setSubmitting]=useState(false),[error,setError]=useState(""),[reload,setReload]=useState(0);
   const [submissionStartedAt,setSubmissionStartedAt]=useState<string|null>(null);
   const groupId=params.get("group")||"rating";
@@ -158,12 +158,10 @@ export function Experiments() {
         <nav className="lab-jump-links" aria-label={t("Điều hướng trong nhóm")}><a href="#lab-run"><Play size={12}/>{t("Chạy thực nghiệm")}</a>{visibleJob?.status==="completed"&&<a href="#lab-results">{t("Kết quả thực nghiệm")}</a>}</nav>
         <AlgorithmSelection group={group} selected={algorithms} disabled={submitting||!!active}
           onChange={value=>setAlgorithmChoices(previous=>({...previous,[group.id]:value}))}/>
-        <ExperimentReductionGuide group={group} preset={preset} algorithms={algorithms}
+        {group.id === "rating" || group.id === "classification" ? <ExperimentMetricGuide groupId={group.id}/> : <ExperimentReductionGuide group={group} preset={preset} algorithms={algorithms}
           choice={reductionChoice} disabled={submitting||!!active}
-          onChange={choice=>setReductionChoices(previous=>({...previous,[group.id]:choice}))}/>
-        <details className="lab-detail-panel lab-reference-details"><summary>Mốc tham chiếu chỉ số</summary>
-          <MetricReferenceTable group={group} values={referenceSettings.settings[group.id]||{}} onChange={(key,value)=>referenceSettings.setValue(group.id,key,value)} onReset={()=>referenceSettings.reset(group.id)}/>
-        </details>
+          onChange={choice=>setReductionChoices(previous=>({...previous,[group.id]:choice}))}/>}
+        {(group.id === "rating" || group.id === "classification") && <ExperimentConfigurationSummary group={group} preset={preset} algorithms={algorithms}/>}
         <section id="lab-run" className="lab-section lab-run-panel" aria-label={t("Chạy thực nghiệm")}><div className="lab-section-heading"><h2>{t("Chạy thực nghiệm nhóm")}</h2><span className="lab-data-status"><i/>{t(catalog?.data_ready?"Dữ liệu đã sẵn sàng":"Chưa chuẩn bị dữ liệu")}</span></div>
           <form onSubmit={e=>{e.preventDefault();void start();}}>
             <div className="lab-run-actions"><button className="lab-primary" type="submit" disabled={submitting||!!active||!catalog?.data_ready||!preset||!algorithms.length}><Play size={17}/>{algorithms.length===1?"Chạy thuật toán đã chọn":t("Chạy thực nghiệm nhóm")}</button><span className="lab-muted">{algorithms.length} thuật toán được chọn</span></div>

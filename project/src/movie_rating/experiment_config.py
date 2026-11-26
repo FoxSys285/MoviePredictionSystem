@@ -110,53 +110,59 @@ def preset_catalog():
             {"label": "Train / Validation / Test", "value": "70% / 15% / 15%"},
         ]
         if group in {"rating", "classification"}:
-            common.append({"label": "Đánh giá", "value": f"{CV_FOLDS}-fold theo thời gian trên Train"})
+            common.append({"label": "Đánh giá", "value": f"GridSearchCV với cv={CV_FOLDS} trên Train"})
 
         algorithm_settings = {}
         for algorithm in ALGORITHMS[group]:
             settings = []
             if group == "rating":
                 if algorithm == "linear":
-                    settings = []
+                    settings = [
+                        {"label": "scaler", "value": "StandardScaler()"},
+                        {"label": "fit_intercept", "value": "True"},
+                    ]
                 elif algorithm == "xgboost":
                     settings = [
-                        {"label": "Cây", "value": str(params["n_estimators"])},
-                        {"label": "Độ sâu", "value": str(params["max_depth"])},
-                        {"label": "Learning rate", "value": str(params["xgb_learning_rate"])},
-                        {"label": "Luồng CPU", "value": str(params["xgb_n_jobs"])},
+                        {"label": "n_estimators", "value": str(params["n_estimators"])},
+                        {"label": "max_depth", "value": str(params["max_depth"])},
+                        {"label": "learning_rate", "value": str(params["xgb_learning_rate"])},
+                        {"label": "n_jobs", "value": str(params["xgb_n_jobs"])},
                     ]
                 elif algorithm == "svd":
                     settings = [
-                        {"label": "Factors", "value": str(params["factors"])},
-                        {"label": "Epochs", "value": str(values["epochs"])},
-                        {"label": "Learning rate", "value": str(params["learning_rate"])},
-                        {"label": "Regularization", "value": str(params["regularization"])},
+                        {"label": "factors", "value": str(params["factors"])},
+                        {"label": "epochs", "value": str(values["epochs"])},
+                        {"label": "learning_rate", "value": str(params["learning_rate"])},
+                        {"label": "regularization", "value": str(params["regularization"])},
                     ]
                 else:
                     settings = [
-                        {"label": "Factors / hidden", "value": f"{params['factors']} / {params['hidden_size']}"},
-                        {"label": "Epochs / patience", "value": f"{values['epochs']} / {values['patience']}"},
-                        {"label": "Batch size", "value": str(params["batch_size"])},
-                        {"label": "Learning rate", "value": str(params["ncf_learning_rate"])},
+                        {"label": "factors", "value": str(params["factors"])},
+                        {"label": "hidden_size", "value": str(params["hidden_size"])},
+                        {"label": "epochs", "value": str(values["epochs"])},
+                        {"label": "patience", "value": str(values["patience"])},
+                        {"label": "batch_size", "value": str(params["batch_size"])},
+                        {"label": "learning_rate", "value": str(params["ncf_learning_rate"])},
+                        {"label": "regularization", "value": str(params["regularization"])},
+                        {"label": "dropout", "value": str(params["dropout"])},
                     ]
             elif group == "classification":
                 if algorithm == "logistic":
                     settings = [
+                        {"label": "scaler", "value": "StandardScaler()"},
                         {"label": "C", "value": str(params["c"])},
-                        {"label": "Số vòng tối đa", "value": str(params["max_iter"])},
-                        {"label": "Ngưỡng thích", "value": "Rating ≥ 3,5"},
+                        {"label": "max_iter", "value": str(params["max_iter"])},
                     ]
                 else:
                     settings = [
-                        {"label": "Số cây", "value": str(params["forest_estimators"])},
-                        {"label": "Độ sâu", "value": str(params["forest_depth"])},
-                        {"label": "Lá tối thiểu", "value": str(params["min_samples_leaf"])},
-                        {"label": "Bootstrap tối đa / cây", "value": (
+                        {"label": "n_estimators", "value": str(params["forest_estimators"])},
+                        {"label": "max_depth", "value": str(params["forest_depth"])},
+                        {"label": "min_samples_leaf", "value": str(params["min_samples_leaf"])},
+                        {"label": "max_samples", "value": (
                             str(params["forest_max_samples"])
-                            if params["forest_max_samples"] is not None else "Toàn bộ Train"
+                            if params["forest_max_samples"] is not None else "None"
                         )},
-                        {"label": "Luồng CPU", "value": str(RANDOM_FOREST_N_JOBS)},
-                        {"label": "Ngưỡng thích", "value": "Rating ≥ 3,5"},
+                        {"label": "n_jobs", "value": str(RANDOM_FOREST_N_JOBS)},
                     ]
             elif group == "clustering":
                 settings = (

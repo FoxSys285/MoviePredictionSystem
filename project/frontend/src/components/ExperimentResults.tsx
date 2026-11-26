@@ -10,8 +10,8 @@ function ExperimentPipeline({group,result}:{group:LabGroup;result:LabJob["result
   const {t}=usePreferences();
   if(!result)return null;
   const stages:Record<string,string[]>={
-    rating:["Train theo thời gian từng user","Đặc trưng rating; loại nhãn của hàng Train","Scaler / PCA / TruncatedSVD fit trong Train hoặc fold","Mô hình và CV thời gian","Chọn cấu hình trên Validation","Refit Train + Validation, đánh giá Test"],
-    classification:["Train theo thời gian từng user","Đặc trưng và chuẩn hóa fit trên Train","Reducer chỉ nén block tương tác user–genre","Logistic / Random Forest","Chọn threshold và model bằng Validation","Refit Train + Validation, đánh giá Test"],
+    rating:["Train theo thời gian từng user","Tạo đặc trưng riêng trong từng fold","StandardScaler chỉ cho Linear Regression","GridSearchCV với cv=5 chọn tham số","Refit cấu hình tốt nhất trên Train","Đánh giá RMSE, MAE trên Validation và Test"],
+    classification:["Train theo thời gian từng user","Ba nhãn: Không thích / Bình thường / Thích","StandardScaler chỉ cho Logistic Regression","GridSearchCV với cv=5 chọn tham số","Refit cấu hình tốt nhất trên Train","Đánh giá Accuracy, F1-macro, AUC-ROC"],
     clustering:["Hồ sơ sở thích và tần suất từ Train","Chia user fit / giữ lại","Scaler / reducer fit trên user fit","K-Means hoặc DBSCAN; tìm lại cấu hình","Fit cuối trên toàn bộ Train","Đánh giá ranking tương lai Validation / Test"],
     reinforcement:["Train support / query theo thời gian","Reducer chỉ nén profile support","Giữ nguyên action mask và tín hiệu động","DQN học; Random / Popularity dùng cùng catalog","Chọn checkpoint bằng Validation","Phục hồi checkpoint và đánh giá Test đóng băng"],
     association:["Toàn bộ prepared Train và transaction dương","Apriori toàn cục giữ làm baseline","Reducer nén profile user Train rồi phân nhóm","Apriori riêng theo nhóm; transaction không bị nén","Chọn theo NDCG Validation","Test ranking trong catalog phim Train"],
@@ -329,8 +329,8 @@ function PerformanceTable({
 function CrossValidation({ result, group, language }: { result: LabResult; group: LabGroup; language: string }) {
   if (!["rating", "classification"].includes(group.id)) return null;
   const entries = Object.entries(result.cv ?? {});
-  const metricKeys = group.id === "rating" ? ["rmse", "mae"] : ["f1", "precision", "recall"];
-  const metricNames: Record<string, string> = { rmse: "RMSE", mae: "MAE", f1: "F1", precision: "Precision", recall: "Recall" };
+  const metricKeys = group.id === "rating" ? ["rmse", "mae"] : ["accuracy", "f1", "auc_roc"];
+  const metricNames: Record<string, string> = { rmse: "RMSE", mae: "MAE", accuracy: "Accuracy", f1: "F1-macro", auc_roc: "AUC-ROC" };
   const chartValues: { label: string; value: number | null }[] = [];
   const temporal = result.cv_protocol === "per_user_expanding_time_v1";
   const foldCount = result.cv_folds ?? Math.max(0, ...entries.map(([, data]) => data.folds?.length ?? 0));
@@ -339,7 +339,7 @@ function CrossValidation({ result, group, language }: { result: LabResult; group
   return (
     <section className="lab-result-row" aria-labelledby="lab-cv-title">
       <h3 id="lab-cv-title">{temporal ? `${cvTitle} theo thời gian trên Train` : foldCount ? `${cvTitle} Cross Validation` : cvTitle}</h3>
-      <p>{temporal ? `${cvTitle} theo thời gian trên Train.` : "Không có metadata CV; giao thức lịch sử cần được kiểm tra trong chi tiết."}</p>
+      <p>{result.cv_protocol === "grid_search_cv_5" ? "GridSearchCV với cv=5 trên Train; chọn tham số theo điểm trung bình 5 fold. Validation và Test được giữ riêng." : temporal ? `${cvTitle} theo thời gian trên Train.` : "Không có metadata CV; giao thức lịch sử cần được kiểm tra trong chi tiết."}</p>
       {entries.length ? <div className="lab-table-scroll"><table className="lab-result-table"><thead><tr>
         <th>Thuật toán / biến thể</th>{metricKeys.flatMap((key) => [...foldIndices.map((index) => `Fold ${index + 1}`), "Trung bình ± độ lệch chuẩn"].map((label) => <th key={`${key}/${label}`}>{metricNames[key]} · {label}</th>))}
       </tr></thead><tbody>{entries.map(([id, data]) => {
@@ -450,7 +450,7 @@ export function ExperimentResults({ job, group }: { job: LabJob; group: LabGroup
         <GroupedAprioriDetails result={result}/>
         {result.clusters && <section className="lab-section"><h3>Hồ sơ genre theo cụm</h3><div className="lab-table-scroll"><table><thead><tr><th>Thuật toán</th><th>Cụm</th><th>Users Train</th><th>Genres nổi bật</th></tr></thead><tbody>{result.clusters.flatMap((cluster) => cluster.profiles.map((profile) => <tr key={`${cluster.variant_id || cluster.algorithm}/${profile.cluster}`}><th>{cluster.variant_id || cluster.algorithm}</th><td>{profile.cluster < 0 ? "Noise" : profile.cluster}</td><td>{profile.users}</td><td>{Object.entries(profile.genre_means).map(([genre, score]) => `${genre}: ${score.toFixed(2)}`).join(" · ")}</td></tr>))}</tbody></table></div></section>}
         {result.search && <details className="lab-detail-panel"><summary>Kết quả tìm kiếm cấu hình</summary><div className="lab-table-scroll"><table><thead><tr><th>Thuật toán</th><th>Cấu hình</th><th>Train</th><th>Validation giữ lại</th><th>Bao phủ</th></tr></thead><tbody>{result.search.map((row, index) => <tr key={index}><th>{String(row.algorithm || "Không có dữ liệu")}</th><td>{JSON.stringify(row.config || "Không có dữ liệu")}</td><td>{shownValue(row.silhouette, language)}</td><td>{shownValue(row.validation_silhouette, language)}</td><td>{shownValue(row.validation_coverage, language)}</td></tr>)}</tbody></table></div></details>}
-        {result.class_balance && <section className="lab-section"><h3>Phân bố nhãn</h3>{Object.entries(result.class_balance).map(([split, balance]) => <p key={split}>{split}: Không thích {balance.negative.toLocaleString("vi-VN")} · Thích {balance.positive.toLocaleString("vi-VN")} · {shownValue(balance.positive_fraction * 100, language)}%</p>)}</section>}
+        {result.class_balance && <section className="lab-section"><h3>Phân bố nhãn</h3>{Object.entries(result.class_balance).map(([split, balance]) => <p key={split}>{split}: Không thích {balance.negative.toLocaleString("vi-VN")}{balance.neutral !== undefined && <> · Bình thường {balance.neutral.toLocaleString("vi-VN")}</>} · Thích {balance.positive.toLocaleString("vi-VN")}</p>)}</section>}
         {hasTimings && <section className="lab-section"><h3>Thời gian pipeline (giây)</h3><div className="lab-preset-common">{Object.entries(detailedTimings!).map(([key, value]) => <div key={key}><dt>{({feature_creation_seconds:"Tạo đặc trưng",reducer_fit_seconds:"Fit reducer",transform_seconds:"Transform",model_training_seconds:"Huấn luyện mô hình",evaluation_seconds:"Đánh giá",total_pipeline_seconds:"Tổng pipeline"} as Record<string,string>)[key] || key}</dt><dd>{shownValue(value, language)}</dd></div>)}</div></section>}
         <details className="lab-detail-panel"><summary>Các biểu đồ chẩn đoán</summary><div className="lab-charts">{result.charts.map((chart) => <LabChartFigure key={chart.index} chart={chart}/>)}</div></details>
         <details className="lab-detail-panel"><summary>Cấu hình và metadata</summary><pre>{JSON.stringify({config: result.config, best_configs: result.best_configs, provenance: result.provenance, runtime: result.runtime, protocol: result.rl_protocol, notes: result.notes}, null, 2)}</pre></details>

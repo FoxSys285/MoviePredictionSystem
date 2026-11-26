@@ -132,19 +132,19 @@
     {
       "id": "classification",
       "title": "Classification",
-      "question": "Người dùng có thích bộ phim không?",
+      "question": "Người dùng không thích, thấy bình thường hay thích bộ phim?",
       "algorithms": [
         {
           "id": "logistic",
           "name": "Logistic Regression",
-          "description": "Ước lượng xác suất thuộc lớp; scaler và reducer fit riêng trong Train/fold, chỉ nén block tương tác user–genre. Threshold được chọn trên Validation.",
-          "output": "Xác suất thích và nhãn thích/không thích."
+          "description": "Phân loại ba lớp bằng Logistic Regression. StandardScaler và đặc trưng được fit riêng trong từng fold của GridSearchCV; chọn tham số theo F1-macro trung bình.",
+          "output": "Xác suất ba lớp và nhãn: Không thích (<2,5), Bình thường (2,5–3,5), Thích (>3,5)."
         },
         {
           "id": "random_forest",
           "name": "Random Forest Classifier",
-          "description": "Tổng hợp nhiều cây quyết định để học ranh giới phi tuyến. Biến thể PCA giữ đặc trưng nền và chỉ nén block tương tác profile; so với nhánh raw trên cùng fold.",
-          "output": "Xác suất và nhãn lớp."
+          "description": "Phân loại ba lớp bằng Random Forest, không dùng StandardScaler. Đặc trưng được fit riêng trong từng fold của GridSearchCV; chọn tham số theo F1-macro trung bình.",
+          "output": "Xác suất ba lớp và nhãn: Không thích (<2,5), Bình thường (2,5–3,5), Thích (>3,5)."
         }
       ],
       "metrics": [
@@ -168,10 +168,10 @@
         },
         {
           "key": "f1",
-          "name": "F1-score ↑",
-          "definition": "F1 của lớp Thích (rating ≥3,5).",
+          "name": "F1-macro",
+          "definition": "Trung bình F1 của ba lớp Không thích, Bình thường và Thích, mỗi lớp có trọng số bằng nhau.",
           "interpretation": "Cao hơn tốt hơn.",
-          "question": "F1 của lớp Thích (rating ≥3,5).",
+          "question": "Trung bình F1 của ba lớp Không thích, Bình thường và Thích.",
           "reference": {
             "value": 0.7,
             "operator": "gte",
@@ -179,17 +179,17 @@
             "unit": "tỷ lệ",
             "minimum": 0,
             "maximum": 1,
-            "rationale": "Mục tiêu F1 lớp Thích ít nhất 0,70 để cân bằng Precision và Recall.",
-            "interpretation": "≥0,70: đạt mục tiêu cân bằng; <0,70: còn bỏ sót phim thích hoặc gợi ý sai nhiều.",
-            "caution": "F1 không tính TN, phụ thuộc ngưỡng xác suất và tỷ lệ nhãn. Đọc thêm Confusion Matrix, Precision và Recall."
+            "rationale": "Mục tiêu F1-macro ít nhất 0,70 trên ba lớp.",
+            "interpretation": "F1-macro càng cao thể hiện chất lượng tổng hợp trên ba lớp càng tốt.",
+            "caution": "Đây là mốc của dự án; cần so sánh các mô hình trên cùng tập đánh giá."
           }
         },
         {
           "key": "auc_roc",
           "name": "AUC-ROC ↑",
-          "definition": "Diện tích ROC, tính từ xác suất lớp Thích.",
+          "definition": "AUC-ROC trung bình ba lớp theo One-vs-Rest, tính từ xác suất dự đoán.",
           "interpretation": "Cao hơn tốt hơn.",
-          "question": "Diện tích ROC, tính từ xác suất lớp Thích.",
+          "question": "AUC-ROC trung bình ba lớp theo One-vs-Rest.",
           "reference": {
             "value": 0.7,
             "operator": "gte",
@@ -197,9 +197,9 @@
             "unit": "tỷ lệ",
             "minimum": 0,
             "maximum": 1,
-            "rationale": "Mục tiêu AUC ít nhất 0,70: có khả năng xếp hạng hai lớp tốt hơn mức không phân biệt 0,50.",
+            "rationale": "Mục tiêu AUC-ROC macro ít nhất 0,70 trên ba bài toán một lớp so với các lớp còn lại.",
             "interpretation": "≥0,70: đạt mốc phân biệt; 0,50–<0,70: phân biệt còn yếu; <0,50: cần kiểm tra chiều điểm/nhãn.",
-            "caution": "AUC dùng xác suất, không phải nhãn cứng; không đo độ hiệu chỉnh xác suất hoặc bảo đảm Precision cao."
+            "caution": "Không tính được khi tập đánh giá thiếu một lớp; kết quả được để trống kèm lý do."
           }
         },
         {

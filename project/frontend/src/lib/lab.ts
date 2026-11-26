@@ -26,7 +26,7 @@ export type LabResult = {
   recommendation?:{k?:number;cohort_users?:number;candidate_movies:number;protocol?:string;rows:{algorithm:string;variant_id:string;split:string;recall_at_10:number|null;ndcg_at_10:number|null;evaluated_users:number;sampled_users:number;clustered_users?:number;clustered_recall_at_10?:number|null;clustered_ndcg_at_10?:number|null;group_assigned_users?:number;group_coverage?:number;recommendation_coverage?:number;fallback_users?:number;candidate_pool_size?:number;eligible_positives?:number;candidate_eligible_positives?:number;candidate_positive_coverage?:number|null}[]};
   cv_protocol?:string; cv_folds?:number;
   cv?:Record<string,{metrics:Record<string,{mean:number;std:number;n:number}>;folds:unknown[]}>;
-  class_balance?:Record<string,{positive:number;negative:number;positive_fraction:number}>;
+  class_balance?:Record<string,{positive:number;negative:number;neutral?:number;positive_fraction:number}>;
   rules?:LabRule[]; search?:Record<string,unknown>[];
   clusters?:{algorithm:string;variant_id?:string;qualified?:boolean;stability?:{adjusted_rand_mean:number|null;joint_coverage_mean:number;comparisons:number};profiles:{cluster:number;users:number;genre_means:Record<string,number>}[]}[];
   runtime?:{isolated_process?:boolean;automatic_memory_limit?:boolean;memory_budget_mb?:number;worker_peak_private_mb?:number;system_min_available_mb?:number;processor:string;cpu_count:number;ram_bytes:number;device:string;python:string;platform:string;xgb_n_jobs?:number|null;threadpool_limit?:number;torch_cuda_runtime?:string|null};

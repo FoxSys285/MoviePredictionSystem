@@ -321,3 +321,208 @@ def evaluate_model(model, X, ratings, task: str = "regression", split: str = "va
     if hasattr(model, "run_directory_"):
         save_evaluation(model.run_directory_, result)
     return result
+
+
+def candidates(algorithm, request):
+    """Return parameter dictionaries for every supervised algorithm.
+
+    Fixed requests still run five-fold GridSearchCV with one configuration.
+    Tuning requests compare a bounded set of additional configurations.
+    """
+    p = request.parameters
+    base = {
+        "linear": {"fit_intercept": True},
+        "xgboost": {"n_estimators": p.n_estimators, "max_depth": p.max_depth,
+                    "learning_rate": p.xgb_learning_rate, "n_jobs": p.xgb_n_jobs},
+        "svd": {"factors": p.factors, "epochs": request.epochs,
+                "learning_rate": p.learning_rate, "regularization": p.regularization},
+        "ncf": {"factors": p.factors, "epochs": request.epochs,
+                "hidden_size": p.hidden_size, "learning_rate": p.ncf_learning_rate,
+                "regularization": p.regularization, "dropout": p.dropout,
+                "batch_size": p.batch_size, "patience": request.patience},
+        "logistic": {"C": p.c, "max_iter": p.max_iter},
+        "random_forest": {"n_estimators": p.forest_estimators, "max_depth": p.forest_depth,
+                          "min_samples_leaf": p.min_samples_leaf,
+                          "max_samples": p.forest_max_samples, "n_jobs": 4},
+    }
+    if algorithm not in base:
+        raise ValueError(f"Unsupported supervised algorithm: {algorithm}")
+    options = [base[algorithm]]
+    if request.tune:
+        alternatives = {
+            "linear": {"fit_intercept": False},
+            "xgboost": {"max_depth": max(1, p.max_depth - 2) if p.max_depth > 1 else 3},
+            "svd": {"factors": max(2, p.factors // 2) if p.factors > 2 else 4},
+            "ncf": {"factors": max(2, p.factors // 2) if p.factors > 2 else 4},
+            "logistic": {"C": p.c * 0.1},
+            "random_forest": {"max_depth": max(1, p.forest_depth - 2) if p.forest_depth > 1 else 3},
+        }
+        alternative = {**options[0], **alternatives[algorithm]}
+        if alternative != options[0]:
+            options.append(alternative)
+    return options
+
+
+def _supervised_variants(algorithm, request):
+    """Keep factor IDs native; optionally reduce tabular features inside each fold."""
+    if algorithm in {"svd", "ncf"}:
+        return [(None, None)]
+    if request.preset_id is not None:
+        from movie_rating.experiment_config import preset_reduction_plan
+
+        plan = preset_reduction_plan(request.group, algorithm, request.reduction_choice)
+        return [(plan["method"], plan["components"])] if plan else [(None, None)]
+    variants = [(None, None)] if request.reduction_mode in {"off", "compare"} else []
+    if request.reduction_mode != "off":
+        variants.extend((method, k) for method in request.reduction_methods for k in request.components)
+    return variants
+
+
+def _cv_report(search):
+    """Present the selected configuration's fold scores in original metric units."""
+    results, best = search.cv_results_, search.best_index_
+    metrics = list(search.scoring)
+    summary = {}
+    folds = [{"fold": fold + 1} for fold in range(5)]
+    for metric in metrics:
+        sign = -1 if metric in {"rmse", "mae"} else 1
+        summary[metric] = {
+            "mean": float(sign * results[f"mean_test_{metric}"][best]),
+            "std": float(results[f"std_test_{metric}"][best]),
+        }
+        for fold in range(5):
+            folds[fold][metric] = float(sign * results[f"split{fold}_test_{metric}"][best])
+    return {"metrics": summary, "folds": folds}
+
+
+def supervised(splits, movies, request, update, progress_store=None):
+    """Run the shared GridSearchCV/evaluation/CSV workflow for all six algorithms.
+
+    Outer splits come from ExperimentData's per-user chronological splitter.
+    Parameter selection uses only five-fold CV on Train. All models are evaluated
+    on the same untouched Validation/Test sets; no refit on Validation is done.
+    Completed algorithm/representation units can be reused when resuming a job.
+    """
+    import hashlib
+
+    from movie_rating.experiment_estimators import MovieClassifier, MovieRegressor
+
+    if request.group not in {"rating", "classification"}:
+        raise ValueError("The supervised workflow supports rating and classification groups.")
+    task = "regression" if request.group == "rating" else "classification"
+    allowed = ({"linear", "xgboost", "svd", "ncf"} if task == "regression" else
+               {"logistic", "random_forest"})
+    if not set(request.algorithms).issubset(allowed):
+        raise ValueError("The selected algorithms do not belong to this supervised task.")
+    train, validation, test = (splits[name] for name in ("train", "validation", "test"))
+    for name, frame in splits.items():
+        if frame.empty:
+            raise ValueError(f"The {name} split must not be empty.")
+        validate_ratings(frame.rating)
+    # Verify that held-out ratings occur strictly after each user's fit history.
+    train_max = train.groupby("userId").timestamp.max()
+    valid_min = validation.groupby("userId").timestamp.min()
+    valid_max = validation.groupby("userId").timestamp.max()
+    test_min = test.groupby("userId").timestamp.min()
+    if not (set(train_max.index) == set(valid_min.index) == set(test_min.index)):
+        raise ValueError("Each user must have ratings in Train, Validation, and Test.")
+    if not (train_max < valid_min.reindex(train_max.index)).all() or not (
+        valid_max < test_min.reindex(valid_max.index)
+    ).all():
+        raise ValueError("Outer splits must follow time order within every user.")
+
+    y_train = train.rating.to_numpy() if task == "regression" else rating_labels(train.rating)
+    source_hash = hashlib.sha256()
+    for name in ("train", "validation", "test"):
+        source_hash.update(name.encode())
+        source_hash.update(pd.util.hash_pandas_object(
+            splits[name][["userId", "movieId", "rating", "timestamp"]], index=False,
+        ).to_numpy().tobytes())
+    source_hash.update(pd.util.hash_pandas_object(
+        movies[["movieId", "genres"]], index=False,
+    ).to_numpy().tobytes())
+    fingerprint = source_hash.hexdigest()
+    result = {"rows": [], "charts": [], "cv": {}, "best_configs": {},
+              "cv_folds": 5, "cv_protocol": "grid_search_cv_5",
+              "notes": [
+                  "All supervised algorithms use GridSearchCV(cv=5) on Train only.",
+                  "Only Linear Regression and Logistic Regression use StandardScaler.",
+                  "Outer splits are chronological per user; inner CV is not forward-only.",
+                  "Fixed requests evaluate one configuration; enable tuning to compare parameters.",
+                  "SVD/NCF keep native user/movie factors; reduction applies to tabular models.",
+              ]}
+    units = [(a, method, k) for a in request.algorithms
+             for method, k in _supervised_variants(a, request)]
+    for index, (algorithm, reduction, components) in enumerate(units):
+        variant_id = f"{algorithm}__{reduction}_{components}" if reduction else algorithm
+        saved = progress_store.get_unit(variant_id, algorithm) if progress_store else {}
+        unit = saved.get("final")
+        if unit is None:
+            def report(message):
+                update(None, f"{variant_id} | {message}")
+
+            update(10 + int(80 * index / len(units)),
+                   f"{variant_id}: GridSearchCV, 5 folds on Train")
+            constructor = MovieRegressor if task == "regression" else MovieClassifier
+            model = constructor(algorithm=algorithm, movies=movies, reduction=reduction,
+                                components=components or 8, seed=request.seed, report=report)
+            log_directory = (progress_store.path.parent / "model-comparison"
+                             if progress_store else DEFAULT_TRACKING_DIRECTORY)
+            search = grid_search_model(
+                model, train, y_train, {"parameters": candidates(algorithm, request)},
+                task=task, log_directory=log_directory,
+                run_metadata={"algorithm": algorithm, "variant_id": variant_id,
+                              "dataset_split_sha256": fingerprint,
+                              "split": "per_user_chronological", "seed": request.seed,
+                              "features": "fold_train_only_rating_aggregates_and_genres",
+                              "reduction": reduction, "components": components},
+            )
+            unit_rows = []
+            for split_name, frame in (("validation", validation), ("test", test)):
+                evaluated = evaluate_model(search, frame, frame.rating, task=task, split=split_name)
+                row = {
+                    "algorithm": algorithm, "base_algorithm": algorithm,
+                    "variant_id": variant_id, "name": variant_id, "split": split_name,
+                    "fit_scope": "train", "refit_ratings": len(train),
+                    "fit_seconds": search.refit_time_,
+                    "search_seconds": float(search.cv_results_["mean_fit_time"].sum() * 5),
+                    "inference_seconds": evaluated["inference_seconds"],
+                    "run_id": search.run_id_, "tracking_directory": str(search.run_directory_),
+                    "representation": "reduced_features" if reduction else "raw",
+                    "reduction_method": reduction, "components": components,
+                    **evaluated["metrics"],
+                }
+                if task == "classification":
+                    row["auc_roc_reason"] = evaluated["auc_roc_reason"]
+                unit_rows.append(row)
+                report(f"{split_name}: {evaluated['metrics']}")
+            unit = {"rows": unit_rows, "cv": _cv_report(search),
+                    "best_config": search.best_params_["parameters"]}
+            if progress_store:
+                progress_store.save_unit(variant_id, algorithm, {"final": unit})
+        else:
+            update(None, f"{variant_id}: restored completed experiment results")
+        result["rows"].extend(unit["rows"])
+        result["cv"][variant_id] = unit["cv"]
+        result["best_configs"][variant_id] = unit["best_config"]
+
+    valid_rows = [row for row in result["rows"] if row["split"] == "validation"]
+    chosen = (min(valid_rows, key=lambda row: row["rmse"]) if task == "regression" else
+              max(valid_rows, key=lambda row: row["f1"]))
+    result["selected_variant_id"] = chosen["variant_id"]
+    result["selection"] = "Parameters selected by mean CV; model comparison uses Validation, never Test."
+    if task == "classification":
+        result["classification_protocol"] = {
+            "labels": {"0": "rating < 2.5", "1": "2.5 <= rating <= 3.5", "2": "rating > 3.5"},
+            "f1_average": "macro", "auc_roc": "macro_one_vs_rest",
+        }
+        result["class_balance"] = {}
+        for name, frame in splits.items():
+            labels = rating_labels(frame.rating)
+            result["class_balance"][name] = {
+                "negative": int((labels == 0).sum()), "neutral": int((labels == 1).sum()),
+                "positive": int((labels == 2).sum()),
+                "positive_fraction": float((labels == 2).mean()),
+            }
+    update(95, "All selected models evaluated; CV and held-out results saved to CSV")
+    return result

@@ -402,3 +402,18 @@ html[data-theme="light"] .lab-page .lab-protocol-card + .lab-protocol-card { bor
 .lab-criteria th:nth-child(2) { width:43%; }
 .lab-criteria th:nth-child(3) { width:37%; }
 @media(max-width:600px) { .lab-reference-actions { width:100%; justify-content:flex-start; }.lab-reference-actions .lab-outline { flex:1 1 auto; } }
+.lab-metric-guide { padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.lab-metric-guide-heading h2 { margin:0; font-size:19px; font-weight:600; }
+.lab-metric-guide-heading > p { margin-top:6px; color:var(--lab-muted); font-size:12px; line-height:1.7; }
+.lab-metric-guide-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:12px; margin-top:18px; }
+.lab-metric-guide-card { min-width:0; padding:18px; border:1px solid var(--lab-line); border-radius:9px; background:var(--lab-card); }
+.lab-metric-guide-card h3 { margin:0; color:var(--lab-text); font-size:16px; }
+.lab-metric-guide-card p { margin-top:10px; color:var(--lab-muted); font-size:12px; line-height:1.8; }
+.lab-metric-guide-card > span { display:block; margin-top:14px; color:var(--lab-accent); font-size:11px; }
+.lab-configuration-summary { padding:0; border:0; background:transparent; box-shadow:none; }
+.lab-configuration-summary h2 { margin:0; font-size:19px; font-weight:600; }
+.lab-configuration-rows { margin:16px 0 0; }
+.lab-configuration-rows > div { display:grid; grid-template-columns:minmax(160px,210px) minmax(0,1fr); gap:18px; padding:15px 0; border-bottom:1px solid var(--lab-line); }
+.lab-configuration-rows dt { color:var(--lab-text); font-size:13px; font-weight:600; }
+.lab-configuration-rows dd { margin:0; color:var(--lab-muted); font-size:12px; line-height:1.8; overflow-wrap:anywhere; }
+@media(max-width:600px) { .lab-configuration-rows > div { grid-template-columns:1fr; gap:6px; } }

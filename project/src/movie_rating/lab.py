@@ -469,6 +469,10 @@ class LabService:
                 else 'Kết quả thuộc mẫu user công bố ở trên; không đại diện tự động cho toàn bộ MovieLens 25M.'
             )
             protocol_note = 'Chọn cấu hình trên validation; test chỉ báo cáo đánh giá cuối, không dùng để tuning tiếp.'
+            if request.group in ('rating', 'classification'):
+                protocol_note = ('GridSearchCV với cv=5 chỉ dùng Train để chọn tham số; '
+                                 'Validation so sánh mô hình; Test chỉ đánh giá cuối. '
+                                 'StandardScaler chỉ áp dụng cho Linear Regression và Logistic Regression.')
             if request.group == 'association':
                 data_note = 'Kết quả dùng toàn bộ tập Train đã chuẩn bị; không lấy mẫu user.'
                 protocol_note = ('Ngưỡng khai phá áp dụng trên Train. Validation/Test không tham gia '
