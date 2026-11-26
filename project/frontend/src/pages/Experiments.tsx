@@ -4,7 +4,7 @@ import { Activity, AlertCircle, ChevronRight, Download, FlaskConical, GitCompare
 import { PageHero } from "../components/ui";
 import { LabChartFigure } from "../components/LabChart";
 import { ExperimentResults, DatasetSummary } from "../components/ExperimentResults";
-import { AlgorithmSelection, ExperimentConfiguration } from "../components/ExperimentConfig";
+import { AlgorithmSelection } from "../components/ExperimentConfig";
 import { ExperimentLog } from "../components/ExperimentLog";
 import { ExperimentJobStatus } from "../components/ExperimentJobStatus";
 import { AssociationDataSource } from "../components/AssociationDataSource";
@@ -166,7 +166,6 @@ export function Experiments() {
         </details>
         <section id="lab-run" className="lab-section lab-run-panel" aria-label={t("Chạy thực nghiệm")}><div className="lab-section-heading"><h2>{t("Chạy thực nghiệm nhóm")}</h2><span className="lab-data-status"><i/>{t(catalog?.data_ready?"Dữ liệu đã sẵn sàng":"Chưa chuẩn bị dữ liệu")}</span></div>
           <form onSubmit={e=>{e.preventDefault();void start();}}>
-            <ExperimentConfiguration key={group.id} group={group} preset={preset} algorithms={algorithms}/>
             <div className="lab-run-actions"><button className="lab-primary" type="submit" disabled={submitting||!!active||!catalog?.data_ready||!preset||!algorithms.length}><Play size={17}/>{algorithms.length===1?"Chạy thuật toán đã chọn":t("Chạy thực nghiệm nhóm")}</button><span className="lab-muted">{algorithms.length} thuật toán được chọn</span></div>
           </form>
           {error&&<div className="lab-alert" role="alert"><AlertCircle size={18}/><p>{error}</p><button className="lab-outline" onClick={()=>{setError("");setReload(v=>v+1);}}>{t("Thử lại")}</button></div>}

@@ -108,7 +108,7 @@ try {
     await page.locator(".lab-algorithm-picker").waitFor();
     assert.equal(await page.locator(".lab-stat-grid").first().locator(".lab-stat-card").count(), 5);
     const statLabels = await page.locator(".lab-stat-grid").first().innerText();
-    assert.ok(statLabels.includes("Movies có ratings") && statLabels.includes("Movies trong catalog"));
+    assert.ok(statLabels.includes("Phim có đánh giá") && statLabels.includes("Phim trong danh mục"));
     assert.ok(!statLabels.includes("Sparsity") && !statLabels.includes("Rating mean"));
     const guide = page.getByTestId("lab-reduction-guide");
     assert.equal(await guide.getAttribute("data-group-id"), groupId);
@@ -117,10 +117,9 @@ try {
     assert.equal(await page.locator(".lab-reduction-card").count(), 3);
 
     const config = page.locator(".lab-preset");
-    assert.equal(await config.locator("input, select, button").count(), 0, "Preset is read-only");
+    assert.equal(await config.count(), 0, "Preset annotations are hidden for every algorithm group");
     const preset = catalog.presets[groupId];
     assert.ok(preset?.id?.endsWith(".standard.v1"));
-    assert.ok((await config.innerText()).includes(preset.label));
     assert.equal(await page.locator(".lab-algorithm-picker input").count(), group.algorithms.length);
 
     const ids = group.algorithms.map((algorithm) => algorithm.id);
@@ -140,7 +139,7 @@ try {
       group: groupId, algorithms: [expected.algorithm], preset_id: preset.id,
       reduction_choice: expected.default_pca ? "pca" : "off",
     });
-    assert.equal(await config.locator("input, select, button").count(), 0);
+    assert.equal(await config.count(), 0);
 
     // Exercise all choices with algorithms that can consume reduced profiles.
     for (const option of await options.all()) await option.check();

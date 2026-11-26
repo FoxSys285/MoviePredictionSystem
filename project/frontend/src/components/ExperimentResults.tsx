@@ -50,8 +50,8 @@ export function DatasetSummary({stats,label}:{stats?:DatasetStats;label:string})
   const {t}=usePreferences();
   if(!stats)return null;
   const cells:[[string,unknown],...[string,unknown][]]=[
-    ["Ratings",stats.ratings],["Users",stats.users],["Movies có ratings",stats.movies],["Genres",stats.genres],
-    ["Movies trong catalog",stats.catalog_movies],
+    ["Lượt đánh giá",stats.ratings],["Người dùng",stats.users],["Phim có đánh giá",stats.movies],["Thể loại",stats.genres],
+    ["Phim trong danh mục",stats.catalog_movies],
   ];
   const icons=[Activity,Users,Film,Tags,Database];
   return <section className="lab-section lab-dataset-summary"><div className="lab-section-heading"><div className="lab-section-title"><span className="lab-section-icon"><Database size={21}/></span><div><h2>{t(label)}</h2><p>{t("Thống kê được tính từ dữ liệu MovieLens đã chuẩn bị.")}</p></div></div><span className="lab-badge">MovieLens 25M</span></div>

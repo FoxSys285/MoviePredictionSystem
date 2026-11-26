@@ -1,4 +1,4 @@
-import type { LabGroup, LabPreset } from "../lib/lab";
+import type { LabGroup } from "../lib/lab";
 
 export function AlgorithmSelection({
   group,
@@ -31,62 +31,5 @@ export function AlgorithmSelection({
         ))}
       </div>
     </fieldset>
-  );
-}
-
-export function ExperimentConfiguration({
-  group,
-  preset,
-  algorithms,
-}: {
-  group: LabGroup;
-  preset?: LabPreset;
-  algorithms: string[];
-}) {
-  return (
-    <section className="lab-preset" aria-label="Cấu hình preset chỉ đọc">
-      <div className="lab-preset-heading">
-        <div>
-          <span className="lab-kicker">PRESET V{preset?.version ?? 1}</span>
-          <h3>{preset?.label ?? "Preset chuẩn"}</h3>
-        </div>
-        <span className="lab-badge">Tuning tắt</span>
-      </div>
-      <dl className="lab-preset-common">
-        {(preset?.common ?? []).map((setting) => (
-          <div key={setting.label}>
-            <dt>{setting.label}</dt>
-            <dd>{setting.value || "Không có dữ liệu"}</dd>
-          </div>
-        ))}
-      </dl>
-      {algorithms.length > 0 ? (
-        <div className="lab-preset-algorithms">
-          {algorithms.map((id) => {
-            const algorithm = group.algorithms.find((candidate) => candidate.id === id);
-            const settings = preset?.algorithms[id]?.settings ?? [];
-            return (
-              <article key={id}>
-                <h4>{algorithm?.name ?? id}</h4>
-                {settings.length > 0 ? (
-                  <dl>
-                    {settings.map((setting) => (
-                      <div key={setting.label}>
-                        <dt>{setting.label}</dt>
-                        <dd>{setting.value || "Không có dữ liệu"}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : (
-                  <p>Không có tham số bổ sung.</p>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="lab-preset-empty">Chọn ít nhất một thuật toán để xem preset.</p>
-      )}
-    </section>
   );
 }

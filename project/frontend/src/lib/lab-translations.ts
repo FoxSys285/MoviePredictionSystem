@@ -23,6 +23,7 @@ export const labTranslations: Record<string,string> = {
   "Dataset đã chuẩn bị":"Prepared dataset",
   "Thống kê được tính từ dữ liệu MovieLens đã chuẩn bị.":"Statistics are calculated from the prepared MovieLens data.",
   "Ratings":"Ratings", "Users":"Users", "Movies có ratings":"Movies with ratings", "Genres":"Genres",
+  "Lượt đánh giá":"Ratings", "Người dùng":"Users", "Phim có đánh giá":"Movies with ratings", "Thể loại":"Genres", "Phim trong danh mục":"Movies in catalog",
   "Rating min / max":"Rating min / max", "Rating mean":"Mean rating", "Sparsity":"Sparsity", "Movies trong catalog":"Movies in catalog",
   "Hồi quy":"Regression", "Phân loại":"Classification", "Học tăng cường":"Reinforcement learning", "Giảm chiều dữ liệu":"Dimensionality reduction", "chỉ số":"metrics",
   "So sánh thuật toán":"Compare algorithms", "Chọn lịch sử cùng nhóm":"Choose runs from the same group", "Không giảm chiều":"No dimensionality reduction",
