@@ -1,0 +1,141 @@
+{
+  "output": "BaoCao_MovieLens25M.docx",
+  "template_sha256": "b044a0aaf7bd4e125efa027785e1d4641dda257c22cacb4fecb321e27286b4cd",
+  "cover_xml_preserved": true,
+  "chapters": 5,
+  "paragraphs": 415,
+  "tables": 18,
+  "figures": 11,
+  "word_count_approx": 13231,
+  "theory_excludes_project_experiments": true,
+  "reduction_results_blank": true,
+  "supervised_cv_folds": {
+    "rating": 3,
+    "classification": 3
+  },
+  "sources": {
+    "rating": {
+      "run_id": "20261126T015401-4c1f33e3",
+      "result_sha256": "d02ce9f536bf5de25f5fe35c8217c71262f4f35b21301c997bfdb2c213cd365b",
+      "protocol": "per_user_temporal_70_15_15_v2"
+    },
+    "classification": {
+      "run_id": "20261126T060857-59d1c9fa",
+      "result_sha256": "c99e0d32c738c4c744357a641168bb8f824434cabea0cee4652e97a833dfa818",
+      "protocol": "per_user_temporal_70_15_15_v2"
+    },
+    "clustering": {
+      "run_id": "20261126T063703-2538ed62",
+      "result_sha256": "51858ec9a06d14b5bb1a6929ed86fba5036a1624dd4852303e79128eb797d369",
+      "protocol": "past_taste_full_train_future_ranking_v2"
+    },
+    "association": {
+      "run_id": "20261126T064427-dda71bbb",
+      "result_sha256": "08abb9a20562d486a1142d4ad09c8fe3203c00c408b397af2235a62d073e7031",
+      "protocol": "global_temporal_70_15_15_v1"
+    },
+    "reinforcement": {
+      "run_id": "20261126T064844-25de2fc0",
+      "result_sha256": "2d71f8759ac978bcc057ffdf9fdf70f3bb1bde5efb80fc5c8acb6543f8f8723d",
+      "protocol": "temporal_support_query_dqn_v1"
+    }
+  },
+  "final_render_validation": {
+    "pages": 53,
+    "issues": [],
+    "cover_text_matches": true,
+    "template_unchanged_sha256": "b044a0aaf7bd4e125efa027785e1d4641dda257c22cacb4fecb321e27286b4cd",
+    "table_widths_cm": [
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0,
+      15.0
+    ],
+    "sparse_pages": [],
+    "footer_page_fields": [
+      0,
+      1,
+      1
+    ],
+    "reference_count": 26,
+    "styles": {
+      "Report Body": {
+        "font": "Times New Roman",
+        "size_pt": 13.0,
+        "line_spacing": 1.3,
+        "color": "000000"
+      },
+      "Report Chapter": {
+        "font": "Times New Roman",
+        "size_pt": 18.0,
+        "line_spacing": 1.3,
+        "color": "000000"
+      },
+      "Report Heading 1": {
+        "font": "Times New Roman",
+        "size_pt": 14.0,
+        "line_spacing": 1.3,
+        "color": "000000"
+      },
+      "Report Heading 2": {
+        "font": "Times New Roman",
+        "size_pt": 13.0,
+        "line_spacing": 1.3,
+        "color": "000000"
+      },
+      "Report Table Text": {
+        "font": "Times New Roman",
+        "size_pt": 12.0,
+        "line_spacing": 1.3,
+        "color": "000000"
+      }
+    },
+    "margins_cm": [
+      {
+        "left": 3.501,
+        "right": 2.501,
+        "top": 2.501,
+        "bottom": 2.501
+      },
+      {
+        "left": 3.5,
+        "right": 2.499,
+        "top": 2.499,
+        "bottom": 2.499
+      },
+      {
+        "left": 3.5,
+        "right": 2.499,
+        "top": 2.499,
+        "bottom": 2.499
+      }
+    ],
+    "table_headers_repeat": true,
+    "reduction_results_blank": true,
+    "result_sources_unchanged": true
+  },
+  "final_files": {
+    "BaoCao_MovieLens25M.docx": {
+      "bytes": 925054,
+      "sha256": "7d329ed1c331d5a94fd2e5e7311038ee39bb34bb2aabdcecf8255b71d7a3c353"
+    },
+    "BaoCao_MovieLens25M.pdf": {
+      "bytes": 1255803,
+      "sha256": "c31f3f26ff50df6ab158617ed128e9bb86b16d9512721864394b5ba6401c719e"
+    }
+  }
+}

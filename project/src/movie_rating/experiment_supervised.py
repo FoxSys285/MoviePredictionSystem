@@ -1,4 +1,4 @@
-"""Three train-only folds, validation selection, frozen refit and final test."""
+"""Five train-only folds, validation selection, frozen refit and final test."""
 
 import copy
 import gc
@@ -26,7 +26,7 @@ from sklearn.metrics import (
 from sklearn.preprocessing import StandardScaler
 from torch import nn
 
-from movie_rating.data.temporal import temporal_folds
+from movie_rating.data.temporal import CV_FOLDS, temporal_folds
 from movie_rating.experiment_config import RANDOM_FOREST_N_JOBS, preset_reduction_plan
 from movie_rating.experiment_reduction import FeatureReducer, ReductionSpec, reduction_variants
 from movie_rating.lab import LinearRating, chart, measured, series
@@ -55,7 +55,6 @@ NAMES = {
     "logistic": "Logistic Regression",
     "random_forest": "Random Forest Classifier",
 }
-CV_FOLDS = 3
 
 
 def classification_scores(actual, probability, threshold=0.5):

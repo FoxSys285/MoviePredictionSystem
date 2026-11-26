@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from movie_rating.data.temporal import CV_FOLDS
+
 RANDOM_FOREST_N_JOBS = 4
 
 ALGORITHMS = {
@@ -108,7 +110,7 @@ def preset_catalog():
             {"label": "Train / Validation / Test", "value": "70% / 15% / 15%"},
         ]
         if group in {"rating", "classification"}:
-            common.append({"label": "Đánh giá", "value": "3-fold theo thời gian trên Train"})
+            common.append({"label": "Đánh giá", "value": f"{CV_FOLDS}-fold theo thời gian trên Train"})
 
         algorithm_settings = {}
         for algorithm in ALGORITHMS[group]:

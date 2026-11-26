@@ -75,9 +75,9 @@ def test_six_groups_fit_real_models_and_serialize_finite_results(group, lab_data
     if group in ("rating", "classification"):
         assert set(result["cv"]) == set(request.algorithms)
         for data in result["cv"].values():
-            assert len(data["folds"]) == 3
+            assert len(data["folds"]) == 5
             for key, stats in data["metrics"].items():
-                assert stats["n"] == 3
+                assert stats["n"] == 5
                 assert stats["mean"] == pytest.approx(np.mean([r[key] for r in data["folds"]]))
                 assert stats["std"] == pytest.approx(
                     np.std([r[key] for r in data["folds"]], ddof=1)
@@ -254,7 +254,7 @@ def test_cv_features_never_receive_heldout_rows_and_test_cannot_change_selection
     changed = {s: f.copy() for s, f in splits.items()}
     changed["test"]["rating"] = 0.5
     second = supervised(changed, movies, request, lambda *_: None)
-    assert len(calls) == 2 * (3 + 3 + 1)  # 3 candidates, selected-config CV, final refit
+    assert len(calls) == 2 * (3 + 5 + 1)  # 3 candidates, selected-config CV, final refit
     assert first["best_configs"] == second["best_configs"]
     assert first["cv"]["logistic"]["metrics"]["f1"] == second["cv"]["logistic"]["metrics"]["f1"]
     assert any(n == len(splits["train"]) + len(splits["validation"]) for n in calls)

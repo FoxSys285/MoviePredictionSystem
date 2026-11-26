@@ -2,6 +2,8 @@
 
 import numpy as np
 
+CV_FOLDS = 5
+
 PERSONALIZED_PROTOCOL = "per_user_temporal_70_15_15_v2"
 
 
@@ -52,7 +54,7 @@ def user_temporal_split(frame, train_fraction=0.7, validation_fraction=0.15, min
     return splits, report
 
 
-def temporal_folds(frame, n_splits=3):
+def temporal_folds(frame, n_splits=CV_FOLDS):
     """Expanding history per user: past only, shared users, held-out timestamp blocks."""
     order, starts, counts = _ordered_groups(frame)
     times = frame.timestamp.to_numpy()[order]
@@ -71,5 +73,5 @@ def temporal_folds(frame, n_splits=3):
         fit_mask = (times <= np.repeat(cut, counts)) & valid
         held_mask = (times <= np.repeat(upper, counts)) & ~fit_mask & valid
         if not fit_mask.any() or not held_mask.any():
-            raise ValueError("Không đủ lịch sử/timestamp khác nhau cho 3 lượt CV thời gian.")
+            raise ValueError(f"Không đủ lịch sử/timestamp khác nhau cho {n_splits} lượt CV thời gian.")
         yield order[fit_mask], order[held_mask]

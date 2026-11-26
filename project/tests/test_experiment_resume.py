@@ -59,18 +59,18 @@ def test_interrupted_supervised_run_skips_completed_validation_and_keeps_test_ou
 
     resumed = ProgressStore(tmp_path, identity)
     result = execute(splits, movies, request, lambda *_: None, progress_store=resumed)
-    assert len(calls) == 5  # One Validation fit, three CV folds and the final refit.
-    assert result["cv_folds"] == 3
+    assert len(calls) == 7  # One Validation fit, five CV folds and the final refit.
+    assert result["cv_folds"] == 5
     assert {row["split"] for row in result["rows"]} == {"validation", "test"}
-    for train, validation in calls[1:4]:
+    for train, validation in calls[1:6]:
         assert validation is None
         assert set(map(tuple, train[["userId", "movieId"]].to_numpy())) <= set(
             map(tuple, splits["train"][["userId", "movieId"]].to_numpy())
         )
     pd.testing.assert_frame_equal(
-        calls[4][0], pd.concat([splits["train"], splits["validation"]], ignore_index=True)
+        calls[6][0], pd.concat([splits["train"], splits["validation"]], ignore_index=True)
     )
-    assert ProgressStore.summary(tmp_path)["completed_work_units"] == 5
+    assert ProgressStore.summary(tmp_path)["completed_work_units"] == 7
 
 
 def test_resume_rejects_changed_data_or_parameters(tmp_path):

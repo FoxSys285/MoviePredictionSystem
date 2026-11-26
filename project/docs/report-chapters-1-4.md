@@ -336,7 +336,7 @@ Repository có nhiều đường chạy phục vụ các mục tiêu khác nhau.
 | Nội dung | Trạng thái thấy trong repository | Cách ghi trong báo cáo |
 |---|---|---|
 | Dữ liệu và chia tập | Artifact chuẩn bị hiện có dùng dữ liệu đầy đủ, split thời gian trong từng user 70/15/15 | Ghi đúng tên protocol và manifest của run dùng để sinh kết quả |
-| Số fold | Experiment Studio schema mới dùng 3 fold thời gian; report_temporal_experiments.py định nghĩa 5 fold toàn cục | Nếu báo cáo k=5, chạy đúng report runner hoặc đồng bộ Studio trước; không gán k=5 cho run 3 fold |
+| Số fold | Experiment Studio dùng 5 fold thời gian trong từng user; report_temporal_experiments.py định nghĩa 5 fold toàn cục | Chạy lại Studio để tạo kết quả 5 fold; không gán k=5 cho các run lịch sử đã chạy 3 fold |
 | Tuning | Report runner có GridSearchCV/Optuna; Studio dùng candidate sweep riêng | Chỉ ghi thư viện tuning tương ứng với run thực tế; chưa thấy RandomizedSearchCV/MLflow được nối trong giao diện hiện tại |
 | Cold-start | Bộ chuẩn bị chính yêu cầu user có tối thiểu 10 rating; report runner riêng dùng ngưỡng user/item 5/3 | Nêu ngưỡng và phạm vi fit ở từng protocol; không trộn hai ngưỡng |
 | Học tăng cường | Report runner có Q-Learning dạng bảng; Experiment Studio hiện tại có DQN và baseline | Ghi Q-Learning nếu chạy bảng Q; ghi DQN nếu chạy mạng xấp xỉ |

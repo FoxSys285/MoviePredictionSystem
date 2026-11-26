@@ -46,11 +46,11 @@ Sử dụng layout thống nhất giữa các nhóm nhưng nội dung cấu hìn
 
 - Random Seed: 42.
 - Train/Validation/Test: 70/15/15.
-- Cross Validation: 3-Fold đối với Regression và Classification.
+- Cross Validation: 5-Fold đối với Regression và Classification.
 
 Quy trình chia dữ liệu:
 - Giữ riêng Test Set (15%), không sử dụng trong quá trình tuning.
-- Thực hiện 3-Fold Cross Validation trên Train Set (70%).
+- Thực hiện 5-Fold Cross Validation trên Train Set (70%).
 - Validation Set (15%) dùng để lựa chọn cấu hình và Early Stopping khi cần.
 - Sau khi chọn cấu hình, huấn luyện lại trên Train + Validation và đánh giá cuối cùng trên Test.
 
@@ -84,7 +84,7 @@ Tiêu chí:
 - Inference Time (↓).
 
 Yêu cầu bổ sung:
-- Báo cáo Mean ± Standard Deviation qua 3-Fold.
+- Báo cáo Mean ± Standard Deviation qua 5-Fold.
 - NCF phải có Learning Curve thể hiện Train Loss và Validation Loss theo Epoch.
 - Có Early Stopping để hạn chế Overfitting.
 - Lưu lại cấu hình tốt nhất của từng thuật toán.
@@ -115,7 +115,7 @@ Yêu cầu:
 - AUC-ROC tính từ xác suất dự đoán.
 - Báo cáo Precision, Recall và Confusion Matrix bổ sung.
 - Kiểm tra sự mất cân bằng giữa hai lớp.
-- Báo cáo kết quả 3-Fold Mean ± Std.
+- Báo cáo kết quả 5-Fold Mean ± Std.
 
 ### 4.3. Clustering – Phân cụm người dùng
 

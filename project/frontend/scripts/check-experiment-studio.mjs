@@ -171,8 +171,23 @@ try {
   assert.match(rows[0], /Kết quả giảm chiều/);
   assert.match(rows[1], /Kết quả huấn luyện/);
   assert.match(rows[2], /Biểu đồ so sánh/);
-  assert.match(rows[3], /3-fold Cross Validation/);
+  assert.match(rows[3], /Cross Validation/);
+  assert.doesNotMatch(rows[3], /\d-fold/); // Missing metadata must not invent a fold count.
   assert.ok((await page.locator(".lab-results").innerText()).includes("Không có dữ liệu"));
+  for (const count of [5, 3]) {
+    currentHistory.result.cv_protocol = "per_user_expanding_time_v1";
+    currentHistory.result.cv_folds = count;
+    currentHistory.result.cv = { linear: {
+      metrics: { rmse: { mean: 1, std: 0.1, n: count }, mae: { mean: 0.8, std: 0.1, n: count } },
+      folds: Array.from({ length: count }, (_, index) => ({ fold: index + 1, rmse: 1 + index / 10, mae: 0.8 + index / 10 })),
+    } };
+    await page.reload();
+    await page.locator("#lab-cv-title").waitFor();
+    assert.match(await page.locator("#lab-cv-title").innerText(), new RegExp(`${count}-fold`));
+    const table = page.locator('section[aria-labelledby="lab-cv-title"] table');
+    assert.equal(await table.locator("thead th").count(), 1 + 2 * (count + 1));
+    assert.equal(await table.locator("tbody tr").first().locator("td").count(), 2 * (count + 1));
+  }
   await page.locator(".lab-history select").selectOption(oldHistory.id);
   await page.locator("#lab-results").waitFor();
   const legacyText = await page.locator("#lab-results").innerText();

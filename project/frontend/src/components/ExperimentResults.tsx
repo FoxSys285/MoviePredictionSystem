@@ -333,16 +333,19 @@ function CrossValidation({ result, group, language }: { result: LabResult; group
   const metricNames: Record<string, string> = { rmse: "RMSE", mae: "MAE", f1: "F1", precision: "Precision", recall: "Recall" };
   const chartValues: { label: string; value: number | null }[] = [];
   const temporal = result.cv_protocol === "per_user_expanding_time_v1";
+  const foldCount = result.cv_folds ?? Math.max(0, ...entries.map(([, data]) => data.folds?.length ?? 0));
+  const foldIndices = Array.from({ length: foldCount }, (_, index) => index);
+  const cvTitle = foldCount ? `${foldCount}-fold` : "Cross Validation";
   return (
     <section className="lab-result-row" aria-labelledby="lab-cv-title">
-      <h3 id="lab-cv-title">{temporal ? "3-fold theo thời gian trên Train" : "3-fold Cross Validation"}</h3>
-      <p>{temporal ? "3-fold theo thời gian trên Train." : "Không có metadata CV; giao thức lịch sử cần được kiểm tra trong chi tiết."}</p>
+      <h3 id="lab-cv-title">{temporal ? `${cvTitle} theo thời gian trên Train` : foldCount ? `${cvTitle} Cross Validation` : cvTitle}</h3>
+      <p>{temporal ? `${cvTitle} theo thời gian trên Train.` : "Không có metadata CV; giao thức lịch sử cần được kiểm tra trong chi tiết."}</p>
       {entries.length ? <div className="lab-table-scroll"><table className="lab-result-table"><thead><tr>
-        <th>Thuật toán / biến thể</th>{metricKeys.flatMap((key) => ["Fold 1", "Fold 2", "Fold 3", "Trung bình ± độ lệch chuẩn"].map((label) => <th key={`${key}/${label}`}>{metricNames[key]} · {label}</th>))}
+        <th>Thuật toán / biến thể</th>{metricKeys.flatMap((key) => [...foldIndices.map((index) => `Fold ${index + 1}`), "Trung bình ± độ lệch chuẩn"].map((label) => <th key={`${key}/${label}`}>{metricNames[key]} · {label}</th>))}
       </tr></thead><tbody>{entries.map(([id, data]) => {
         const folds = (data.folds ?? []) as ResultRecord[];
         return <tr key={id}><th>{id}</th>{metricKeys.flatMap((key) => {
-          const values = [0, 1, 2].map((index) => numericValue(folds[index]?.[key]));
+          const values = foldIndices.map((index) => numericValue(folds[index]?.[key]));
           const summary = data.metrics[key];
           if (key === (group.id === "rating" ? "rmse" : "f1")) {
             values.forEach((value, index) => chartValues.push({ label: `${id} · Fold ${index + 1}`, value }));

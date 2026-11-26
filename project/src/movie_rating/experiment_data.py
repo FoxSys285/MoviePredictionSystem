@@ -45,7 +45,7 @@ def parquet_fingerprint(paths):
 def split_ratings(frame):
     """Rounded IID rating splits for groups that do not require per-user future holdouts."""
     if len(frame) < 40:
-        raise ValueError("Cần ít nhất 40 ratings để chia dữ liệu và chạy 3-Fold.")
+        raise ValueError("Cần ít nhất 40 ratings để chia dữ liệu và chạy 5-Fold.")
     indices = np.arange(len(frame))
     heldout_size = max(1, round(len(frame) * 0.15))
     train_val, test = train_test_split(indices, test_size=heldout_size, random_state=42)

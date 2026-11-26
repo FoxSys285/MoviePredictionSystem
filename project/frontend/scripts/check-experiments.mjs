@@ -234,5 +234,5 @@ try{
   assert.ok((await page.locator(".lab-reduction-guide").innerText()).includes("Dimensionality reduction"));
   assert.deepEqual(errors,[]);
   await writeFile(path.join(output,"lab-real-runs.json"),JSON.stringify(summary,null,2));
-  console.log("PASS five primary groups, shared reduction guide, real training, 3-Fold CV, single/multiple selection, legacy PCA history route, exports, mobile dark/light and error recovery.");
+  console.log("PASS five primary groups, shared reduction guide, real training, 5-Fold CV, single/multiple selection, legacy PCA history route, exports, mobile dark/light and error recovery.");
 }finally{await browser?.close();server.kill();}

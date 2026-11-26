@@ -4,7 +4,7 @@
 
 Kiểm tra ban đầu: backend FastAPI, frontend React/TypeScript/Vite, dữ liệu chuẩn bị
 Parquet từ MovieLens 25M, mô hình NumPy/Numba, scikit-learn, XGBoost và PyTorch.
-Lab cũ chạy năm nhóm qua `lab_compact.py`, chưa có 3-Fold, refit 85%, AUC,
+Lab cũ chạy năm nhóm qua `lab_compact.py`, chưa có 5-Fold, refit 85%, AUC,
 DQN hoặc đầy đủ thông tin hiệu năng. Experiment Studio hiện có năm nhóm tác vụ
 chính và một reducer dùng chung PCA/TruncatedSVD trong các pipeline. Route PCA
 độc lập chỉ còn dành để mở/xuất lịch sử cũ; API vẫn giữ handler tương thích.
@@ -19,7 +19,7 @@ không ghi đè model phục vụ ứng dụng.
 |---|---|
 | `experiment_config.py` | Kiểm tra cấu hình, thuật toán hợp lệ và giới hạn tài nguyên |
 | `experiment_data.py` | Dùng split đầy đủ hoặc lấy mẫu user, cache thống kê/Parquet, fingerprint |
-| `experiment_supervised.py` | 3-Fold, chọn cấu hình trên Validation, refit và đánh giá Test |
+| `experiment_supervised.py` | 5-Fold, chọn cấu hình trên Validation, refit và đánh giá Test |
 | `experiment_clustering.py` | Sở thích tương đối, bao phủ cụm, độ ổn định và ranking tương lai |
 | `experiment_unsupervised.py` | Apriori toàn cục, Apriori phân nhóm và chẩn đoán PCA/TruncatedSVD |
 | `experiment_reduction.py` | Reducer dùng chung, metadata/fingerprint và biến thể raw/reduced |
@@ -293,7 +293,7 @@ vẫn dùng biểu diễn gốc theo preset. Mỗi lần chạy chỉ dùng bi�
 PCA/TruncatedSVD fit bằng dữ liệu Train; mỗi fold CV fit reducer riêng.
 Trang “Dimensionality Reduction” cũ chỉ còn để đọc lịch sử đã lưu.
 
-Kết quả hiện theo thứ tự: tóm tắt giảm chiều, bảng theo nhóm, biểu đồ so sánh và 3-fold theo thời
+Kết quả hiện theo thứ tự: tóm tắt giảm chiều, bảng theo nhóm, biểu đồ so sánh và 5-fold theo thời
 gian trên Train (chỉ hồi quy/phân loại). Metadata và biểu đồ chẩn đoán nằm trong phần chi tiết.
 Thiếu trường của báo cáo cũ hiển thị “Không có dữ liệu”; không suy ra kết luận tăng tốc khi thiếu
 đối chứng.

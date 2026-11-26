@@ -6,7 +6,7 @@ export const labTranslations: Record<string,string> = {
   "Đã chọn · đang tắt":"Selected · currently off",
   "Chọn phương pháp":"Select method",
   "Bỏ chọn":"Deselect",
-  "Với mô hình có tham số hỗ trợ, thử các cấu hình nhẹ hơn, mặc định và mạnh hơn. Validation chọn một cấu hình cho từng thuật toán; 3-Fold CV chạy trên cấu hình được chọn trong mỗi biểu diễn.":"For models with supported parameters, test smaller, default, and larger configurations. Validation selects one configuration per algorithm; 3-fold CV runs only for the selected configuration in each representation.",
+  "Với mô hình có tham số hỗ trợ, thử các cấu hình nhẹ hơn, mặc định và mạnh hơn. Validation chọn một cấu hình cho từng thuật toán; 5-Fold CV chạy trên cấu hình được chọn trong mỗi biểu diễn.":"For models with supported parameters, test smaller, default, and larger configurations. Validation selects one configuration per algorithm; 5-fold CV runs only for the selected configuration in each representation.",
   "Ratings trong dữ liệu đã chuẩn bị":"Ratings in the prepared dataset",
   "Nguồn dữ liệu thực nghiệm":"Experiment data source",
   "Train đã chuẩn bị":"Prepared Train split",

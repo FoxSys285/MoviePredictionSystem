@@ -35,7 +35,9 @@ def test_temporal_holdout_and_cv_are_past_only_with_timestamp_ties():
         assert groups[0].timestamp.max() < groups[1].timestamp.min()
         assert groups[1].timestamp.max() < groups[2].timestamp.min()
     previous = set()
-    for fit_idx, held_idx in temporal_folds(splits["train"]):
+    folds = list(temporal_folds(splits["train"]))
+    assert len(folds) == 5
+    for fit_idx, held_idx in folds:
         fit, held = splits["train"].iloc[fit_idx], splits["train"].iloc[held_idx]
         assert not set(fit_idx) & set(held_idx)
         assert previous <= set(fit_idx)
@@ -142,17 +144,18 @@ def test_classifier_does_not_fit_an_auxiliary_regressor(configured, monkeypatch)
 
 
 def _reduction_rating_data():
+    # Keep two movies per genre in the earliest training block of five-fold CV.
     train_rows, validation_rows, test_rows = [], [], []
     for user in range(1, 21):
-        for movie in range(1, 33):
+        for movie in range(1, 65):
             rating = 0.5 + 0.5 * ((user * 7 + movie * 3 + (user % 4) * (movie % 5)) % 10)
             row = (user, movie, rating, user * 1000 + movie)
-            (train_rows if movie <= 24 else validation_rows if movie <= 28 else test_rows).append(row)
+            (train_rows if movie <= 48 else validation_rows if movie <= 56 else test_rows).append(row)
     columns = ["userId", "movieId", "rating", "timestamp"]
     movies = pd.DataFrame({
-        "movieId": range(1, 33), "title": [f"Movie {i}" for i in range(1, 33)],
+        "movieId": range(1, 65), "title": [f"Movie {i}" for i in range(1, 65)],
         "genres": ["Action" if i % 4 == 0 else "Comedy" if i % 4 == 1
-                   else "Drama" if i % 4 == 2 else "Romance" for i in range(1, 33)],
+                   else "Drama" if i % 4 == 2 else "Romance" for i in range(1, 65)],
     })
     return {
         "train": pd.DataFrame(train_rows, columns=columns),
@@ -175,7 +178,7 @@ def test_supervised_compare_runs_train_only_reducer_per_fold_and_ignores_test_la
     assert result["cv"]["linear_pca_1"]["fit_scope"] == "train_fold_specific"
     folds = result["cv"]["linear_pca_1"]["folds"]
     assert {fold["reduction"]["fit_scope"] for fold in folds} == {
-        "train_fold_1", "train_fold_2", "train_fold_3"
+        "train_fold_1", "train_fold_2", "train_fold_3", "train_fold_4", "train_fold_5"
     }
     changed = {name: frame.copy() for name, frame in splits.items()}
     changed["test"]["rating"] = 5.0 - changed["test"]["rating"]
@@ -300,18 +303,18 @@ def test_ncf_reduction_pipeline_execute_has_distinct_hybrid_curve_and_locked_epo
     selected = result["best_configs"][reduced_id]
     assert 1 <= selected["epochs"] <= request.epochs
     assert 1 <= selected["side_epochs"] <= request.epochs
-    assert len(fit_calls) == 5  # Validation selection, three CV folds, final refit.
+    assert len(fit_calls) == 7  # Validation selection, five CV folds, final refit.
     assert fit_calls[0] == {"epochs": None, "side_epochs": None, "fit_scope": "train"}
-    assert [call["fit_scope"] for call in fit_calls[1:4]] == [
-        "train_fold_1", "train_fold_2", "train_fold_3"
+    assert [call["fit_scope"] for call in fit_calls[1:6]] == [
+        "train_fold_1", "train_fold_2", "train_fold_3", "train_fold_4", "train_fold_5"
     ]
-    assert fit_calls[4]["fit_scope"] == "train_plus_validation"
+    assert fit_calls[6]["fit_scope"] == "train_plus_validation"
     assert all(call["epochs"] == selected["epochs"] for call in fit_calls[1:])
     assert all(call["side_epochs"] == selected["side_epochs"] for call in fit_calls[1:])
     assert selected["reduction"]["fit_scope"] == "train_plus_validation"
     assert result["cv"][reduced_id]["fit_scope"] == "train_fold_specific"
     assert {fold["reduction"]["fit_scope"] for fold in result["cv"][reduced_id]["folds"]} == {
-        "train_fold_1", "train_fold_2", "train_fold_3"
+        "train_fold_1", "train_fold_2", "train_fold_3", "train_fold_4", "train_fold_5"
     }
     final = next(row for row in result["rows"] if row.get("variant_id") == reduced_id and row["split"] == "test")
     assert final["refit_ratings"] == len(splits["train"]) + len(splits["validation"])
