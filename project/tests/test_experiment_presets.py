@@ -83,7 +83,9 @@ def test_supervised_preset_dispatches_only_the_declared_reduction(group, expecte
         return {"rows": rows, "cv": {}, "best_configs": {}, "charts": [], "tuning": [], "notes": []}
 
     monkeypatch.setattr(experiment_supervised, "_supervised_single", fake_run)
-    request = ExperimentRequest(group=group, preset_id=f"{group}.standard.v1", reduction_choice=choice)
+    from movie_rating.experiment_config import PRESET_IDS
+
+    request = ExperimentRequest(group=group, preset_id=PRESET_IDS[group], reduction_choice=choice)
     result = experiment_supervised.supervised({}, None, request, lambda *_: None)
 
     if choice == "off":
@@ -229,7 +231,9 @@ def test_association_and_reinforcement_presets_dispatch_declared_raw_and_pca_pat
 def test_preset_reduction_choice_survives_serialization(group, choice):
     from movie_rating.experiment_config import ExperimentRequest, preset_reduction_plan
 
-    request = ExperimentRequest(group=group, preset_id=f"{group}.standard.v1", reduction_choice=choice)
+    from movie_rating.experiment_config import PRESET_IDS
+
+    request = ExperimentRequest(group=group, preset_id=PRESET_IDS[group], reduction_choice=choice)
     restored = ExperimentRequest.model_validate(request.model_dump())
     assert restored.reduction_choice == choice
     assert restored.reduction_mode == ("off" if choice == "off" else "enabled")

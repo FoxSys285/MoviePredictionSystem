@@ -16,9 +16,12 @@ ALGORITHMS = {
     "reinforcement": ("dqn", "random", "popular"),
 }
 
-PRESET_IDS = {
-    group: f"{group}.standard.v1"
+PRESET_VERSIONS = {
+    group: 2 if group == "classification" else 1
     for group in ("rating", "classification", "clustering", "association", "reinforcement")
+}
+PRESET_IDS = {
+    group: f"{group}.standard.v{version}" for group, version in PRESET_VERSIONS.items()
 }
 
 # Standard Studio parameters are versioned; reduction_choice selects one representation.
@@ -146,6 +149,10 @@ def preset_catalog():
                         {"label": "Số cây", "value": str(params["forest_estimators"])},
                         {"label": "Độ sâu", "value": str(params["forest_depth"])},
                         {"label": "Lá tối thiểu", "value": str(params["min_samples_leaf"])},
+                        {"label": "Bootstrap tối đa / cây", "value": (
+                            str(params["forest_max_samples"])
+                            if params["forest_max_samples"] is not None else "Toàn bộ Train"
+                        )},
                         {"label": "Luồng CPU", "value": str(RANDOM_FOREST_N_JOBS)},
                         {"label": "Ngưỡng thích", "value": "Rating ≥ 3,5"},
                     ]
@@ -179,7 +186,7 @@ def preset_catalog():
 
         output[group] = {
             "id": preset_id,
-            "version": 1,
+            "version": PRESET_VERSIONS[group],
             "label": "Preset chuẩn",
             "common": common,
             "algorithms": algorithm_settings,
@@ -201,6 +208,10 @@ class ModelParameters(BaseModel):
     max_depth: int = Field(6, ge=1, le=20)
     forest_estimators: int = Field(100, ge=10, le=500)
     forest_depth: int = Field(8, ge=1, le=20)
+    forest_max_samples: int | None = Field(
+        250_000, ge=1,
+        description="Maximum bootstrap draws per tree, capped at fit rows; None uses all fit rows.",
+    )
     c: float = Field(1, gt=0, le=100)
     max_iter: int = Field(600, ge=50, le=2000)
     min_samples_leaf: int = Field(5, ge=1, le=50)

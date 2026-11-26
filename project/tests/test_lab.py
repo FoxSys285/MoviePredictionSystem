@@ -135,6 +135,7 @@ def test_full_data_rating_and_classification_defaults_are_bounded():
         "n_estimators": 100,
         "max_depth": 8,
         "min_samples_leaf": 5,
+        "max_samples": 250_000,
     }
 
 

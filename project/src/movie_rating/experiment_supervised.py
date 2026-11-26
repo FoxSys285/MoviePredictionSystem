@@ -95,6 +95,7 @@ def candidates(algorithm, request):
             n_estimators=p.forest_estimators,
             max_depth=p.forest_depth,
             min_samples_leaf=p.min_samples_leaf,
+            max_samples=p.forest_max_samples,
         ),
     }[algorithm]
     output = [base]
@@ -548,7 +549,12 @@ def feature_fit(train, targets, movies, algorithm, config, report=None,
     builder.fit_statistics(train)
     if report:
         report(f"Đã tạo {builder.feature_count} đặc trưng, loại nhãn của hàng huấn luyện.")
-    estimator = classifier(algorithm, config)
+    fit_config = dict(config)
+    if algorithm == "random_forest" and fit_config.get("max_samples") is not None:
+        # Keep the requested cap in saved configs; sklearn requires the effective
+        # integer draw count to be no larger than this fold's training population.
+        fit_config["max_samples"] = min(fit_config["max_samples"], len(train))
+    estimator = classifier(algorithm, fit_config)
     scaler = None
     if algorithm == "logistic":
         if report:
@@ -599,6 +605,8 @@ def feature_fit(train, targets, movies, algorithm, config, report=None,
                     if algorithm == "logistic"
                     else f"Bắt đầu Random Forest · {config['n_estimators']} cây · "
                     f"depth={config['max_depth']} · min_samples_leaf={config['min_samples_leaf']} · "
+                    f"bootstrap={estimator.max_samples or len(train):,}/{len(train):,} "
+                    "lượt lấy mẫu/cây · "
                     f"{estimator.n_jobs} luồng CPU."
                 )
             fit_started = time.perf_counter()

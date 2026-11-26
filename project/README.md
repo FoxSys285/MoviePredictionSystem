@@ -244,3 +244,29 @@ Chạy benchmark có giới hạn user bằng:
 Benchmark giữ seed 42, giao thức thời gian từng user, 150 cây, depth 6 và learning rate 0.05.
 Nó ghi feature/cache time, fit time, tổng thời gian và RSS đỉnh vào thư mục benchmark mới dưới
 `artifacts/benchmarks/`; không chạy toàn bộ MovieLens 25M.
+
+Random Forest trong preset phân loại v2 giữ 100 cây, depth 8 và 4 luồng CPU, nhưng giới hạn
+bootstrap ở tối đa **250.000 lượt lấy mẫu có hoàn lại mỗi cây**. Mỗi cây lấy mẫu độc lập từ
+toàn bộ Train của lượt fit; fold nhỏ dùng tối đa số hàng hiện có. Thống kê đặc trưng vẫn fit
+trên toàn bộ Train; 3 fold thời gian, Validation và Test không bị lấy mẫu nhỏ lại. Giới hạn này
+có thể thay đổi chất lượng dự đoán, cần đánh giá lại trên dữ liệu đầy đủ. Tổng pipeline còn
+có lượt chọn cấu hình trên Validation và lượt refit Train + Validation ngoài 3 fold CV.
+
+API không dùng preset có thể đặt `parameters.forest_max_samples` thành số nguyên dương;
+đặt `null` để dùng bootstrap theo kích thước toàn bộ Train như trước. Cấu hình export lưu mức
+giới hạn; log từng fit ghi số lượt lấy mẫu thực tế. Khởi động lại ứng dụng và tạo run mới để
+áp dụng thay đổi; checkpoint từ code/preset cũ không dùng chung với cấu hình mới.
+
+Đo thời gian và F1/AUC Validation trên cùng cohort, seed và ngưỡng 0,5:
+
+```powershell
+\.venv\Scripts\python.exe scripts\benchmark_random_forest_sampling.py --users 5000 --trees 100
+```
+
+Kết quả được lưu vào `artifacts/benchmarks/random-forest-sampling-*.json`. Đây là benchmark
+cohort có giới hạn, không thay thế đánh giá 3 fold và Test trên toàn bộ dữ liệu.
+
+Lượt đo ngày 26/11/2026: 544.920 hàng Train, 116.708 hàng Validation, 100 cây; tổng thời gian
+fit gồm tạo đặc trưng giảm từ 25,57 xuống 16,16 giây (1,58 lần). F1 Validation ở ngưỡng 0,5
+đổi từ 0,79883 thành 0,79863; AUC từ 0,78554 thành 0,78583. Thời gian phụ thuộc máy và tải
+hệ thống; không suy ra thời gian hay chất lượng trên toàn bộ 25M từ lượt đo này.
