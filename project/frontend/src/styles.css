@@ -1630,55 +1630,6 @@ option {
   line-height: 1.8;
   margin-top: 5px;
 }
-.best-badge {
-  display: inline-flex;
-  gap: 3px;
-  align-items: center;
-  font-size: 8px;
-  color: #dcb2b6;
-  background: #78172370;
-  padding: 4px 6px;
-  border-radius: 3px;
-}
-.model-pending {
-  display: flex;
-  gap: 13px;
-  background: #10161d;
-  border: 1px solid #2c3741;
-  border-radius: 5px;
-  padding: 17px;
-  margin-top: 26px;
-  color: #8ba0b1;
-  align-items: center;
-}
-.model-pending p {
-  font-size: 10px;
-  line-height: 1.9;
-}
-.metrics-table {
-  margin-top: 25px;
-}
-.metrics-table h3 {
-  font-size: 12px;
-  margin-bottom: 12px;
-}
-.metrics-table table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 10px;
-}
-.metrics-table th {
-  color: #a6b3c0;
-  text-align: left;
-}
-.metrics-table td,
-.metrics-table th {
-  border-bottom: 1px solid #24303b;
-  padding: 12px 7px;
-}
-.metrics-table td {
-  color: #c1ccd6;
-}
 .toast {
   position: fixed;
   z-index: 100;

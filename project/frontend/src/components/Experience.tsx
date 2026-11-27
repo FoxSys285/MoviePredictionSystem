@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { NavLink, useLocation, useNavigate, useNavigationType } from "react-router-dom";
+import { Link, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { ArrowUp, FlaskConical } from "lucide-react";
 import { observeReveals, reducedMotion } from "../lib/motion";
 import { usePreferences } from "../lib/preferences";
@@ -13,6 +13,7 @@ export function RouteFrame({ children }: { children: ReactNode }) {
 export function ScrollExperience() {
   const { t } = usePreferences();
   const location = useLocation();
+  const showExperimentEntry = !["/login", "/register", "/experiments"].includes(location.pathname);
   const navigation = useNavigationType();
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
@@ -94,11 +95,11 @@ export function ScrollExperience() {
 
   return <>
     <div className="scroll-progress" aria-hidden="true" />
-    <NavLink className="experiments-fab" to="/experiments" aria-label={t("Mở trang thực nghiệm so sánh")}>
-      <FlaskConical size={22} aria-hidden="true" />
-      <span className="experiments-fab-tooltip">{t("Thực nghiệm so sánh")}</span>
-    </NavLink>
-    <button className={`back-to-top ${visible ? "is-visible" : ""}`}
+    {showExperimentEntry && <Link className="experiment-launcher" to="/experiments">
+      <FlaskConical size={20} aria-hidden="true" />
+      <span>{t("Thực nghiệm")}</span>
+    </Link>}
+    <button className={`back-to-top ${visible ? "is-visible" : ""} ${showExperimentEntry ? "above-experiments" : ""}`}
       aria-label={t("Lên đầu trang")} title={t("Lên đầu trang")} tabIndex={visible ? 0 : -1}
       aria-hidden={!visible}
       onClick={() => window.scrollTo({ top: 0, behavior: reducedMotion() ? "instant" : "smooth" })}>

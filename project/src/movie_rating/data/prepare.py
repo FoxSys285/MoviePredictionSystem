@@ -28,7 +28,7 @@ def load_ratings(settings: Settings) -> pd.DataFrame:
         if not chunk.rating.isin(np.arange(0.5, 5.1, 0.5)).all():
             raise ValueError("MovieLens ratings must be 0.5, 1.0, ..., 5.0.")
         # An integer hash avoids retaining only the first users/rows in the CSV.
-        hashed = (chunk.userId.astype("int64") ^ settings.experiment.seed) * 2654435761
+        hashed = (chunk.userId.astype("int64") ^ settings.training.seed) * 2654435761
         selected = (hashed % 2**32) / 2**32 < settings.data.user_sample_fraction
         frames.append(chunk.loc[selected])
     ratings = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
@@ -70,7 +70,7 @@ def prepare(settings: Settings) -> dict:
     destination = settings.artifacts_dir / "data"
     if destination.exists() and any(destination.iterdir()):
         raise FileExistsError(
-            "Prepared data already exists. Use a new artifacts_directory for another experiment."
+            "Prepared data already exists. Use a new artifacts_directory to prepare another dataset."
         )
     ratings = load_ratings(settings)
     exclusion = None

@@ -9,7 +9,7 @@ validation_fraction = 0.15
 split_strategy = "per_user_temporal"
 minimum_user_ratings = 10
 
-[experiment]
+[training]
 seed = 42
 artifacts_directory = "artifacts"
 algorithms = ["ridge", "xgboost", "svd", "ncf"]

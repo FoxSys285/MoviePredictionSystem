@@ -1,16 +1,14 @@
 # MoviePredictionSystem
 
-Ứng dụng học máy dự đoán điểm đánh giá phim trên **MovieLens 25M**, gồm backend
-FastAPI, giao diện React/TypeScript và phòng thực nghiệm với 14 thuật toán/baseline thuộc
-6 nhóm nhiệm vụ. Người dùng có thể tìm phim, xem chi tiết, chấm điểm, quản lý
-Watch History và nhận gợi ý theo lịch sử.
+Ứng dụng khám phá phim và dự đoán điểm đánh giá trên MovieLens 25M, gồm backend
+FastAPI và giao diện React/TypeScript. Người dùng có thể tìm phim, xem chi tiết,
+chấm điểm, quản lý lịch sử đánh giá và nhận gợi ý theo lịch sử.
 
-Module thực nghiệm v3 có 5-Fold CV, refit Train + Validation, sáu nhóm thuật toán,
-chạy nền, lịch sử và xuất CSV/Excel. Xem [hướng dẫn sử dụng](project/docs/experiment-studio.md).
+Phần thực nghiệm và bộ test cũ đã được xoá để xây dựng lại từ đầu.
 
 ## Chạy trên Windows
 
-Yêu cầu Python 3.12 và Node.js/npm. Trong PowerShell tại thư mục repository:
+Yêu cầu Python 3.12 và Node.js/npm. Tại thư mục repository:
 
 ```powershell
 cd project
@@ -21,40 +19,24 @@ cd ../..
 .\run_project.bat
 ```
 
-`setup.ps1` cài PyTorch CUDA 13.2 mặc định. Để chọn bản PyTorch CPU-only, chạy
+`setup.ps1` cài PyTorch CUDA mặc định. Có thể chọn bản CPU bằng
 `.\scripts\setup.ps1 -TorchBuild cpu` trong thư mục `project`.
 
 Giao diện/API: <http://127.0.0.1:8000>. Swagger: <http://127.0.0.1:8000/docs>.
 
-## Dữ liệu và mô hình
+## Dữ liệu và chức năng
 
-Tải [MovieLens 25M từ GroupLens](https://grouplens.org/datasets/movielens/25m/),
-đặt `ratings.csv`, `movies.csv`, `tags.csv` và `links.csv` trong `dataset/`.
-Tạo bản dữ liệu sạch trước khi huấn luyện theo
-[hướng dẫn dự án](project/README.md#bản-dữ-liệu-đã-làm-sạch).
-
-CSV MovieLens, môi trường Python, `node_modules`, mô hình/hiện vật sinh khi chạy
-và cơ sở dữ liệu tài khoản cục bộ không được lưu trong repository. Một bản clone
-mới cần chuẩn bị dữ liệu và huấn luyện mô hình để sử dụng đầy đủ chức năng.
+Dataset gốc ở `dataset/`, bản sạch ở `dataset_cleaned/`. Dữ liệu tài khoản lưu ở
+`project/artifacts/application.sqlite3`; cache danh mục và dữ liệu đã chuẩn bị
+được giữ lại. Các mô hình phục vụ dự đoán/gợi ý nằm trong
+`project/src/movie_rating/models/`.
 
 ## Tài liệu
 
-- [Hướng dẫn cài đặt, cấu hình và huấn luyện](project/README.md)
-- [Phòng thực nghiệm: 6 nhóm nhiệm vụ](project/docs/experiment-lab.md)
+- [Cài đặt và huấn luyện mô hình cho ứng dụng](project/README.md)
 - [Kiến trúc hệ thống](project/docs/architecture.md)
 - [API](project/docs/api.md)
 - [Giao diện frontend](project/frontend/README.md)
-- [Báo cáo đồ án — Word](Bao%20cao%20do%20an%20-%20Movie%20Rating%20Prediction.docx)
-- [Báo cáo đồ án — PDF](Bao%20cao%20do%20an%20-%20Movie%20Rating%20Prediction.pdf)
 
-## Kiểm tra
-
-Trong thư mục `project`:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-```
-
-Trong `project/frontend`, chạy `npm run build` để kiểm tra TypeScript và build
-giao diện.
+Để kiểm tra TypeScript và build giao diện, chạy `npm run build` trong
+`project/frontend`.

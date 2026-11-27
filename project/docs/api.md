@@ -17,15 +17,6 @@ Swagger `/docs` cung cấp schema và thử request trực tiếp.
 | PUT | `/me/ratings/{movie_id}` | Tạo/cập nhật điểm riêng 0,5–5, bước 0,5; phim phải có trong catalogue |
 | DELETE | `/me/ratings/{movie_id}` | Xóa đánh giá của tài khoản đăng nhập |
 | POST | `/predictions` | Dự đoán điểm theo user/movie/thuật toán |
-| GET | `/experiments/latest` | Kết quả validation và test của run mới nhất |
-| GET | `/experiments/documents/protocol` | Tải quy trình so sánh thực nghiệm dạng Markdown |
-| GET | `/experiments/documents/challenges` | Tải tài liệu khó khăn thực nghiệm dạng Markdown |
-| GET | `/experiments/documents/figures-stability` | Tải thiết kế biểu đồ, lặp seed/thời gian và bootstrap |
-| GET | `/experiments/documents/results` | Tải báo cáo kết quả và nhận xét |
-| GET | `/experiments/exports/stability` | Tải báo cáo độ ổn định JSON |
-| GET | `/experiments/exports/seeds` | Tải CSV từng lượt seed |
-| GET | `/experiments/exports/temporal` | Tải CSV từng fold thời gian |
-| GET | `/experiments/exports/bootstrap` | Tải CSV chênh lệch và CI 95% |
 | POST | `/auth/register` | Tạo tài khoản bằng name/email/password (ít nhất 8 ký tự) |
 | POST | `/auth/login` | Đăng nhập bằng email/password, cấp cookie HttpOnly |
 | GET | `/auth/demo-accounts` | Chuẩn bị và liệt kê tối đa 5 tài khoản demo, mật khẩu demo, userId và số rating đã nhập |
@@ -115,17 +106,6 @@ Endpoint predictions vẫn chọn `best_algorithm` theo RMSE. Test không đổi
 Khi history_count=0, dù chọn thuật toán nào, mode=popular, algorithm=null,
 predicted_rating=null; requested_algorithm vẫn ghi lựa chọn của trình duyệt.
 Không thể suy ra sở thích cá nhân chỉ từ tài khoản trống.
-
-Quy trình so sánh theo đề cương nhóm: [experimental-protocol.md](experimental-protocol.md).
-`GET /experiments/latest` trả thêm `analysis` (null nếu chưa chạy
-`analyze-experiments`), chứa `run_id` và `cold_history.validation/test` cho đồ thị
-0/5/10/20 rating; mỗi cohort ghi số user, query và RMSE/MAE của từng mô hình.
-Endpoint cũng trả `stability` (null nếu chưa chạy), gồm `status`, `seed_runs`,
-`temporal_runs`, `seed_summary.validation/test`, `temporal_summary` và
-`bootstrap.validation/test`. Chỉ số summary có `mean`, sample `std`, `n`;
-chênh lệch bootstrap giữ dấu âm/dương, với `delta`, `ci_low`, `ci_high`, `users`
-và `conclusion`. File đang chạy chỉ chứa các lượt đã hoàn tất; tải lại để cập nhật.
-Khó khăn và giới hạn: [experimental-challenges.md](experimental-challenges.md).
 
 ## Hồ sơ dataset và tài khoản mới
 

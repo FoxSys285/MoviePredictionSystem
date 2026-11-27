@@ -10,10 +10,8 @@ import App from "./App";
 import "./styles.css";
 import "./experience.css";
 import "./discovery.css";
-import "./experiments.css";
 import "./demo-profiles.css";
 import "./theme.css";
-import "./lab.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

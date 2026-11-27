@@ -84,19 +84,12 @@ html[data-theme="light"] .team-card,
 html[data-theme="light"] .contact-form-section,
 html[data-theme="light"] .auth-panel,
 html[data-theme="light"] .auth-demo-panel,
-html[data-theme="light"] .experiment-summary > div,
-html[data-theme="light"] .experiment-chart,
-html[data-theme="light"] .experiment-documents,
-html[data-theme="light"] .experiment-table caption,
-html[data-theme="light"] .experiment-table thead,
 html[data-theme="light"] .history-remove-confirm,
 html[data-theme="light"] .history-count,
 html[data-theme="light"] .rail-error,
 html[data-theme="light"] .rail-empty,
 html[data-theme="light"] .model-dialog,
-html[data-theme="light"] .metrics-table,
-html[data-theme="light"] .dataset-table-wrap,
-html[data-theme="light"] .experiment-table-wrap {
+html[data-theme="light"] .dataset-table-wrap {
   color: #263241;
   background-color: #fff;
   border-color: #dbe1e7;
@@ -123,8 +116,7 @@ html[data-theme="light"] input::placeholder,
 html[data-theme="light"] textarea::placeholder { color: #8793a1; }
 html[data-theme="light"] .empty-state,
 html[data-theme="light"] .rail-error,
-html[data-theme="light"] .rail-empty,
-html[data-theme="light"] .experiment-status {
+html[data-theme="light"] .rail-empty {
   color: #273442;
   background: #fff;
   border-color: #dce2e8;
@@ -137,11 +129,6 @@ html[data-theme="light"] .personal-rating {
 html[data-theme="light"] .rating-panel-heading p,
 html[data-theme="light"] .history-heading p,
 html[data-theme="light"] .genres-heading p,
-html[data-theme="light"] .experiments-intro p,
-html[data-theme="light"] .experiment-chart p,
-html[data-theme="light"] .experiment-method-grid p,
-html[data-theme="light"] .experiment-documents p,
-html[data-theme="light"] .experiment-table-note,
 html[data-theme="light"] .rail-subtitle,
 html[data-theme="light"] .subtle-note,
 html[data-theme="light"] .dataset-intro,
@@ -152,8 +139,6 @@ html[data-theme="light"] .muted { color: #657386; }
 html[data-theme="light"] .section-title,
 html[data-theme="light"] .empty-state h2,
 html[data-theme="light"] .dataset-table th,
-html[data-theme="light"] .experiment-status h3,
-html[data-theme="light"] .experiment-table tbody th,
 html[data-theme="light"] .auth-panel h1,
 html[data-theme="light"] .contact-form-section > h2,
 html[data-theme="light"] .history-heading h1,
@@ -167,13 +152,6 @@ html[data-theme="light"] .movie-rating-summary b,
 html[data-theme="light"] .movie-rating-summary div > span,
 html[data-theme="light"] .contact-detail h3,
 html[data-theme="light"] .contact-form label,
-html[data-theme="light"] .experiment-chart-row,
-html[data-theme="light"] .experiment-table td,
-html[data-theme="light"] .experiment-summary p,
-html[data-theme="light"] .experiment-summary > div > span,
-html[data-theme="light"] .experiment-model-card p,
-html[data-theme="light"] .experiment-run-meta,
-html[data-theme="light"] .experiment-table caption,
 html[data-theme="light"] .auth-subtitle,
 html[data-theme="light"] .auth-demo-panel > p,
 html[data-theme="light"] .demo-account-heading span,
@@ -195,27 +173,10 @@ html[data-theme="light"] .password-hint { color: #68778a; }
 html[data-theme="light"] .movie-genre-list > span,
 html[data-theme="light"] .movie-tag-list > span { color: #394858; background: #f5f6f8; border-color: #dce1e7; }
 html[data-theme="light"] .movie-genre-list > span { background: #fff4f3; border-color: #efd2d1; }
-html[data-theme="light"] .rating-bar-track,
-html[data-theme="light"] .experiment-chart-row > div { background: #e7ebf0; }
-html[data-theme="light"] .dataset-table th,
-html[data-theme="light"] .experiment-table thead,
-html[data-theme="light"] .experiment-table caption { background: #f1f4f7; }
-html[data-theme="light"] .experiment-table td,
-html[data-theme="light"] .experiment-table th,
+html[data-theme="light"] .rating-bar-track { background: #e7ebf0; }
+html[data-theme="light"] .dataset-table th { background: #f1f4f7; }
 html[data-theme="light"] .dataset-table td,
 html[data-theme="light"] .dataset-table th { border-color: #dfe4e9; }
-html[data-theme="light"] .experiment-model-card {
-  color: #263241;
-  background: linear-gradient(145deg, #fff, #f7f8fa);
-  border-color: #dce1e8;
-}
-html[data-theme="light"] .experiment-split { background: #f1f3f6; border-color: #dce2e8; }
-html[data-theme="light"] .experiment-split button { color: #566477; }
-html[data-theme="light"] .experiment-split button.selected { color: #fff; background: #8e3d66; }
-html[data-theme="light"] .experiment-run-meta { background: #f2f7f6; border-color: #d5e4e0; }
-html[data-theme="light"] .experiment-status h3 { color: #283443; }
-html[data-theme="light"] .experiment-status p { color: #647286; }
-html[data-theme="light"] .experiment-status.has-error { background: #fff8f6; }
 html[data-theme="light"] .history-count { background: #f8f4fb; border-color: #e3d9ea; color: #56436b; }
 html[data-theme="light"] .history-entry-meta > span { color: #586578; }
 html[data-theme="light"] .history-remove-confirm { background: #fff8f6; }
@@ -253,21 +214,17 @@ html[data-theme="light"] .feature p,
 html[data-theme="light"] .team-card p,
 html[data-theme="light"] .contact-detail p,
 html[data-theme="light"] .form-intro,
-html[data-theme="light"] .catalog-caption,
-html[data-theme="light"] .experiment-table-note { color: #5f6e80; }
+html[data-theme="light"] .catalog-caption { color: #5f6e80; }
 html[data-theme="light"] .movie-meta > span:last-child,
 html[data-theme="light"] .movie-votes,
 html[data-theme="light"] .movie-breadcrumb,
 html[data-theme="light"] .movie-original-title,
 html[data-theme="light"] .search-field svg,
 html[data-theme="light"] .select-field svg,
-html[data-theme="light"] .history-entry-meta time,
-html[data-theme="light"] .experiment-model-family,
-html[data-theme="light"] .experiment-summary > div > span { color: #68788b; }
+html[data-theme="light"] .history-entry-meta time { color: #68788b; }
 html[data-theme="light"] .movie-facts,
 html[data-theme="light"] .contact-info,
-html[data-theme="light"] .social-section,
-html[data-theme="light"] .experiment-model-state { border-color: #dbe1e7; }
+html[data-theme="light"] .social-section { border-color: #dbe1e7; }
 html[data-theme="light"] .social-links button {
   color: #465365;
   background: #fff;
@@ -281,11 +238,6 @@ html[data-theme="light"] .button-outline {
   border-color: #cbd4de;
 }
 html[data-theme="light"] .button-outline:not(:disabled):hover { background: #f3f5f7; border-color: #aa3440; }
-html[data-theme="light"] .experiment-chart-row b { color: #74415f; }
-html[data-theme="light"] .experiment-table .selected-model { background: #f8f1f7; }
-html[data-theme="light"] .experiment-run-meta code { color: #326754; }
-html[data-theme="light"] .experiment-model-state { color: #586779; }
-html[data-theme="light"] .experiment-model-state.is-trained { color: #19734e; }
 html[data-theme="light"] .form-error { color: #9f2934; background: #fff2f1; border-color: #edc3c3; }
 html[data-theme="light"] .form-success { color: #21744e; }
 html[data-theme="light"] .password-toggle,
@@ -431,16 +383,6 @@ html[data-theme="light"] .hero-history::before {
     radial-gradient(circle at 82% 61%, #fff 0 7px, #c9b9e5 8px 10px, transparent 11px),
     repeating-linear-gradient(0deg, transparent 0 37px, #e3dcf0 38px 39px),
     linear-gradient(135deg, #fff, #f3eff9);
-}
-html[data-theme="light"] .page-hero.hero-experiments { --banner-soft: #e5eaf7; --banner-line: #c9d1ec; }
-html[data-theme="light"] .hero-experiments::before {
-  width: min(43vw, 450px);
-  height: 230px;
-  border-radius: 18px;
-  background: repeating-linear-gradient(0deg, transparent 0 31px, #d9dff0 32px 33px),
-    repeating-linear-gradient(90deg, transparent 0 36px, #e2e6f3 37px 38px),
-    linear-gradient(135deg, #fff, #e8ecf8);
-  clip-path: polygon(0 100%, 0 71%, 19% 59%, 35% 78%, 54% 30%, 72% 49%, 100% 8%, 100% 100%);
 }
 html[data-theme="light"] .hero-about .hero-copy,
 html[data-theme="light"] .hero-contact .hero-copy { text-align: left; }

@@ -40,17 +40,17 @@ def train(settings: Settings) -> dict:
     run_dir = settings.artifacts_dir / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     results = []
-    for algorithm in settings.experiment.algorithms:
+    for algorithm in settings.training.algorithms:
         params = settings.models.get(algorithm, {})
         model_class = MODEL_REGISTRY[algorithm]
         # Only the legacy Numba models need JIT warm-up outside the fit timer.
         if algorithm in ("svd", "nmf", "item_knn"):
-            warmup = model_class(**params, seed=settings.experiment.seed)
+            warmup = model_class(**params, seed=settings.training.seed)
             tiny = train_data.iloc[: min(10, len(train_data))]
             warmup.fit(tiny)
             warmup.predict(tiny.userId, tiny.movieId)
             del warmup
-        model = model_class(**params, seed=settings.experiment.seed)
+        model = model_class(**params, seed=settings.training.seed)
         if hasattr(model, "set_movie_metadata"):
             model.set_movie_metadata(movies)
         print(f"Training {algorithm} on {len(train_data):,} ratings...", flush=True)
@@ -62,7 +62,7 @@ def train(settings: Settings) -> dict:
         fit_seconds = time.perf_counter() - started
         measured = evaluate_model(model, validation)
         measured.update(
-            evaluate_ranking(model, validation, train_data, seed=settings.experiment.seed)
+            evaluate_ranking(model, validation, train_data, seed=settings.training.seed)
         )
         model_path = run_dir / f"{algorithm}.joblib"
         joblib.dump(model, model_path, compress=3)
@@ -162,7 +162,7 @@ def evaluate_test(settings: Settings) -> dict:
             {
                 "algorithm": row["algorithm"],
                 **evaluate_model(model, test),
-                **evaluate_ranking(model, test, history, seed=settings.experiment.seed),
+                **evaluate_ranking(model, test, history, seed=settings.training.seed),
             }
         )
         del model

@@ -1,4 +1,3 @@
-import json
 import os
 import re
 import uuid
@@ -6,12 +5,10 @@ from typing import Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 
 from movie_rating.api.accounts import account_router
 from movie_rating.api.activity import activity_router
 from movie_rating.api.frontend import mount_frontend
-from movie_rating.api.lab import lab_router
 from movie_rating.api.schemas import PredictionRequest, PredictionResponse
 from movie_rating.services.catalog import RATING_COLUMNS, CatalogService, movie_records
 from movie_rating.services.prediction import PredictionService
@@ -151,56 +148,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except FileNotFoundError as error:
             raise HTTPException(503, "Model unavailable. Run: movie-rating train") from error
 
-    @router.get("/experiments/latest")
-    def comparison():
-        run = get_run()
-        test_path = run / "test.json"
-        analysis_path = run / "analysis.json"
-        stability_path = run / "stability.json"
-        return {
-            "validation": json.loads((run / "validation.json").read_text(encoding="utf-8")),
-            "test": json.loads(test_path.read_text(encoding="utf-8"))
-            if test_path.is_file()
-            else None,
-            "analysis": json.loads(analysis_path.read_text(encoding="utf-8"))
-            if analysis_path.is_file()
-            else None,
-            "stability": json.loads(stability_path.read_text(encoding="utf-8"))
-            if stability_path.is_file()
-            else None,
-        }
-
-    @router.get("/experiments/exports/{document}")
-    def experiment_export(document: Literal["stability", "seeds", "temporal", "bootstrap"]):
-        relative = {
-            "stability": "stability.json",
-            "seeds": "stability/seed-runs.csv",
-            "temporal": "stability/temporal-runs.csv",
-            "bootstrap": "stability/bootstrap.csv",
-        }[document]
-        path = get_run() / relative
-        if not path.is_file():
-            raise HTTPException(404, "Kết quả này chưa được tạo.")
-        media_type = "application/json" if document == "stability" else "text/csv"
-        return FileResponse(path, media_type=media_type, filename=path.name)
-
-    @router.get("/experiments/documents/{document}")
-    def experiment_document(
-        document: Literal["protocol", "challenges", "figures-stability", "results"]
-    ):
-        name = {
-            "protocol": "experimental-protocol.md",
-            "challenges": "experimental-challenges.md",
-            "figures-stability": "experiment-figures-and-stability.md",
-            "results": "experimental-results.md",
-        }[document]
-        path = PROJECT_ROOT / "docs" / name
-        if not path.is_file():
-            raise HTTPException(404, "Tài liệu thực nghiệm chưa có sẵn.")
-        return FileResponse(path, media_type="text/markdown; charset=utf-8", filename=name)
-
     app.include_router(router)
-    app.include_router(lab_router(settings))
     app.include_router(account_router(settings))
     app.include_router(activity_router(settings, catalog_service))
     mount_frontend(app, PROJECT_ROOT / "frontend/dist")

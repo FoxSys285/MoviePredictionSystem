@@ -27,7 +27,7 @@ class DataSettings(BaseModel):
         return self
 
 
-class ExperimentSettings(BaseModel):
+class TrainingSettings(BaseModel):
     seed: int = Field(default=42, ge=0)
     artifacts_directory: str = "artifacts"
     algorithms: list[str] = Field(default_factory=lambda: list(PRIMARY_ALGORITHMS), min_length=1)
@@ -43,7 +43,7 @@ class ExperimentSettings(BaseModel):
 
 class Settings(BaseModel):
     data: DataSettings = Field(default_factory=DataSettings)
-    experiment: ExperimentSettings = Field(default_factory=ExperimentSettings)
+    training: TrainingSettings = Field(default_factory=TrainingSettings)
     models: dict[str, dict[str, int | float]] = Field(default_factory=dict)
 
     @property
@@ -52,7 +52,7 @@ class Settings(BaseModel):
 
     @property
     def artifacts_dir(self) -> Path:
-        value = os.getenv("MOVIE_ARTIFACTS_DIR", self.experiment.artifacts_directory)
+        value = os.getenv("MOVIE_ARTIFACTS_DIR", self.training.artifacts_directory)
         return (PROJECT_ROOT / value).resolve()
 
 

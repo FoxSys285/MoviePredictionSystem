@@ -27,6 +27,7 @@ function AppContent() {
   const [authLoading, setAuthLoading] = useState(true);
   const [ratingsVersion, setRatingsVersion] = useState(0);
   const [dataset, setDataset] = useState<Dataset | null>(null);
+  const [datasetLoading, setDatasetLoading] = useState(true);
   const [modelsOpen, setModelsOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const location = useLocation();
@@ -35,8 +36,9 @@ function AppContent() {
   useEffect(() => {
     const controller = new AbortController();
     api<Dataset>("/dataset", { signal: controller.signal })
-      .then(setDataset)
-      .catch(() => {});
+      .then((value) => { if (!controller.signal.aborted) setDataset(value); })
+      .catch(() => {})
+      .finally(() => { if (!controller.signal.aborted) setDatasetLoading(false); });
     api<User>("/auth/me")
       .then((value) => { if (!controller.signal.aborted) setUser(value); })
       .catch(() => {})
@@ -52,7 +54,7 @@ function AppContent() {
       "/login": t("Đăng nhập"),
       "/register": t("Đăng ký"),
       "/genres": t("Tất cả thể loại"),
-      "/experiments": t("Thực nghiệm so sánh mô hình"),
+      "/experiments": t("Thực nghiệm"),
       "/watch-history": t("Những phim bạn đã đánh giá"),
     };
     document.title = `MOVIE — ${titles[location.pathname] || t("Khám phá thế giới phim ảnh")}`;
@@ -102,7 +104,7 @@ function AppContent() {
           <Route path="/gallery" element={<Gallery dataset={dataset} />} />
           <Route path="/galary" element={<Navigate to="/gallery" replace />} />
           <Route path="/genres" element={<Genres dataset={dataset} />} />
-          <Route path="/experiments" element={<Experiments />} />
+          <Route path="/experiments" element={<Experiments dataset={dataset} datasetLoading={datasetLoading} />} />
           <Route path="/watch-history" element={<WatchHistory />} />
           <Route path="/movies/:movieId" element={<MovieDetail />} />
           <Route path="/about" element={<About dataset={dataset} />} />

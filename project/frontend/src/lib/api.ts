@@ -46,17 +46,6 @@ export type Prediction = {
   cold_start: boolean;
   run_id: string;
 };
-export type Metric = {
-  algorithm: Algorithm;
-  rmse: number;
-  mae: number;
-  fit_seconds: number;
-};
-export type Experiment = {
-  validation: { best_algorithm: Algorithm; results: Metric[] };
-  test: { results: Metric[] } | null;
-};
-
 export type RatingBucket = { rating: number; count: number };
 export type Dataset = {
   name: string;

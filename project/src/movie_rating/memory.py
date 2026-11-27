@@ -1,4 +1,4 @@
-"""Bounded workspaces and disk-backed feature buffers for large experiments."""
+"""Bounded workspaces and disk-backed feature buffers for model training."""
 
 import os
 import pickle

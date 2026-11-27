@@ -253,7 +253,7 @@ export function Auth({
                   <button type="button" disabled={busy} onClick={() => chooseDemo(account)}>{email === account.email ? t("Đã chọn · Điền lại") : t("Dùng tài khoản này")}</button>
                 </div>
               </article>)}</div>
-              <p className="demo-disclaimer">{t(demos.notice)} {t("Đây là các hồ sơ dùng chung cho thực nghiệm.")}</p></>}
+              <p className="demo-disclaimer">{t(demos.notice)} {t("Đây là các hồ sơ demo dùng chung.")}</p></>}
           <div className="demo-new-user"><UserRound size={20} /><div><strong>{t("Muốn thử tài khoản mới?")}</strong><p>{t("Đăng ký để bắt đầu với lịch sử trống. Gợi ý sẽ thay đổi sau khi bạn đánh giá phim.")}</p><Link to={`/register${params.get("next") ? `?next=${encodeURIComponent(destination)}` : ""}`}>{t("Tạo hồ sơ của bạn →")}</Link></div></div>
         </section>}
       </div>

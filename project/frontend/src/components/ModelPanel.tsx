@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Award,
   BrainCircuit,
-  Check,
   Database,
-  LoaderCircle,
-  ShieldCheck,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -15,18 +12,17 @@ import {
   ALGORITHM_NAMES,
   api,
   type Algorithm,
-  type Experiment,
 } from "../lib/api";
 
 export function ModelPanel({ onClose }: { onClose: () => void }) {
   const { t } = usePreferences();
-  const [experiment, setExperiment] = useState<Experiment | null>(null);
+  const [models, setModels] = useState<{ algorithm: Algorithm; trained: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
-    api<Experiment>("/experiments/latest")
+    api<{ algorithm: Algorithm; trained: boolean }[]>("/models")
       .then((data) => {
-        if (active) setExperiment(data);
+        if (active) setModels(data);
       })
       .catch(() => {})
       .finally(() => {
@@ -77,53 +73,13 @@ export function ModelPanel({ onClose }: { onClose: () => void }) {
             <div>
               <h3>
                 {ALGORITHM_NAMES[name]}{" "}
-                {experiment?.validation.best_algorithm === name && (
-                  <span className="best-badge">
-                    <Check size={10} /> {t("Tốt nhất")}
-                  </span>
-                )}
               </h3>
               <p>{t(text)}</p>
+              <p>{t(loading ? "Đang kiểm tra" : models.some((model) => model.algorithm === name && model.trained) ? "Đã huấn luyện" : "Chưa huấn luyện")}</p>
             </div>
           </div>
         ))}
       </div>
-      {loading ? (
-        <p className="subtle-note">
-          <LoaderCircle className="spin" size={15} /> {t("Đang tải kết quả thực nghiệm...")}
-        </p>
-      ) : experiment ? (
-        <div className="metrics-table">
-            <h3>{t("Kết quả trên tập validation")}</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>{t("Thuật toán")}</th>
-                <th>RMSE ↓</th>
-                <th>MAE ↓</th>
-                <th>{t("Huấn luyện")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {experiment.validation.results.map((row) => (
-                <tr key={row.algorithm}>
-                  <td>{ALGORITHM_NAMES[row.algorithm]}</td>
-                  <td>{row.rmse.toFixed(4)}</td>
-                  <td>{row.mae.toFixed(4)}</td>
-                  <td>{row.fit_seconds.toFixed(2)}s</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="model-pending">
-          <ShieldCheck size={23} />
-          <p>
-            {t("Chưa có kết quả huấn luyện để so sánh. Bạn vẫn có thể xem danh mục và chi tiết phim từ dataset.")}
-          </p>
-        </div>
-      )}
     </Dialog>
   );
 }

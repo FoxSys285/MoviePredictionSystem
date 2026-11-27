@@ -9,12 +9,11 @@ from movie_rating.training import evaluate_test, train
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MovieLens 25M experiment pipeline")
+    parser = argparse.ArgumentParser(description="MovieLens 25M movie application")
     parser.add_argument("--config", help="Path to a TOML config; default: configs/default.toml")
     parser.add_argument(
         "command",
-        choices=["analyze", "prepare", "train", "evaluate", "analyze-experiments",
-                 "stability", "serve"],
+        choices=["analyze", "prepare", "train", "evaluate", "serve"],
     )
     args = parser.parse_args()
     settings = load_settings(args.config)
@@ -28,14 +27,6 @@ def main():
             return
         if args.command == "analyze":
             report = CatalogService(settings).load().summary
-        elif args.command == "analyze-experiments":
-            from movie_rating.experiment_analysis import analyze_experiments
-
-            report = analyze_experiments(settings)
-        elif args.command == "stability":
-            from movie_rating.stability import run_stability
-
-            report = run_stability(settings)
         else:
             actions = {"prepare": prepare, "train": train, "evaluate": evaluate_test}
             report = actions[args.command](settings)

@@ -3,14 +3,12 @@
 import numpy as np
 import pandas as pd
 
-CV_FOLDS = 5
-
 PERSONALIZED_PROTOCOL = "per_user_temporal_70_15_15_v2"
 
 
 def _ordered_groups(frame):
     if "timestamp" not in frame:
-        raise ValueError("Dữ liệu thực nghiệm cần timestamp để chia theo thời gian.")
+        raise ValueError("Dữ liệu cần timestamp để chia theo thời gian.")
     order = np.lexsort(
         (frame.movieId.to_numpy(), frame.timestamp.to_numpy(), frame.userId.to_numpy())
     )
@@ -53,29 +51,6 @@ def user_temporal_split(frame, train_fraction=0.7, validation_fraction=0.15, min
         for code, name in enumerate(("train", "validation", "test"))
     }
     return splits, report
-
-
-def temporal_folds(frame, n_splits=CV_FOLDS):
-    """Expanding history per user: past only, shared users, held-out timestamp blocks."""
-    order, starts, counts = _ordered_groups(frame)
-    times = frame.timestamp.to_numpy()[order]
-    ends = starts + counts
-    for fold in range(n_splits):
-        cut = times[starts + np.maximum(0, (counts * (fold + 1) / (n_splits + 1)).astype(int) - 1)]
-        upper = times[
-            starts + np.maximum(0, (counts * (fold + 2) / (n_splits + 1)).astype(int) - 1)
-        ]
-        if fold == n_splits - 1:
-            upper = times[ends - 1]
-        # Keep expanding training histories even when a user's next block is all ties.
-        # Such a user simply contributes no held-out rows in this particular fold.
-        eligible = counts >= n_splits + 1
-        valid = np.repeat(eligible, counts)
-        fit_mask = (times <= np.repeat(cut, counts)) & valid
-        held_mask = (times <= np.repeat(upper, counts)) & ~fit_mask & valid
-        if not fit_mask.any() or not held_mask.any():
-            raise ValueError(f"Không đủ lịch sử/timestamp khác nhau cho {n_splits} lượt CV thời gian.")
-        yield order[fit_mask], order[held_mask]
 
 
 def split_by_time(

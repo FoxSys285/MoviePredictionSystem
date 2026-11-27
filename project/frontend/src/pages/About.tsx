@@ -18,7 +18,7 @@ const team = [
   { name: "Backend Developer", role: "Dữ liệu & hệ thống", avatar: "backend" },
   {
     name: "Machine Learning",
-    role: "Mô hình & thực nghiệm",
+    role: "Mô hình & dự đoán",
     avatar: "ml",
   },
   { name: "UI/UX Designer", role: "Thiết kế & tương tác", avatar: "design" },
@@ -42,13 +42,13 @@ export function About({ dataset }: { dataset: Dataset | null }) {
               {t("MOVIE là đồ án khám phá phim và dự đoán điểm đánh giá từ dữ liệu MovieLens. Bạn có thể tìm kiếm phim, xem điểm cộng đồng và khám phá những bộ phim cùng thể loại.")}
             </p>
             <p>
-              {t("Khám phá 11 thuật toán trong 5 nhóm nhiệm vụ, so sánh Validation và Test bằng các chỉ số chính.")}
+              {t("Tìm hiểu các mô hình dự đoán điểm đánh giá và gợi ý phim theo lịch sử của bạn.")}
             </p>
             <div className="feature-grid">
               <Feature
                 icon={BrainCircuit}
-                title={t("5 nhóm thực nghiệm")}
-                description={t("11 thuật toán · 17 chỉ số · Validation và Test")}
+                title={t("Dự đoán điểm đánh giá")}
+                description={t("Gợi ý phim theo lịch sử của bạn")}
               />
               <Feature
                 icon={Clapperboard}

@@ -78,12 +78,17 @@ Không cần `.env` cho cấu hình mặc định.
 | `/home` | Trang chủ bổ sung theo cùng phong cách và lối vào bộ sưu tập |
 | `/watch-history` | Phim tài khoản đã đánh giá, điểm riêng, ngày cập nhật, sửa/xóa và phân trang |
 | `/genres` | Danh sách thể loại thật; chọn để chuyển Gallery với bộ lọc tương ứng |
-| `/experiments` | Khu vực thực nghiệm đã được làm trống, chờ danh sách thuật toán và thiết kế đánh giá mới |
+| `/experiments` | Sidebar gồm Mô hình cơ sở, Mô hình cải tiến, So sánh và đánh giá kết quả thực nghiệm; mỗi mục có vùng nội dung riêng |
 
-Menu dùng nhãn **Genres**. Nút bình thí nghiệm nổi ở góc dưới phải mở `/experiments`;
-nút lên đầu trang được đặt phía trên để không chồng lấp. Menu thu gọn trên màn hình hẹp.
-Trang Experiments hiện không hiển thị mô hình, số liệu hoặc kết luận cũ. Nội dung mới sẽ
-được bổ sung sau khi danh sách thuật toán được chốt.
+Menu thu gọn trên màn hình hẹp. Mục **Thực nghiệm** và nút nổi cùng tên mở
+`/experiments`. Nút lên đầu trang nằm phía trên nút thực nghiệm khi cùng xuất hiện.
+Mục thực nghiệm đang chọn được lưu trong query `section=baseline`, `improved` hoặc
+`evaluation`; tải lại trang và nút Back/Forward giữ đúng mục tương ứng.
+Mô hình cơ sở và Mô hình cải tiến có bốn ô chọn dạng nút: Linear Regression,
+XGBoost, SVD, NCF. Hai mục giữ lựa chọn riêng trong lúc chuyển qua lại trên trang.
+Bên dưới là mô tả MovieLens và bốn CSV. Số rating, user, phim, thể loại, giai đoạn
+đánh giá và mật độ ma trận dùng thống kê từ `/api/v1/dataset`, dùng chung dữ liệu
+đã tải ở ứng dụng.
 
 Home và Gallery có hàng "Các phim có thể bạn yêu thích", cuộn ngang tối đa 20 phim.
 Home có thêm 5 hàng thể loại, tối đa 10 phim mỗi hàng; nút Xem tất cả mở Gallery
@@ -158,27 +163,14 @@ src/
 └── main.tsx                 # React root, router và font cục bộ
 public/assets/               # Ảnh WebP dùng trong giao diện
 scripts/prepare-assets.mjs   # Chuyển PNG gốc sang WebP
-scripts/check-ui.mjs         # Kiểm tra bằng Chrome/Edge cài sẵn
 ```
 
 Nguồn ảnh: `images/generated/` ở gốc workspace.
 Prompt và phương thức tạo ảnh: [prompts.json](../../images/generated/prompts.json).
 Năm ảnh UI/UX gốc được giữ nguyên.
 
-## Kiểm tra
+## Build giao diện
 
 ```powershell
 npm run build
-npm run test:ui
 ```
-
-`test:ui` tự mở hai tiến trình kiểm thử, dùng dữ liệu tài khoản/tin nhắn trong thư mục
-tạm rồi dừng các tiến trình. Cần Python trong `project/.venv` và Chrome hoặc Edge
-cài sẵn; đặt `CHROME_PATH` khi cài ở vị trí khác. Không tải trình duyệt mới.
-Kiểm tra các trang ở chiều rộng 360, 390, 768 và chụp desktop 1440px; thử đọc CSV
-giả lập trong thư mục tạm, tìm/lọc phim, mở và tải lại trang chi tiết, giữ bộ lọc
-khi quay lại, phim chưa có điểm, phim không tồn tại, bảng mô hình, liên hệ và tài khoản.
-Kiểm tra bổ sung ảnh lỗi chuyển sang pattern, biến thể màu, phím tắt tìm kiếm,
-skeleton, hover theo chuột, reveal khi cuộn, thanh tiến độ, nút lên đầu trang,
-chuyển trang, phục hồi vị trí cuộn và chế độ giảm chuyển động.
-Ảnh chụp lưu trong `test-results/` (không đưa vào Git).
