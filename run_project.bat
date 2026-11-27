@@ -3,7 +3,7 @@ setlocal
 title Movie Rating Prediction
 chcp 65001 >nul
 set "LAUNCH_SCRIPT=%~dp0project\scripts\start.ps1"
-if not exist "%LAUNCH_SCRIPT%" (
+if not exist "%LAUNCH_SCRIPT%" (    
     echo Cannot find project\scripts\start.ps1 next to this file.
     pause
     exit /b 1

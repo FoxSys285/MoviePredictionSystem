@@ -1,26 +1,14 @@
-"""Dispatch and presentation schema for version-three real experiments."""
+"""Dispatch and presentation schema for rating regression experiments."""
 
 from movie_rating.lab import CATALOG, chart, series
 
 
 def execute(splits, movies, request, update, progress_store=None):
-    from movie_rating.experiment_clustering import clustering
-    from movie_rating.experiment_reinforcement import reinforcement
     from movie_rating.experiment_supervised import supervised
-    from movie_rating.experiment_unsupervised import association, reduction
 
-    handler = {
-        "rating": supervised,
-        "classification": supervised,
-        "clustering": clustering,
-        "association": association,
-        "pca": reduction,
-        "reinforcement": reinforcement,
-    }[request.group]
-    if request.group in ("rating", "classification"):
-        result = handler(splits, movies, request, update, progress_store=progress_store)
-    else:
-        result = handler(splits, movies, request, update)
+    if request.group != "rating":
+        raise ValueError("The experiment workspace currently supports regression only.")
+    result = supervised(splits, movies, request, update, progress_store=progress_store)
     metrics = next(g["metrics"] for g in CATALOG["groups"] if g["id"] == request.group)
     comparisons = []
     for metric in metrics:

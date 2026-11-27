@@ -41,21 +41,17 @@ def test_csv_tracks_candidates_folds_and_selected_config(tmp_path):
     assert config["estimator_params"]["scaler__with_std"] is True
 
 
-def test_runs_append_without_mixing_models_or_tasks(tmp_path):
+def test_regression_runs_append_to_tracking_log(tmp_path):
     x = np.arange(40).reshape(20, 2)
-    for algorithm, task, y in (
-        ("linear", "regression", np.linspace(0.5, 5.0, 20)),
-        ("logistic", "classification", np.arange(20) % 3),
-    ):
-        grid_search_model(build_scaled_model(algorithm), x, y, {}, task=task,
-                          log_directory=tmp_path)
+    y = np.linspace(0.5, 5.0, 20)
+    for _ in range(2):
+        grid_search_model(build_scaled_model("linear"), x, y, {}, log_directory=tmp_path)
     runs = pd.read_csv(tmp_path / "runs.csv")
     assert len(runs) == 2
     assert runs.run_id.nunique() == 2
-    assert set(runs.model) == {"LinearRegression", "LogisticRegression"}
+    assert set(runs.model) == {"LinearRegression"}
     assert pd.notna(runs.iloc[0].cv_rmse_mean)
-    assert pd.isna(runs.iloc[1].cv_rmse_mean)
-    assert pd.notna(runs.iloc[1].cv_f1_mean)
+    assert pd.notna(runs.iloc[1].cv_rmse_mean)
 
 
 def test_failed_fit_is_logged_and_original_error_propagates(tmp_path):

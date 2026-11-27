@@ -10,7 +10,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
-from sklearn.model_selection import train_test_split
 
 from movie_rating.data.temporal import PERSONALIZED_PROTOCOL, user_temporal_split
 
@@ -40,20 +39,6 @@ def parquet_fingerprint(paths):
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(block)
     return digest.hexdigest()
-
-
-def split_ratings(frame):
-    """Rounded IID rating splits for groups that do not require per-user future holdouts."""
-    if len(frame) < 40:
-        raise ValueError("Cần ít nhất 40 ratings để chia dữ liệu và chạy 5-Fold.")
-    indices = np.arange(len(frame))
-    heldout_size = max(1, round(len(frame) * 0.15))
-    train_val, test = train_test_split(indices, test_size=heldout_size, random_state=42)
-    train, validation = train_test_split(train_val, test_size=heldout_size, random_state=42)
-    return {
-        name: frame.iloc[idx].reset_index(drop=True)
-        for name, idx in [("train", train), ("validation", validation), ("test", test)]
-    }
 
 
 class ExperimentData:
@@ -152,20 +137,17 @@ class ExperimentData:
         return destination
 
     def load(self, request):
-        historical = request.group in ("rating", "classification", "clustering", "reinforcement")
         key = (
             self.current_signature(),
             request.use_all_data,
             request.max_users,
-            historical,
-            request.group == "association",
         )
         if key == self.sample_key:
             return self.sample
         movies = pd.read_parquet(self.directory / "movies.parquet")
         exclusions = None
         if request.use_all_data:
-            directory = self.personalized_directory() if historical else self.directory
+            directory = self.personalized_directory()
             splits = {
                 name: pd.read_parquet(directory / f"{name}.parquet")
                 for name in ("train", "validation", "test")
@@ -205,13 +187,10 @@ class ExperimentData:
             ratings = ratings.sort_values(["userId", "movieId"], kind="stable").reset_index(
                 drop=True
             )
-            if historical:
-                splits, exclusions = user_temporal_split(ratings)
-            else:
-                splits = split_ratings(ratings)
+            splits, exclusions = user_temporal_split(ratings)
             source = "MovieLens: complete histories of sampled prepared users"
-            protocol = PERSONALIZED_PROTOCOL if historical else "iid_rating_70_15_15_v3"
-            if historical and exclusions["excluded_ratings"]:
+            protocol = PERSONALIZED_PROTOCOL
+            if exclusions["excluded_ratings"]:
                 ratings = pd.concat(splits.values(), ignore_index=True)
             selected_users = int(ratings.userId.nunique())
             ratings_count = len(ratings)
@@ -252,19 +231,5 @@ class ExperimentData:
                 for name, f in splits.items()
             },
         }
-        if request.group == "association":
-            provenance["association_source"] = {
-                "mode": "full_prepared_train",
-                "train_file": str((self.directory / "train.parquet").resolve()),
-                "movies_file": str((self.directory / "movies.parquet").resolve()),
-                "heldout_files": [
-                    str((self.directory / f"{name}.parquet").resolve())
-                    for name in ("validation", "test")
-                ],
-                "prepared_user_sample_fraction": json.loads(manifest.read_text(encoding="utf-8"))
-                .get("settings", {})
-                .get("data", {})
-                .get("user_sample_fraction"),
-            }
         self.sample_key, self.sample = key, (splits, movies, provenance)
         return self.sample

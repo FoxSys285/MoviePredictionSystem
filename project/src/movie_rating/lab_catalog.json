@@ -1,736 +1,143 @@
 {
-  "version": 3,
-  "source": "MovieLens · real experiment pipeline",
-  "groups": [
-    {
-      "id": "rating",
-      "title": "Regression · Rating Prediction",
-      "question": "Người dùng sẽ chấm bộ phim bao nhiêu sao?",
-      "algorithms": [
-        {
-          "id": "linear",
-          "name": "Linear Regression",
-          "description": "Học quan hệ tuyến tính giữa đặc trưng và rating. Biến thể giảm chiều chỉ nén block tương tác hồ sơ user–genre với genre phim; bias và thống kê nền được giữ.",
-          "output": "Một giá trị rating dự đoán, ví dụ 4,2 sao."
-        },
-        {
-          "id": "xgboost",
-          "name": "XGBoost Regressor",
-          "description": "Kết hợp các cây quyết định theo boosting để giảm sai số. Biến thể giảm chiều giữ bias/thống kê nền và nén block tương tác user–genre; PCA không được giả định có lợi cho cây.",
-          "output": "Một giá trị rating dự đoán."
-        },
-        {
-          "id": "svd",
-          "name": "SVD/MF có bias",
-          "description": "Học vector nhân tố tiềm ẩn của user và movie từ rating quan sát được; biến thể hybrid giữ latent factors và cộng nhánh hiệu chỉnh từ hồ sơ tương tác đã giảm chiều.",
-          "output": "Một giá trị rating dự đoán."
-        },
-        {
-          "id": "ncf",
-          "name": "NCF hồi quy",
-          "description": "Học embedding user/movie bằng mạng neural; biến thể hybrid ghép profile đã giảm chiều qua một nhánh MLP được fit trong từng fold.",
-          "output": "Một giá trị rating dự đoán."
-        }
-      ],
-      "metrics": [
-        {
-          "key": "rmse",
-          "name": "RMSE ↓",
-          "definition": "Căn trung bình bình phương sai số rating.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Căn trung bình bình phương sai số rating.",
-          "reference": {
-            "value": 1,
-            "operator": "lte",
-            "kind": "quality",
-            "unit": "sao",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Cho phép sai số căn quân phương tối đa khoảng 1 sao trên thang 0,5–5; phạt mạnh lỗi lớn.",
-            "interpretation": "≤1,00: đạt mục tiêu sai số ban đầu; >1,00: chưa đạt. Ví dụ 0,80 tốt hơn 1,20.",
-            "caution": "Đây là mục tiêu của dự án, không phải chuẩn MovieLens. Cần đọc cùng MAE, CV ± Std và baseline."
-          }
-        },
-        {
-          "key": "mae",
-          "name": "MAE ↓",
-          "definition": "Trung bình độ lệch tuyệt đối theo sao.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Trung bình độ lệch tuyệt đối theo sao.",
-          "reference": {
-            "value": 0.75,
-            "operator": "lte",
-            "kind": "quality",
-            "unit": "sao",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Mục tiêu lệch tuyệt đối trung bình không quá 0,75 sao, khoảng một đến hai nấc rating 0,5.",
-            "interpretation": "≤0,75: đạt mục tiêu; >0,75: sai lệch trung bình còn cao. 0,50 nghĩa là lệch trung bình nửa sao.",
-            "caution": "MAE không mô tả riêng các lỗi rất lớn; cần đọc cùng RMSE. Mốc là lựa chọn vận hành của dự án."
-          }
-        },
-        {
-          "key": "fit_seconds",
-          "name": "Training Time (s) ↓",
-          "definition": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
-          "reference": {
-            "value": 60,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "s",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách khởi đầu 60 giây cho một lần fit cuối / khai phá trên mẫu đang chọn.",
-            "interpretation": "≤60 giây: trong ngân sách; >60 giây: vượt ngân sách. Chậm không đồng nghĩa dự đoán kém.",
-            "caution": "Chỉ so cùng mẫu, CPU, số luồng và cách đo. Không gồm toàn bộ tuning/CV; Q-Learning có checkpoint Validation."
-          }
-        },
-        {
-          "key": "inference_seconds",
-          "name": "Inference Time (s) ↓",
-          "definition": "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú.",
-          "reference": {
-            "value": 0.1,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "s/batch",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách thử nghiệm 100 ms cho cả batch đánh giá, không phải 100 ms cho mỗi rating.",
-            "interpretation": "≤0,10 giây/batch: trong ngân sách; lớn hơn: cần tối ưu nếu giữ nguyên số mẫu.",
-            "caution": "Batch phải cùng số dòng và cùng máy. Regression gồm predict và xây đặc trưng; Classification chỉ đo predict_proba."
-          }
-        }
-      ],
-      "charts": [
-        {
-          "name": "RMSE ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Căn trung bình bình phương sai số rating."
-        },
-        {
-          "name": "MAE ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Trung bình độ lệch tuyệt đối theo sao."
-        },
-        {
-          "name": "Training Time (s) ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU."
-        },
-        {
-          "name": "Inference Time (s) ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú."
-        }
-      ]
-    },
-    {
-      "id": "classification",
-      "title": "Classification",
-      "question": "Người dùng không thích, thấy bình thường hay thích bộ phim?",
-      "algorithms": [
-        {
-          "id": "logistic",
-          "name": "Logistic Regression",
-          "description": "Phân loại ba lớp bằng Logistic Regression. StandardScaler và đặc trưng được fit riêng trong từng fold của GridSearchCV; chọn tham số theo F1-macro trung bình.",
-          "output": "Xác suất ba lớp và nhãn: Không thích (<2,5), Bình thường (2,5–3,5), Thích (>3,5)."
-        },
-        {
-          "id": "random_forest",
-          "name": "Random Forest Classifier",
-          "description": "Phân loại ba lớp bằng Random Forest, không dùng StandardScaler. Đặc trưng được fit riêng trong từng fold của GridSearchCV; chọn tham số theo F1-macro trung bình.",
-          "output": "Xác suất ba lớp và nhãn: Không thích (<2,5), Bình thường (2,5–3,5), Thích (>3,5)."
-        }
-      ],
-      "metrics": [
-        {
-          "key": "accuracy",
-          "name": "Accuracy ↑",
-          "definition": "Tỷ lệ nhãn dự đoán đúng.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "Tỷ lệ nhãn dự đoán đúng.",
-          "reference": {
-            "value": 0.7,
-            "operator": "gte",
-            "kind": "quality",
-            "unit": "tỷ lệ",
-            "minimum": 0,
-            "maximum": 1,
-            "rationale": "Mục tiêu ít nhất 70% nhãn dự đoán đúng trên cùng tập đánh giá.",
-            "interpretation": "≥0,70: đạt mốc, chẳng hạn 0,80 đạt; <0,70: chưa đạt. Vẫn cần vượt baseline lớp đa số Train.",
-            "caution": "Nếu dự đoán duy nhất lớp đa số đã đúng 85%, Accuracy 80% chưa hữu ích dù vượt mốc 70%."
-          }
-        },
-        {
-          "key": "f1",
-          "name": "F1-macro",
-          "definition": "Trung bình F1 của ba lớp Không thích, Bình thường và Thích, mỗi lớp có trọng số bằng nhau.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "Trung bình F1 của ba lớp Không thích, Bình thường và Thích.",
-          "reference": {
-            "value": 0.7,
-            "operator": "gte",
-            "kind": "quality",
-            "unit": "tỷ lệ",
-            "minimum": 0,
-            "maximum": 1,
-            "rationale": "Mục tiêu F1-macro ít nhất 0,70 trên ba lớp.",
-            "interpretation": "F1-macro càng cao thể hiện chất lượng tổng hợp trên ba lớp càng tốt.",
-            "caution": "Đây là mốc của dự án; cần so sánh các mô hình trên cùng tập đánh giá."
-          }
-        },
-        {
-          "key": "auc_roc",
-          "name": "AUC-ROC ↑",
-          "definition": "AUC-ROC trung bình ba lớp theo One-vs-Rest, tính từ xác suất dự đoán.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "AUC-ROC trung bình ba lớp theo One-vs-Rest.",
-          "reference": {
-            "value": 0.7,
-            "operator": "gte",
-            "kind": "quality",
-            "unit": "tỷ lệ",
-            "minimum": 0,
-            "maximum": 1,
-            "rationale": "Mục tiêu AUC-ROC macro ít nhất 0,70 trên ba bài toán một lớp so với các lớp còn lại.",
-            "interpretation": "≥0,70: đạt mốc phân biệt; 0,50–<0,70: phân biệt còn yếu; <0,50: cần kiểm tra chiều điểm/nhãn.",
-            "caution": "Không tính được khi tập đánh giá thiếu một lớp; kết quả được để trống kèm lý do."
-          }
-        },
-        {
-          "key": "fit_seconds",
-          "name": "Training Time (s) ↓",
-          "definition": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
-          "reference": {
-            "value": 60,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "s",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách khởi đầu 60 giây cho một lần fit cuối / khai phá trên mẫu đang chọn.",
-            "interpretation": "≤60 giây: trong ngân sách; >60 giây: vượt ngân sách. Chậm không đồng nghĩa dự đoán kém.",
-            "caution": "Chỉ so cùng mẫu, CPU, số luồng và cách đo. Không gồm toàn bộ tuning/CV; Q-Learning có checkpoint Validation."
-          }
-        },
-        {
-          "key": "inference_seconds",
-          "name": "Inference Time (s) ↓",
-          "definition": "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú.",
-          "reference": {
-            "value": 0.1,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "s/batch",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách thử nghiệm 100 ms cho cả batch đánh giá, không phải 100 ms cho mỗi rating.",
-            "interpretation": "≤0,10 giây/batch: trong ngân sách; lớn hơn: cần tối ưu nếu giữ nguyên số mẫu.",
-            "caution": "Batch phải cùng số dòng và cùng máy. Regression gồm predict và xây đặc trưng; Classification chỉ đo predict_proba."
-          }
-        }
-      ],
-      "charts": [
-        {
-          "name": "Accuracy ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Tỷ lệ nhãn dự đoán đúng."
-        },
-        {
-          "name": "F1-score ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "F1 của lớp Thích (rating ≥3,5)."
-        },
-        {
-          "name": "AUC-ROC ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Diện tích ROC, tính từ xác suất lớp Thích."
-        },
-        {
-          "name": "Training Time (s) ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU."
-        },
-        {
-          "name": "Inference Time (s) ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú."
-        }
-      ]
-    },
-    {
-      "id": "clustering",
-      "title": "Clustering · Người dùng",
-      "question": "Những user có lịch sử nào có sở thích tương tự, và gợi ý theo cụm có tốt hơn Popularity trên rating tương lai không?",
-      "algorithms": [
-        {
-          "id": "kmeans",
-          "name": "K-Means",
-          "description": "Chia hồ sơ sở thích tương đối và tần suất của user thành K cụm. PCA/TruncatedSVD chỉ đổi biểu diễn fit từ user Train; mô tả cụm vẫn dùng genre gốc.",
-          "output": "Nhãn cụm của từng đối tượng và các tâm cụm."
-        },
-        {
-          "id": "dbscan",
-          "name": "DBSCAN",
-          "description": "Tìm cụm theo mật độ với eps và min_samples; nếu giảm chiều, eps được tìm lại trong không gian mới. Noise dùng Popularity dự phòng khi đánh giá gợi ý.",
-          "output": "Nhãn cụm hoặc nhãn nhiễu của từng đối tượng."
-        }
-      ],
-      "metrics": [
-        {
-          "key": "silhouette",
-          "name": "Silhouette ↑",
-          "definition": "Độ tách biệt cụm, loại noise, lấy mẫu tối đa 2.000 user. Đo trên hồ sơ lịch sử Train; không phải độ chính xác dự đoán tương lai.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "Độ tách biệt cụm, loại noise, lấy mẫu tối đa 2.000 user.",
-          "reference": {
-            "value": 0.5,
-            "operator": "gte",
-            "kind": "quality",
-            "unit": "điểm",
-            "minimum": 0,
-            "maximum": 1,
-            "rationale": "Chọn 0,50 làm mục tiêu khám phá ban đầu: điểm trong cụm cần gần nhau hơn so với cụm lân cận.",
-            "interpretation": "≥0,50: đạt mốc tách biệt; 0–<0,50: cụm chồng lấn hoặc yếu; <0: có thể gán cụm không phù hợp.",
-            "caution": "Đây là heuristic, không có mốc tốt phổ quát. DBSCAN loại noise khi tính, nên phải đọc cùng tỷ lệ noise và số cụm. Không kết luận tốt nếu chưa đạt điều kiện bao phủ/cấu hình; lịch sử cũ dùng cách tạo hồ sơ khác."
-          }
-        },
-        {
-          "key": "dbi",
-          "name": "Davies-Bouldin ↓",
-          "definition": "Tỷ số độ phân tán trong cụm trên khoảng cách cụm. Đo trên hồ sơ lịch sử Train; không phải độ chính xác dự đoán tương lai.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Tỷ số độ phân tán trong cụm trên khoảng cách cụm.",
-          "reference": {
-            "value": 1,
-            "operator": "lte",
-            "kind": "quality",
-            "unit": "điểm",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Mốc khám phá 1,00 ưu tiên độ phân tán trong cụm nhỏ tương đối so với khoảng cách giữa cụm.",
-            "interpretation": "≤1,00: đạt mục tiêu ban đầu; >1,00: cụm còn phân tán/gần nhau theo tiêu chí này.",
-            "caution": "DBI không có ngưỡng tốt chung và phụ thuộc scaler, khoảng cách, số cụm. Chỉ so cùng đặc trưng; đọc cùng noise. Không kết luận tốt nếu chưa đạt điều kiện bao phủ/cấu hình; lịch sử cũ dùng cách tạo hồ sơ khác."
-          }
-        },
-        {
-          "key": "coverage",
-          "name": "Bao phủ ↑",
-          "definition": "Tỷ lệ user đủ lịch sử được gán cụm; 0–1. Đọc trước Silhouette/DBI.",
-          "interpretation": "Cao hơn phục vụ được nhiều user hơn; một cụm duy nhất vẫn không đạt yêu cầu phân cụm.",
-          "question": "Mô hình thực sự phục vụ được bao nhiêu user?",
-          "reference": {
-            "value": 0.8,
-            "operator": "gte",
-            "kind": "quality",
-            "unit": "tỷ lệ",
-            "minimum": 0,
-            "maximum": 1,
-            "rationale": "Mục tiêu ban đầu: gán cụm được ít nhất 80% user đủ lịch sử.",
-            "interpretation": "Bao phủ đạt mốc vẫn cần ít nhất hai cụm và đánh giá chất lượng gợi ý.",
-            "caution": "Ngưỡng chọn mô hình nằm trong cấu hình thực nghiệm; thay mốc hiển thị không thay cấu hình đã chọn."
-          }
-        },
-        {
-          "key": "fit_seconds",
-          "name": "Training Time (s) ↓",
-          "definition": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
-          "reference": {
-            "value": 60,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "s",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách khởi đầu 60 giây cho một lần fit cuối / khai phá trên mẫu đang chọn.",
-            "interpretation": "≤60 giây: trong ngân sách; >60 giây: vượt ngân sách. Chậm không đồng nghĩa dự đoán kém.",
-            "caution": "Chỉ so cùng mẫu, CPU, số luồng và cách đo. Không gồm toàn bộ tuning/CV; Q-Learning có checkpoint Validation."
-          }
-        },
-        {
-          "key": "inference_seconds",
-          "name": "Inference Time (s) ↓",
-          "definition": "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú.",
-          "reference": {
-            "value": 0.1,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "s/batch",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách thử nghiệm 100 ms cho cả batch đánh giá, không phải 100 ms cho mỗi rating.",
-            "interpretation": "≤0,10 giây/batch: trong ngân sách; lớn hơn: cần tối ưu nếu giữ nguyên số mẫu.",
-            "caution": "Batch phải cùng số dòng và cùng máy. Regression gồm predict và xây đặc trưng; Classification chỉ đo predict_proba."
-          }
-        }
-      ],
-      "charts": [
-        {
-          "name": "Silhouette ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Độ tách biệt cụm, loại noise, lấy mẫu tối đa 2.000 user."
-        },
-        {
-          "name": "Davies-Bouldin ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Tỷ số độ phân tán trong cụm trên khoảng cách cụm."
-        },
-        {
-          "name": "Training Time (s) ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU."
-        },
-        {
-          "name": "Inference Time (s) ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú."
-        }
-      ]
-    },
-    {
-      "id": "association",
-      "title": "Association Rules",
-      "question": "Những phim nào thường cùng được thích?",
-      "algorithms": [
-        {
-          "id": "apriori",
-          "name": "Apriori",
-          "description": "Apriori toàn cục giữ transaction Train làm baseline. Biến thể hỗ trợ giảm chiều nén profile user để phân nhóm rồi khai phá luật riêng; không PCA transaction phim.",
-          "output": "Tập phim phổ biến và luật A → B kèm các chỉ số."
-        }
-      ],
-      "metrics": [
-        {
-          "key": "support",
-          "name": "Support ↑",
-          "definition": "Tỷ lệ transaction chứa cả vế trái và vế phải.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "Tỷ lệ transaction chứa cả vế trái và vế phải.",
-          "reference": {
-            "value": 0.08,
-            "operator": "gte",
-            "kind": "screening",
-            "unit": "tỷ lệ",
-            "minimum": 0,
-            "maximum": 1,
-            "rationale": "Mục tiêu luật xuất hiện trong ít nhất 8% transactions user Train để tránh quy luật quá hiếm.",
-            "interpretation": "≥0,08: đạt độ phủ mong muốn; <0,08: độ phủ còn thấp. 0,08 tương ứng 8 user trên 100 transactions.",
-            "caution": "Đây là mốc độ phủ, không phải độ chính xác. Catalog top phim và transaction rỗng ảnh hưởng mẫu số."
-          }
-        },
-        {
-          "key": "confidence",
-          "name": "Confidence ↑",
-          "definition": "Xác suất vế phải khi có vế trái.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "Xác suất vế phải khi có vế trái.",
-          "reference": {
-            "value": 0.3,
-            "operator": "gte",
-            "kind": "screening",
-            "unit": "tỷ lệ",
-            "minimum": 0,
-            "maximum": 1,
-            "rationale": "Mục tiêu ít nhất 30% user có vế trái cũng có vế phải; khớp min_confidence mặc định.",
-            "interpretation": "≥0,30: đạt mốc sàng lọc; <0,30: xác suất đồng xuất hiện có điều kiện còn thấp theo mục tiêu.",
-            "caution": "Phim vế phải rất phổ biến có thể tạo confidence cao mà không có liên kết hữu ích. Cần Lift >1."
-          }
-        },
-        {
-          "key": "lift",
-          "name": "Lift ↑",
-          "definition": "Confidence chia support vế phải; >1 biểu thị đồng xuất hiện dương.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "Confidence chia support vế phải; >1 biểu thị đồng xuất hiện dương.",
-          "reference": {
-            "value": 1,
-            "operator": "gt",
-            "kind": "quality",
-            "unit": "lần",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Mốc độc lập là 1: so confidence với tần suất nền của phim ở vế phải.",
-            "interpretation": ">1: liên kết dương; =1: không tăng đồng xuất hiện so độc lập; <1: liên kết âm. Lift 1,20 là cao hơn nền 20%.",
-            "caution": "Lift cao ở luật hiếm có thể không ổn định. Đọc cùng support/confidence; không suy ra nhân quả."
-          }
-        },
-        {
-          "key": "fit_seconds",
-          "name": "Execution Time (s) ↓",
-          "definition": "Thời gian Apriori và sinh luật.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian Apriori và sinh luật.",
-          "reference": {
-            "value": 60,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "s",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách khởi đầu 60 giây cho một lần fit cuối / khai phá trên mẫu đang chọn.",
-            "interpretation": "≤60 giây: trong ngân sách; >60 giây: vượt ngân sách. Chậm không đồng nghĩa dự đoán kém.",
-            "caution": "Chỉ so cùng mẫu, CPU, số luồng và cách đo. Không gồm toàn bộ tuning/CV; Q-Learning có checkpoint Validation."
-          }
-        }
-      ],
-      "charts": [
-        {
-          "name": "Support ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Tỷ lệ transaction chứa cả vế trái và vế phải."
-        },
-        {
-          "name": "Confidence ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Xác suất vế phải khi có vế trái."
-        },
-        {
-          "name": "Lift ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Confidence chia support vế phải; >1 biểu thị đồng xuất hiện dương."
-        },
-        {
-          "name": "Execution Time (s) ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian Apriori và sinh luật."
-        }
-      ]
-    },
-    {
-      "id": "pca",
-      "title": "Dimensionality Reduction",
-      "question": "Giữ lại bao nhiêu thông tin khi giảm số chiều vector sở thích?",
-      "algorithms": [
-        {
-          "id": "pca",
-          "name": "PCA",
-          "description": "Giảm chiều tuyến tính có centering; tối đa phương sai giữ lại.",
-          "output": "Vector user–genre ít chiều."
-        },
-        {
-          "id": "truncated_svd",
-          "name": "TruncatedSVD",
-          "description": "Chiếu SVD không trừ trung bình; tỷ lệ phương sai giải thích đo phương sai thành phần chiếu chia cho tổng phương sai của đầu vào đã scale, không phải tỷ lệ năng lượng.",
-          "output": "Vector user–genre ít chiều."
-        }
-      ],
-      "metrics": [
-        {
-          "key": "reconstruction_error",
-          "name": "Reconstruction Error ↓",
-          "definition": "MSE tái tạo vector user–genre chuẩn hóa.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "MSE tái tạo vector user–genre chuẩn hóa.",
-          "reference": {
-            "value": 0.1,
-            "operator": "lte",
-            "kind": "quality",
-            "unit": "MSE chuẩn hóa",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Mục tiêu MSE tái tạo trung bình ≤0,10 trong không gian user–genre đã chuẩn hóa.",
-            "interpretation": "≤0,10: đạt mục tiêu mất mát tái tạo; >0,10: nên thử thêm components nếu cần giữ thông tin.",
-            "caution": "Chỉ có ý nghĩa trên cùng đặc trưng/scaler. Đây không phải sai số rating và không bảo đảm chất lượng gợi ý."
-          }
-        },
-        {
-          "key": "explained_variance_ratio",
-          "name": "Explained Variance ↑",
-          "definition": "Phương sai thực tế của các thành phần chiếu chia cho tổng phương sai của đầu vào đã scale trên Train. TruncatedSVD giữ phép chiếu không centering; chỉ số không phải tỷ lệ năng lượng.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "Bao nhiêu phần trăm phương sai đầu vào được giữ trong các thành phần chiếu?",
-          "reference": {
-            "value": 0.9,
-            "operator": "gte",
-            "kind": "quality",
-            "unit": "tỷ lệ",
-            "minimum": 0,
-            "maximum": 1,
-            "rationale": "Mục tiêu giữ ít nhất 90% phương sai Train, cân bằng nén dữ liệu và lượng thông tin tuyến tính giữ lại.",
-            "interpretation": "≥0,90: đạt mục tiêu phương sai; <0,90: mất hơn 10%, có thể cần tăng components.",
-            "caution": "Phương sai lớn không đồng nghĩa thông tin quan trọng cho mọi tác vụ. Đọc cùng reconstruction error giữ lại và số chiều."
-          }
-        },
-        {
-          "key": "fit_seconds",
-          "name": "Training Time (s) ↓",
-          "definition": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
-          "reference": {
-            "value": 60,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "s",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách khởi đầu 60 giây cho một lần fit cuối / khai phá trên mẫu đang chọn.",
-            "interpretation": "≤60 giây: trong ngân sách; >60 giây: vượt ngân sách. Chậm không đồng nghĩa dự đoán kém.",
-            "caution": "Chỉ so cùng mẫu, CPU, số luồng và cách đo. Không gồm toàn bộ tuning/CV; Q-Learning có checkpoint Validation."
-          }
-        },
-        {
-          "key": "components",
-          "name": "Components ↓",
-          "definition": "Số chiều đầu ra; đọc cùng phương sai và lỗi tái tạo.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Số chiều đầu ra; đọc cùng phương sai và lỗi tái tạo.",
-          "reference": {
-            "value": 8,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "chiều",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách khởi đầu tối đa 8 chiều cho vector khoảng 19 genres; đây là mục tiêu độ gọn.",
-            "interpretation": "≤8: trong ngân sách chiều; >8: vượt ngân sách. Chỉ coi nén đạt yêu cầu khi phương sai và lỗi tái tạo cũng đạt mốc.",
-            "caution": "Ít chiều hơn không tự động tốt hơn. Không kết luận chất lượng nếu EVR <mốc hoặc reconstruction error >mốc."
-          }
-        }
-      ],
-      "charts": [
-        {
-          "name": "Reconstruction Error ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "MSE tái tạo vector user–genre chuẩn hóa."
-        },
-        {
-          "name": "Explained Variance ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Tổng phương sai giữ lại học từ Train."
-        },
-        {
-          "name": "Training Time (s) ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU."
-        },
-        {
-          "name": "Components ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Số chiều đầu ra; đọc cùng phương sai và lỗi tái tạo."
-        }
-      ]
-    },
-    {
-      "id": "reinforcement",
-      "title": "Reinforcement Learning",
-      "question": "DQN và các policy đối chứng nhận reward mô phỏng thế nào trên episode theo thời gian MovieLens?",
-      "algorithms": [
-        {
-          "id": "dqn",
-          "name": "DQN",
-          "description": "Q-Learning xấp xỉ bằng mạng nhỏ để chia sẻ đặc trưng sở thích giữa user; dùng target network và replay buffer.",
-          "output": "Policy tuần tự chọn phim từ observation có action mask."
-        },
-        {
-          "id": "random",
-          "name": "Random Recommendation",
-          "description": "Baseline chọn ngẫu nhiên trong các phim chưa gợi ý.",
-          "output": "Policy chọn phim theo trạng thái."
-        },
-        {
-          "id": "popular",
-          "name": "Popularity Recommendation",
-          "description": "Baseline chọn phim phổ biến Train chưa gợi ý.",
-          "output": "Policy chọn phim theo trạng thái."
-        }
-      ],
-      "metrics": [
-        {
-          "key": "cumulative_reward",
-          "name": "Cumulative Reward ↑",
-          "definition": "Tổng reward trên số bước thực tế; phụ thuộc số episode và horizon.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "Tổng reward mô phỏng trên các hành động thực tế.",
-          "reference": {
-            "value": 0,
-            "operator": "gt",
-            "kind": "baseline",
-            "unit": "Δ reward",
-            "minimum": -500,
-            "maximum": null,
-            "rationale": "Chênh lệch phải dương so với baseline tốt nhất trên cùng cohort, episode và catalog.",
-            "interpretation": "Δ>0: vượt baseline tốt nhất; Δ=0: ngang mốc; Δ<0: chưa vượt.",
-            "caution": "Cumulative reward phụ thuộc số bước thực tế. Đọc cùng coverage và user count; reward offline không chứng minh hiệu quả online."
-          }
-        },
-        {
-          "key": "average_reward",
-          "name": "Average Reward ↑",
-          "definition": "Reward mô phỏng trung bình trên mỗi hành động thực tế; bước thiếu phản hồi nhận 0.",
-          "interpretation": "Cao hơn tốt hơn.",
-          "question": "Reward trung bình mỗi hành động thực tế.",
-          "reference": {
-            "value": 0,
-            "operator": "gt",
-            "kind": "baseline",
-            "unit": "Δ reward/action",
-            "minimum": -500,
-            "maximum": null,
-            "rationale": "Chỉ so với baseline trên cùng cohort, episode và candidate catalog.",
-            "interpretation": "Đọc chênh lệch ghép cặp và coverage; không kết luận policy tốt hơn chỉ từ reward thô.",
-            "caution": "Reward offline từ phản hồi từng phần; không phải đánh giá counterfactual hay hiệu quả online."
-          }
-        },
-        {
-          "key": "fit_seconds",
-          "name": "Training Time (s) ↓",
-          "definition": "Fit DQN gồm preprocessing, train và checkpoint Validation trên CPU; baseline có thời gian khởi tạo riêng.",
-          "interpretation": "Thấp hơn tốt hơn.",
-          "question": "Thời gian học/checkpoint theo CPU.",
-          "reference": {
-            "value": 60,
-            "operator": "lte",
-            "kind": "budget",
-            "unit": "s",
-            "minimum": 0,
-            "maximum": null,
-            "rationale": "Ngân sách khởi đầu 60 giây cho một lần fit cuối / khai phá trên mẫu đang chọn.",
-            "interpretation": "≤60 giây: trong ngân sách; >60 giây: vượt ngân sách. Chậm không đồng nghĩa dự đoán kém.",
-            "caution": "So cùng dữ liệu, CPU và ngân sách. Baseline không có training time tương đương DQN."
-          }
-        }
-      ],
-      "charts": [
-        {
-          "name": "Cumulative Reward ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Tổng reward trên số bước thực tế, đọc cùng coverage và số user."
-        },
-        {
-          "name": "Average Reward ↑",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Reward trung bình trên mỗi hành động, bước thiếu phản hồi nhận 0."
-        },
-        {
-          "name": "Training Time (s) ↓",
-          "axes": "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
-          "question": "Thời gian train DQN và khởi tạo baseline trên cùng cấu hình."
-        }
-      ]
-    }
-  ],
-  "protocol": {
-    "seed": 42,
-    "fractions": [
-      0.7,
-      0.15,
-      0.15
-    ],
-    "cv_folds": 5
-  },
-  "reference_policy": "project-defaults-v1"
+    "version":  3,
+    "source":  "MovieLens · real experiment pipeline",
+    "groups":  [
+                   {
+                       "id":  "rating",
+                       "title":  "Regression",
+                       "question":  "Người dùng sẽ chấm bộ phim bao nhiêu sao?",
+                       "algorithms":  [
+                                          {
+                                              "id":  "linear",
+                                              "name":  "Linear Regression",
+                                              "description":  "Học quan hệ tuyến tính giữa đặc trưng và rating. Biến thể giảm chiều chỉ nén block tương tác hồ sơ user–genre với genre phim; bias và thống kê nền được giữ.",
+                                              "output":  "Một giá trị rating dự đoán, ví dụ 4,2 sao."
+                                          },
+                                          {
+                                              "id":  "xgboost",
+                                              "name":  "XGBoost Regressor",
+                                              "description":  "Kết hợp các cây quyết định theo boosting để giảm sai số. Biến thể giảm chiều giữ bias/thống kê nền và nén block tương tác user–genre; PCA không được giả định có lợi cho cây.",
+                                              "output":  "Một giá trị rating dự đoán."
+                                          },
+                                          {
+                                              "id":  "svd",
+                                              "name":  "SVD/MF có bias",
+                                              "description":  "Học vector nhân tố tiềm ẩn của user và movie từ rating quan sát được; biến thể hybrid giữ latent factors và cộng nhánh hiệu chỉnh từ hồ sơ tương tác đã giảm chiều.",
+                                              "output":  "Một giá trị rating dự đoán."
+                                          },
+                                          {
+                                              "id":  "ncf",
+                                              "name":  "NCF hồi quy",
+                                              "description":  "Học embedding user/movie bằng mạng neural; biến thể hybrid ghép profile đã giảm chiều qua một nhánh MLP được fit trong từng fold.",
+                                              "output":  "Một giá trị rating dự đoán."
+                                          }
+                                      ],
+                       "metrics":  [
+                                       {
+                                           "key":  "rmse",
+                                           "name":  "RMSE ↓",
+                                           "definition":  "Căn trung bình bình phương sai số rating.",
+                                           "interpretation":  "Thấp hơn tốt hơn.",
+                                           "question":  "Căn trung bình bình phương sai số rating.",
+                                           "reference":  {
+                                                             "value":  1,
+                                                             "operator":  "lte",
+                                                             "kind":  "quality",
+                                                             "unit":  "sao",
+                                                             "minimum":  0,
+                                                             "maximum":  null,
+                                                             "rationale":  "Cho phép sai số căn quân phương tối đa khoảng 1 sao trên thang 0,5–5; phạt mạnh lỗi lớn.",
+                                                             "interpretation":  "≤1,00: đạt mục tiêu sai số ban đầu; \u003e1,00: chưa đạt. Ví dụ 0,80 tốt hơn 1,20.",
+                                                             "caution":  "Đây là mục tiêu của dự án, không phải chuẩn MovieLens. Cần đọc cùng MAE, CV ± Std và baseline."
+                                                         }
+                                       },
+                                       {
+                                           "key":  "mae",
+                                           "name":  "MAE ↓",
+                                           "definition":  "Trung bình độ lệch tuyệt đối theo sao.",
+                                           "interpretation":  "Thấp hơn tốt hơn.",
+                                           "question":  "Trung bình độ lệch tuyệt đối theo sao.",
+                                           "reference":  {
+                                                             "value":  0.75,
+                                                             "operator":  "lte",
+                                                             "kind":  "quality",
+                                                             "unit":  "sao",
+                                                             "minimum":  0,
+                                                             "maximum":  null,
+                                                             "rationale":  "Mục tiêu lệch tuyệt đối trung bình không quá 0,75 sao, khoảng một đến hai nấc rating 0,5.",
+                                                             "interpretation":  "≤0,75: đạt mục tiêu; \u003e0,75: sai lệch trung bình còn cao. 0,50 nghĩa là lệch trung bình nửa sao.",
+                                                             "caution":  "MAE không mô tả riêng các lỗi rất lớn; cần đọc cùng RMSE. Mốc là lựa chọn vận hành của dự án."
+                                                         }
+                                       },
+                                       {
+                                           "key":  "fit_seconds",
+                                           "name":  "Training Time (s) ↓",
+                                           "definition":  "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
+                                           "interpretation":  "Thấp hơn tốt hơn.",
+                                           "question":  "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU.",
+                                           "reference":  {
+                                                             "value":  60,
+                                                             "operator":  "lte",
+                                                             "kind":  "budget",
+                                                             "unit":  "s",
+                                                             "minimum":  0,
+                                                             "maximum":  null,
+                                                             "rationale":  "Ngân sách khởi đầu 60 giây cho một lần fit cuối / khai phá trên mẫu đang chọn.",
+                                                             "interpretation":  "≤60 giây: trong ngân sách; \u003e60 giây: vượt ngân sách. Chậm không đồng nghĩa dự đoán kém.",
+                                                             "caution":  "Chỉ so cùng mẫu, CPU, số luồng và cách đo. Thời gian fit không bao gồm toàn bộ thời gian tìm siêu tham số bằng CV."
+                                                         }
+                                       },
+                                       {
+                                           "key":  "inference_seconds",
+                                           "name":  "Inference Time (s) ↓",
+                                           "definition":  "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú.",
+                                           "interpretation":  "Thấp hơn tốt hơn.",
+                                           "question":  "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú.",
+                                           "reference":  {
+                                                             "value":  0.1,
+                                                             "operator":  "lte",
+                                                             "kind":  "budget",
+                                                             "unit":  "s/batch",
+                                                             "minimum":  0,
+                                                             "maximum":  null,
+                                                             "rationale":  "Ngân sách thử nghiệm 100 ms cho cả batch đánh giá, không phải 100 ms cho mỗi rating.",
+                                                             "interpretation":  "≤0,10 giây/batch: trong ngân sách; lớn hơn: cần tối ưu nếu giữ nguyên số mẫu.",
+                                                             "caution":  "Batch phải cùng số dòng và cùng máy. Thời gian hồi quy gồm cả dự đoán và tạo đặc trưng."
+                                                         }
+                                       }
+                                   ],
+                       "charts":  [
+                                      {
+                                          "name":  "RMSE ↓",
+                                          "axes":  "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
+                                          "question":  "Căn trung bình bình phương sai số rating."
+                                      },
+                                      {
+                                          "name":  "MAE ↓",
+                                          "axes":  "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
+                                          "question":  "Trung bình độ lệch tuyệt đối theo sao."
+                                      },
+                                      {
+                                          "name":  "Training Time (s) ↓",
+                                          "axes":  "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
+                                          "question":  "Thời gian fit cuối hoặc khai phá, đo bằng perf_counter trên CPU."
+                                      },
+                                      {
+                                          "name":  "Inference Time (s) ↓",
+                                          "axes":  "X: thuật toán/cấu hình; Y: giá trị đo thực tế.",
+                                          "question":  "Thời gian dự đoán cả batch công bố; đối chiếu số mẫu và phương pháp đo trong ghi chú."
+                                      }
+                                  ]
+                   }
+               ],
+    "protocol":  {
+                     "seed":  42,
+                     "fractions":  [
+                                       0.7,
+                                       0.15,
+                                       0.15
+                                   ],
+                     "cv_folds":  5
+                 },
+    "reference_policy":  "project-defaults-v1"
 }

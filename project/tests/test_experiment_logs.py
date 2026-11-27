@@ -4,7 +4,6 @@ import threading
 import time
 
 import numpy as np
-import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -103,30 +102,11 @@ def test_external_xgboost_cancellation_preserves_error_and_removes_cache(
     assert not list(tmp_path.iterdir())
 
 
-@pytest.mark.parametrize(
-    "group,algorithms",
-    [
-        ("rating", ["linear", "xgboost", "svd", "ncf"]),
-        ("classification", ["logistic", "random_forest"]),
-        ("clustering", ["kmeans", "dbscan"]),
-    ],
-)
-def test_real_job_logs_stages_metrics_and_survives_reopening(configured, group, algorithms):
-    if group == "clustering":
-        path = configured.dataset_dir / "movies.csv"
-        movies = pd.read_csv(path)
-        movies["genres"] = ["Drama" if i % 2 else "Action" for i in range(len(movies))]
-        movies.to_csv(path, index=False)
+def test_real_regression_job_logs_stages_metrics_and_survives_reopening(configured):
+    algorithms = ["linear", "xgboost", "svd", "ncf"]
     prepare(configured)
     service = LabService(configured)
-    job = service.start(
-        LabRequest(
-            group=group,
-            algorithms=algorithms,
-            epochs=2,
-            parameters={"n_estimators": 10, "forest_estimators": 10},
-        )
-    )
+    job = service.start(LabRequest(group="rating", algorithms=algorithms, epochs=2, parameters={"n_estimators": 10}))
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
         finished = service.get(job["id"])
@@ -140,42 +120,18 @@ def test_real_job_logs_stages_metrics_and_survives_reopening(configured, group, 
     page = reopened.logs(job["id"], limit=500)
     assert not page["has_more"]
     messages = "\n".join(row["message"] for row in page["entries"])
-    words = (
-        (
-            "Hồ sơ",
-            "K-Means",
-            "DBSCAN",
-            "bao phủ",
-            "noise",
-            "ổn định",
-            "Recall@10",
-            "NDCG@10",
-            "Validation",
-            "Test",
-        )
-        if group == "clustering"
-        else ("Validation", "CV", "refit", "Test")
-    )
-    for word in words:
+    for word in ("Validation", "CV", "refit", "Test"):
         assert word in messages
-    if group == "rating":
-        assert "cây 1/10" in messages and "epoch 1/2" in messages
-        assert "Neural Collaborative Filtering" in messages
-    elif group == "classification":
-        assert "StandardScaler" in messages and "SAGA" in messages
-        assert "Random Forest" in messages
+    assert "epoch 1/2" in messages
     assert page["entries"][-1]["level"] == "success"
     assert page["entries"][-1]["progress"] == 100
     reopened.executor.shutdown(wait=True)
 
-
 @pytest.mark.parametrize(
     "error,status,level",
-    [(RuntimeError("clustering failed"), "failed", "error"), (Cancelled(), "cancelled", "warning")],
+    [(RuntimeError("regression failed"), "failed", "error"), (Cancelled(), "cancelled", "warning")],
 )
-def test_clustering_failure_and_cancellation_persist_logs(
-    configured, monkeypatch, error, status, level
-):
+def test_regression_failure_and_cancellation_persist_logs(configured, monkeypatch, error, status, level):
     from movie_rating import experiment_pipeline
 
     prepare(configured)
@@ -186,17 +142,16 @@ def test_clustering_failure_and_cancellation_persist_logs(
     monkeypatch.setattr(experiment_pipeline, "execute", stop)
     service = LabService(configured)
     try:
-        job = service.start(LabRequest(group="clustering"))
+        job = service.start(LabRequest(group="rating", algorithms=["linear"]))
         service.executor.shutdown(wait=True)
         finished = service.get(job["id"])
         assert finished["status"] == status, finished.get("message")
         assert "result" not in finished
         entries = service.logs(job["id"], limit=500)["entries"]
-        assert any(e["level"] == level for e in entries)
-        assert not any(e["level"] == "success" for e in entries)
+        assert any(entry["level"] == level for entry in entries)
+        assert not any(entry["level"] == "success" for entry in entries)
     finally:
         service.executor.shutdown(wait=True)
-
 
 def test_log_api_is_paged_validated_and_supports_old_runs(configured):
     service = LabService(configured)

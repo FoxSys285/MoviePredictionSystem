@@ -14,7 +14,7 @@ class RatingFeatures(RatingModel):
         self.metadata = dict(zip(movies.movieId, movies.genres.fillna("")))
 
     def fit_statistics(self, ratings):
-        """Build aggregates only; classification must not fit a throwaway regressor."""
+        """Build rating aggregates without fitting a temporary model."""
         users, items, values = self.encode_training(ratings)
         self.metadata = getattr(self, "metadata", {})
         self.global_positive = float(np.mean(values >= 3.5))

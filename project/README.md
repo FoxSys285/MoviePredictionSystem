@@ -1,6 +1,6 @@
 # Ứng dụng học máy dự đoán đánh giá phim — MovieLens 25M
 
-Trang **Thực nghiệm** có sidebar sáu nhóm, chạy thuật toán thật trên MovieLens: Regression, Classification, Clustering, Association Rules, Dimensionality Reduction và Reinforcement Learning. Năm nhóm chạy dùng preset cố định do backend xác thực; tham số chỉ đọc, còn chọn nhóm/thuật toán, hủy chạy, lịch sử và export vẫn có. Pipeline v3 dùng chia thời gian trong từng user và 3 lượt CV thời gian cho Regression/Classification, chọn cấu hình trên Validation, refit Train + Validation. Thực nghiệm lớn có giới hạn RAM và đặc trưng theo batch; xem [vận hành và bộ nhớ](docs/personalized-experiments.md), [hướng dẫn Experiment Studio](docs/experiment-studio.md) và [kết quả xác nhận](docs/experiment-studio-results.md).
+Trang **Thực nghiệm** hiện chỉ chạy hồi quy rating và hiển thị trực tiếp Linear Regression, XGBoost, SVD và NCF. API chỉ chấp nhận nhóm hồi quy. Các lần chạy dùng chia dữ liệu theo thời gian trong từng user, đánh giá RMSE/MAE, lưu log theo run và cho phép xuất kết quả; xem [hướng dẫn Experiment Studio](docs/experiment-studio.md).
 
 Login có 5 tài khoản demo lấy lịch sử từ MovieLens, hiển thị email/mật khẩu và nút
 điền nhanh. [Luồng tài khoản mới và hồ sơ dataset](docs/user-profiles.md) mô tả cách
@@ -195,7 +195,7 @@ Phân tích toàn bộ dataset đã hoàn tất; kết quả RMSE/MAE chỉ xu�
 chạy `prepare`, `train` và `evaluate`. Thống kê hiển thị trên website không thay
 đổi thống kê train hoặc dùng làm đầu vào cho mô hình.
 
-Đọc thêm: [phân cụm user có lịch sử](docs/clustering-experiments.md),
+Đọc thêm: [hướng dẫn hồi quy và log](docs/experiment-studio.md),
 [kiến trúc](docs/architecture.md), [phương pháp đánh giá](docs/methodology.md),
 [hợp đồng API](docs/api.md), [giao diện và cách chạy](frontend/README.md).
 

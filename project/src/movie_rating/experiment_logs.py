@@ -6,7 +6,44 @@ import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
-LOGGED_GROUPS = ("rating", "classification", "association", "clustering", "reinforcement", "pca")
+LOGGED_GROUPS = ("rating",)
+
+
+class FoldProgressReporter:
+    """Share sequential GridSearchCV progress across cloned movie estimators.
+
+    GridSearchCV visits each candidate's folds in order with n_jobs=1, followed
+    by a final fit on all Train rows. Never use this counter for parallel fits.
+    """
+
+    def __init__(self, report, candidates, folds=5):
+        self.report = report
+        self.candidates = candidates
+        self.folds = folds
+        self.fit_number = 0
+        self.context = ""
+
+    def __deepcopy__(self, memo):
+        # sklearn clones estimator parameters before every fit. Keep a single
+        # counter and the original job logger for this sequential search.
+        return self
+
+    def start_fit(self, rows):
+        position = self.fit_number
+        self.fit_number += 1
+        if position < self.candidates * self.folds:
+            candidate, fold = divmod(position, self.folds)
+            self.context = f"Configuration {candidate + 1}/{self.candidates} | Fold {fold + 1}/{self.folds}"
+        else:
+            self.context = "Refit best configuration on all Train rows"
+        self.started = time.perf_counter()
+        self(f"Starting training | {rows:,} ratings")
+
+    def finish_fit(self):
+        self(f"Training completed | {time.perf_counter() - self.started:.2f}s")
+
+    def __call__(self, message):
+        self.report(f"{self.context} | {message}" if self.context else message)
 
 
 @contextmanager

@@ -1,4 +1,4 @@
-"""Algorithms and evaluation metrics for regression and classification experiments."""
+"""Regression algorithms and evaluation for rating prediction experiments."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from uuid import uuid4
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GridSearchCV
+from sklearn.base import clone
+from sklearn.model_selection import GridSearchCV, ParameterGrid
 
-# Regression: Linear Regression, XGBoost, Funk SVD, and Neural CF.
 from sklearn.linear_model import LinearRegression
 
 from movie_rating.models.factorization import SVD
@@ -21,124 +21,29 @@ from movie_rating.experiment_tracking import (
     DEFAULT_TRACKING_DIRECTORY, save_evaluation, save_search_run,
 )
 
-# Classification: predict dislike, neutral, or like from a user's rating.
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-
-# Dimensionality reduction and feature scaling before training.
-from sklearn.decomposition import PCA, TruncatedSVD
+# Feature scaling before linear regression.
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-# Regression metrics: MAE, MSE, RMSE, and R2.
-# Classification metrics: accuracy, precision, recall, F1, ROC-AUC, and confusion matrix.
 from sklearn.metrics import (
-    accuracy_score,
-    classification_report,
-    confusion_matrix,
-    f1_score,
     make_scorer,
     mean_absolute_error,
-    mean_squared_error,
-    precision_score,
-    r2_score,
-    recall_score,
-    roc_auc_score,
-    roc_curve,
     root_mean_squared_error,
 )
 
 
-def split_by_time(
-    ratings: pd.DataFrame,
-    train_fraction: float = 0.70,
-    validation_fraction: float = 0.15,
-    minimum_ratings: int = 3,
-) -> dict[str, pd.DataFrame]:
-    """Split each user's history chronologically, approximately 70/15/15 by default.
-
-    Round cumulative boundaries: 10 ratings with distinct timestamps yield 7/2/1.
-    Keep equal timestamps in the same split, so actual proportions may differ.
-    Exclude users with short histories or inseparable timestamp boundaries.
-    Store exclusion statistics in attrs["split_report"] on each output frame.
-    """
-    required = {"userId", "movieId", "timestamp"}
-    if not required.issubset(ratings.columns):
-        raise ValueError("Ratings must contain userId, movieId, and timestamp columns.")
-    if ratings.empty:
-        raise ValueError("No ratings are available to split.")
-    if not 0 < train_fraction < train_fraction + validation_fraction < 1:
-        raise ValueError("Train and validation fractions must be positive and sum to less than 1.")
-    if not isinstance(minimum_ratings, int) or minimum_ratings < 3:
-        raise ValueError("minimum_ratings must be an integer greater than or equal to 3.")
-    if ratings[list(required)].isna().any().any():
-        raise ValueError("userId, movieId, and timestamp must not contain missing values.")
-    if not pd.api.types.is_numeric_dtype(ratings["timestamp"]):
-        raise ValueError("timestamp must contain numeric Unix timestamps in seconds.")
-    if not np.isfinite(ratings["timestamp"].to_numpy()).all():
-        raise ValueError("timestamp must contain only finite values.")
-
-    order = np.lexsort((ratings.movieId.to_numpy(), ratings.timestamp.to_numpy(),
-                        ratings.userId.to_numpy()))
-    users = ratings.userId.to_numpy()[order]
-    times = ratings.timestamp.to_numpy()[order]
-    starts = np.r_[0, np.flatnonzero(users[1:] != users[:-1]) + 1]
-    counts = np.diff(np.r_[starts, len(order)])
-
-    # Reserve at least one rating per split before handling equal timestamps.
-    train_counts = np.floor(counts * train_fraction + 0.5).astype(int)
-    train_counts = np.minimum(np.maximum(train_counts, 1), np.maximum(counts - 2, 1))
-    train_valid_counts = np.floor(counts * (train_fraction + validation_fraction) + 0.5).astype(int)
-    train_valid_counts = np.minimum(
-        np.maximum(train_valid_counts, train_counts + 1), np.maximum(counts - 1, 1)
-    )
-    train_cut = times[starts + np.minimum(train_counts, counts) - 1]
-    valid_cut = times[starts + np.minimum(train_valid_counts, counts) - 1]
-    eligible = ((counts >= minimum_ratings) & (train_cut < valid_cut)
-                & (valid_cut < times[starts + counts - 1]))
-    if not eligible.any():
-        raise ValueError("No eligible users have enough history for three distinct time periods.")
-
-    codes = np.full(len(order), 2, dtype=np.uint8)
-    codes[times <= np.repeat(valid_cut, counts)] = 1
-    codes[times <= np.repeat(train_cut, counts)] = 0
-    codes[~np.repeat(eligible, counts)] = 255
-    report = {
-        "protocol": "per_user_temporal",
-        "train_fraction": train_fraction,
-        "validation_fraction": validation_fraction,
-        "minimum_ratings": minimum_ratings,
-        "input_users": int(len(counts)),
-        "included_users": int(eligible.sum()),
-        "excluded_users": int((~eligible).sum()),
-        "excluded_ratings": int(counts[~eligible].sum()),
-        "reason": "short history or inseparable timestamp boundaries",
-    }
-    splits = {}
-    for code, name in enumerate(("train", "validation", "test")):
-        part = ratings.iloc[order[codes == code]].reset_index(drop=True)
-        part.attrs["split_report"] = dict(report)
-        splits[name] = part
-    return splits
-
-
-def build_scaled_model(algorithm: str, **model_params) -> Pipeline:
-    """Build a feature-scaling pipeline for linear or logistic regression.
+def build_scaled_model(algorithm: str = "linear", **model_params) -> Pipeline:
+    """Build a feature-scaling pipeline for Linear Regression.
 
     Fit the returned pipeline on training features and targets only. Use predict
-    (or predict_proba for logistic regression) on validation/test features; the
-    fitted scaler is reused without learning from held-out data. Cross-validation
+    on validation/test features; the fitted scaler is reused without learning
+    from held-out data. Cross-validation
     must fit a fresh pipeline in each fold. Scale feature columns, not targets
     or raw user/movie identifiers.
     """
-    if algorithm == "linear":
-        model = LinearRegression(**model_params)
-    elif algorithm == "logistic":
-        params = {"max_iter": 1000, "random_state": 42, **model_params}
-        model = LogisticRegression(**params)
-    else:
-        raise ValueError("Scaled pipelines support only 'linear' and 'logistic'.")
-
+    if algorithm != "linear":
+        raise ValueError("Feature scaling is configured for Linear Regression only.")
+    model = LinearRegression(**model_params)
     return Pipeline([
         ("scaler", StandardScaler()),
         ("model", model),
@@ -155,12 +60,6 @@ def validate_ratings(ratings) -> np.ndarray:
     return values
 
 
-def rating_labels(ratings) -> np.ndarray:
-    """Encode ratings: 0 = dislike (<2.5), 1 = neutral ([2.5, 3.5]), 2 = like (>3.5)."""
-    values = validate_ratings(ratings)
-    return np.where(values < 2.5, 0, np.where(values <= 3.5, 1, 2)).astype(np.int64)
-
-
 def _rating_rmse(y_true, y_pred):
     return root_mean_squared_error(y_true, np.clip(y_pred, 0.5, 5.0))
 
@@ -174,33 +73,27 @@ def grid_search_model(
     X_train,
     y_train,
     param_grid: dict | list[dict],
-    task: str = "regression",
     n_jobs: int = 1,
     log_directory: str | Path | None = DEFAULT_TRACKING_DIRECTORY,
     run_metadata: dict | None = None,
 ) -> GridSearchCV:
     """Tune parameters with five-fold CV on the outer training set only.
 
-    Pass an unfitted estimator or pipeline. Pipeline parameter names use the
-    step prefix, for example {"model__C": [0.1, 1.0, 10.0]} for logistic
-    regression. An empty grid evaluates the model's current configuration.
+    Pass an unfitted estimator or pipeline. An empty grid evaluates the model's
+    current configuration.
     Scaling and any learned feature generation must be fitted inside each fold.
 
-    With cv=5, sklearn uses KFold for regression and StratifiedKFold for
-    classification, both without shuffling. These are not forward-only temporal
-    folds. Outer validation and test sets remain separate from this search.
+    With cv=5, sklearn uses KFold without shuffling. These are not forward-only
+    temporal folds. Outer validation and test sets remain separate from this search.
 
-    Select parameters using mean CV RMSE (minimize) or macro F1 (maximize), then refit
-    the best configuration on all training rows. Access best_estimator_,
+    Select parameters using mean CV RMSE (minimize), then refit the best
+    configuration on all training rows. Access best_estimator_,
     best_params_, best_score_, and cv_results_ on the returned search object.
     RMSE/MAE scores in cv_results_ are negative because sklearn maximizes scores.
-    Classification targets must be labels from rating_labels(): 0, 1, and 2.
     Regression predictions are clipped to [0.5, 5.0] before CV scoring.
     Save results to CSV by default; set log_directory=None to disable tracking.
     Supply dataset/split/feature identifiers and seeds through run_metadata.
     """
-    if task not in {"regression", "classification"}:
-        raise ValueError("task must be 'regression' or 'classification'.")
     if not hasattr(X_train, "shape"):
         X_train = np.asarray(X_train)
     y_train = np.asarray(y_train)
@@ -211,25 +104,19 @@ def grid_search_model(
     if not np.isfinite(y_train).all():
         raise ValueError("Targets must contain only finite values.")
 
-    if task == "regression":
-        validate_ratings(y_train)
-        scoring = {
-            "rmse": make_scorer(_rating_rmse, greater_is_better=False),
-            "mae": make_scorer(_rating_mae, greater_is_better=False),
-        }
-        refit_metric = "rmse"
-    else:
-        if not np.isin(y_train, [0, 1, 2]).all():
-            raise ValueError("Classification targets must be labels 0, 1, and 2 from rating_labels().")
-        labels, counts = np.unique(y_train, return_counts=True)
-        if len(labels) != 3 or counts.min() < 5:
-            raise ValueError("Five-fold classification requires at least 5 samples in each of 3 labels.")
-        scoring = {
-            "accuracy": "accuracy",
-            "f1": make_scorer(f1_score, average="macro", labels=[0, 1, 2], zero_division=0),
-            "auc_roc": "roc_auc_ovr",
-        }
-        refit_metric = "f1"
+    validate_ratings(y_train)
+    scoring = {
+        "rmse": make_scorer(_rating_rmse, greater_is_better=False),
+        "mae": make_scorer(_rating_mae, greater_is_better=False),
+    }
+    refit_metric = "rmse"
+
+    # Shared fold context also prefixes nested XGBoost cache/epoch messages.
+    report = model.get_params(deep=False).get("report")
+    if callable(report) and n_jobs in (None, 1):
+        from movie_rating.experiment_logs import FoldProgressReporter
+
+        model = clone(model).set_params(report=FoldProgressReporter(report, len(ParameterGrid(param_grid))))
 
     search = GridSearchCV(
         estimator=model,
@@ -251,7 +138,7 @@ def grid_search_model(
             try:
                 save_search_run(
                     search, directory=log_directory, run_id=run_id,
-                    started_at=started_at.isoformat(), task=task, train_rows=len(y_train),
+                    started_at=started_at.isoformat(), task="regression", train_rows=len(y_train),
                     fit_seconds=perf_counter() - started, metadata=run_metadata, error=error,
                 )
             except Exception as log_error:
@@ -260,23 +147,19 @@ def grid_search_model(
     if log_directory is not None:
         search.run_directory_ = save_search_run(
             search, directory=log_directory, run_id=run_id,
-            started_at=started_at.isoformat(), task=task, train_rows=len(y_train),
+            started_at=started_at.isoformat(), task="regression", train_rows=len(y_train),
             fit_seconds=perf_counter() - started, metadata=run_metadata,
         )
         search.run_id_ = run_id
     return search
 
 
-def evaluate_model(model, X, ratings, task: str = "regression", split: str = "validation") -> dict:
+def evaluate_model(model, X, ratings, split: str = "validation") -> dict:
     """Evaluate a fitted model on held-out ratings without fitting any component.
 
-    Always pass original ratings, including for classification. Return predictions
-    and metrics; automatically log metrics when model is a tracked GridSearchCV.
-    Multi-class AUC uses probabilities, macro averaging, and one-vs-rest. If the
-    held-out set lacks a class, AUC is undefined and reported as None with a reason.
+    Return predictions and metrics; automatically log metrics when model is a
+    tracked GridSearchCV.
     """
-    if task not in {"regression", "classification"}:
-        raise ValueError("task must be 'regression' or 'classification'.")
     if split not in {"validation", "test"}:
         raise ValueError("split must be 'validation' or 'test'.")
     truth = validate_ratings(ratings)
@@ -288,34 +171,10 @@ def evaluate_model(model, X, ratings, task: str = "regression", split: str = "va
     predicted = np.asarray(model.predict(X))
     if predicted.shape != truth.shape or not np.isfinite(predicted).all():
         raise ValueError("Predictions must be finite and match the number of ratings.")
-    result = {"task": task, "split": split, "rows": len(truth)}
-    if task == "regression":
-        predicted = np.clip(predicted, 0.5, 5.0)
-        metrics = {"rmse": float(root_mean_squared_error(truth, predicted)),
-                   "mae": float(mean_absolute_error(truth, predicted))}
-    else:
-        truth = rating_labels(truth)
-        if not np.isin(predicted, [0, 1, 2]).all():
-            raise ValueError("Predicted classes must be 0, 1, or 2.")
-        classes = np.asarray(model.classes_)
-        if not np.array_equal(np.sort(classes), [0, 1, 2]):
-            raise ValueError("The classifier must be trained on all three classes.")
-        probabilities = np.asarray(model.predict_proba(X))[:, np.argsort(classes)]
-        metrics = {
-            "accuracy": float(accuracy_score(truth, predicted)),
-            "f1": float(f1_score(truth, predicted, average="macro", labels=[0, 1, 2],
-                                  zero_division=0)),
-            "auc_roc": None,
-        }
-        result["auc_roc_reason"] = ""
-        if len(np.unique(truth)) == 3:
-            metrics["auc_roc"] = float(roc_auc_score(
-                truth, probabilities, labels=[0, 1, 2], multi_class="ovr", average="macro",
-            ))
-        else:
-            result["auc_roc_reason"] = "AUC-ROC is undefined because a held-out class is missing."
-        result["probabilities"] = probabilities
-        result["class_names"] = {0: "dislike", 1: "neutral", 2: "like"}
+    predicted = np.clip(predicted, 0.5, 5.0)
+    result = {"task": "regression", "split": split, "rows": len(truth)}
+    metrics = {"rmse": float(root_mean_squared_error(truth, predicted)),
+               "mae": float(mean_absolute_error(truth, predicted))}
     result.update({"metrics": metrics, "predictions": predicted,
                    "inference_seconds": perf_counter() - started})
     if hasattr(model, "run_directory_"):
@@ -324,7 +183,7 @@ def evaluate_model(model, X, ratings, task: str = "regression", split: str = "va
 
 
 def candidates(algorithm, request):
-    """Return parameter dictionaries for every supervised algorithm.
+    """Return bounded parameter dictionaries for regression algorithms.
 
     Fixed requests still run five-fold GridSearchCV with one configuration.
     Tuning requests compare a bounded set of additional configurations.
@@ -340,10 +199,6 @@ def candidates(algorithm, request):
                 "hidden_size": p.hidden_size, "learning_rate": p.ncf_learning_rate,
                 "regularization": p.regularization, "dropout": p.dropout,
                 "batch_size": p.batch_size, "patience": request.patience},
-        "logistic": {"C": p.c, "max_iter": p.max_iter},
-        "random_forest": {"n_estimators": p.forest_estimators, "max_depth": p.forest_depth,
-                          "min_samples_leaf": p.min_samples_leaf,
-                          "max_samples": p.forest_max_samples, "n_jobs": 4},
     }
     if algorithm not in base:
         raise ValueError(f"Unsupported supervised algorithm: {algorithm}")
@@ -354,8 +209,6 @@ def candidates(algorithm, request):
             "xgboost": {"max_depth": max(1, p.max_depth - 2) if p.max_depth > 1 else 3},
             "svd": {"factors": max(2, p.factors // 2) if p.factors > 2 else 4},
             "ncf": {"factors": max(2, p.factors // 2) if p.factors > 2 else 4},
-            "logistic": {"C": p.c * 0.1},
-            "random_forest": {"max_depth": max(1, p.forest_depth - 2) if p.forest_depth > 1 else 3},
         }
         alternative = {**options[0], **alternatives[algorithm]}
         if alternative != options[0]:
@@ -364,18 +217,18 @@ def candidates(algorithm, request):
 
 
 def _supervised_variants(algorithm, request):
-    """Keep factor IDs native; optionally reduce tabular features inside each fold."""
-    if algorithm in {"svd", "ncf"}:
+    """Compare movie metadata PCA for Linear Regression when selected."""
+    method = "pca" if algorithm == "linear" else None
+    if method is None or request.reduction_mode == "off":
         return [(None, None)]
     if request.preset_id is not None:
         from movie_rating.experiment_config import preset_reduction_plan
 
         plan = preset_reduction_plan(request.group, algorithm, request.reduction_choice)
-        return [(plan["method"], plan["components"])] if plan else [(None, None)]
-    variants = [(None, None)] if request.reduction_mode in {"off", "compare"} else []
-    if request.reduction_mode != "off":
-        variants.extend((method, k) for method in request.reduction_methods for k in request.components)
-    return variants
+        return [(None, None), (plan["method"], plan["components"])] if plan else [(None, None)]
+    if request.reduction_mode == "off" or method not in request.reduction_methods:
+        return [(None, None)]
+    return [(None, None), *((method, k) for k in request.components)]
 
 
 def _cv_report(search):
@@ -396,7 +249,7 @@ def _cv_report(search):
 
 
 def supervised(splits, movies, request, update, progress_store=None):
-    """Run the shared GridSearchCV/evaluation/CSV workflow for all six algorithms.
+    """Run GridSearchCV, evaluation, and CSV tracking for rating regressors.
 
     Outer splits come from ExperimentData's per-user chronological splitter.
     Parameter selection uses only five-fold CV on Train. All models are evaluated
@@ -405,13 +258,11 @@ def supervised(splits, movies, request, update, progress_store=None):
     """
     import hashlib
 
-    from movie_rating.experiment_estimators import MovieClassifier, MovieRegressor
+    from movie_rating.experiment_estimators import MovieRegressor
 
-    if request.group not in {"rating", "classification"}:
-        raise ValueError("The supervised workflow supports rating and classification groups.")
-    task = "regression" if request.group == "rating" else "classification"
-    allowed = ({"linear", "xgboost", "svd", "ncf"} if task == "regression" else
-               {"logistic", "random_forest"})
+    if request.group != "rating":
+        raise ValueError("The regression workflow only supports rating prediction.")
+    allowed = {"linear", "xgboost", "svd", "ncf"}
     if not set(request.algorithms).issubset(allowed):
         raise ValueError("The selected algorithms do not belong to this supervised task.")
     train, validation, test = (splits[name] for name in ("train", "validation", "test"))
@@ -431,7 +282,7 @@ def supervised(splits, movies, request, update, progress_store=None):
     ).all():
         raise ValueError("Outer splits must follow time order within every user.")
 
-    y_train = train.rating.to_numpy() if task == "regression" else rating_labels(train.rating)
+    y_train = train.rating.to_numpy()
     source_hash = hashlib.sha256()
     for name in ("train", "validation", "test"):
         source_hash.update(name.encode())
@@ -445,14 +296,23 @@ def supervised(splits, movies, request, update, progress_store=None):
     result = {"rows": [], "charts": [], "cv": {}, "best_configs": {},
               "cv_folds": 5, "cv_protocol": "grid_search_cv_5",
               "notes": [
-                  "All supervised algorithms use GridSearchCV(cv=5) on Train only.",
-                  "Only Linear Regression and Logistic Regression use StandardScaler.",
+                  "All regression algorithms use GridSearchCV(cv=5) on Train only.",
+                  "Linear Regression uses StandardScaler.",
                   "Outer splits are chronological per user; inner CV is not forward-only.",
                   "Fixed requests evaluate one configuration; enable tuning to compare parameters.",
-                  "SVD/NCF keep native user/movie factors; reduction applies to tabular models.",
+                  "PCA compresses movie metadata only for Linear Regression comparisons.",
+                  "Each reduction is compared with an unreduced baseline from the same feature family.",
               ]}
+    from movie_rating.experiment_baseline import global_mean_baseline
+
+    result["baseline"] = global_mean_baseline(splits)
+    update(None, f"Global Mean baseline | Train mean={result['baseline']['prediction']:.6f} | {result['baseline']['rows']}")
     units = [(a, method, k) for a in request.algorithms
              for method, k in _supervised_variants(a, request)]
+    comparison_families = {
+        algorithm: "movie_features"
+        for algorithm, method, _ in units if method is not None
+    }
     for index, (algorithm, reduction, components) in enumerate(units):
         variant_id = f"{algorithm}__{reduction}_{components}" if reduction else algorithm
         saved = progress_store.get_unit(variant_id, algorithm) if progress_store else {}
@@ -463,23 +323,25 @@ def supervised(splits, movies, request, update, progress_store=None):
 
             update(10 + int(80 * index / len(units)),
                    f"{variant_id}: GridSearchCV, 5 folds on Train")
-            constructor = MovieRegressor if task == "regression" else MovieClassifier
-            model = constructor(algorithm=algorithm, movies=movies, reduction=reduction,
-                                components=components or 8, seed=request.seed, report=report)
+            feature_family = comparison_families.get(algorithm, "rating_aggregates")
+            model = MovieRegressor(algorithm=algorithm, movies=movies, reduction=reduction,
+                                   components=components or 8, seed=request.seed, report=report,
+                                   feature_family=feature_family)
             log_directory = (progress_store.path.parent / "model-comparison"
                              if progress_store else DEFAULT_TRACKING_DIRECTORY)
             search = grid_search_model(
                 model, train, y_train, {"parameters": candidates(algorithm, request)},
-                task=task, log_directory=log_directory,
+                log_directory=log_directory,
                 run_metadata={"algorithm": algorithm, "variant_id": variant_id,
                               "dataset_split_sha256": fingerprint,
                               "split": "per_user_chronological", "seed": request.seed,
-                              "features": "fold_train_only_rating_aggregates_and_genres",
+                              "features": feature_family,
+                              "comparison_baseline": algorithm if algorithm in comparison_families else None,
                               "reduction": reduction, "components": components},
             )
             unit_rows = []
             for split_name, frame in (("validation", validation), ("test", test)):
-                evaluated = evaluate_model(search, frame, frame.rating, task=task, split=split_name)
+                evaluated = evaluate_model(search, frame, frame.rating, split=split_name)
                 row = {
                     "algorithm": algorithm, "base_algorithm": algorithm,
                     "variant_id": variant_id, "name": variant_id, "split": split_name,
@@ -490,10 +352,10 @@ def supervised(splits, movies, request, update, progress_store=None):
                     "run_id": search.run_id_, "tracking_directory": str(search.run_directory_),
                     "representation": "reduced_features" if reduction else "raw",
                     "reduction_method": reduction, "components": components,
+                    "feature_family": feature_family,
+                    "comparison_baseline": algorithm if algorithm in comparison_families else None,
                     **evaluated["metrics"],
                 }
-                if task == "classification":
-                    row["auc_roc_reason"] = evaluated["auc_roc_reason"]
                 unit_rows.append(row)
                 report(f"{split_name}: {evaluated['metrics']}")
             unit = {"rows": unit_rows, "cv": _cv_report(search),
@@ -507,22 +369,24 @@ def supervised(splits, movies, request, update, progress_store=None):
         result["best_configs"][variant_id] = unit["best_config"]
 
     valid_rows = [row for row in result["rows"] if row["split"] == "validation"]
-    chosen = (min(valid_rows, key=lambda row: row["rmse"]) if task == "regression" else
-              max(valid_rows, key=lambda row: row["f1"]))
+    chosen = min(valid_rows, key=lambda row: row["rmse"])
     result["selected_variant_id"] = chosen["variant_id"]
     result["selection"] = "Parameters selected by mean CV; model comparison uses Validation, never Test."
-    if task == "classification":
-        result["classification_protocol"] = {
-            "labels": {"0": "rating < 2.5", "1": "2.5 <= rating <= 3.5", "2": "rating > 3.5"},
-            "f1_average": "macro", "auc_roc": "macro_one_vs_rest",
-        }
-        result["class_balance"] = {}
-        for name, frame in splits.items():
-            labels = rating_labels(frame.rating)
-            result["class_balance"][name] = {
-                "negative": int((labels == 0).sum()), "neutral": int((labels == 1).sum()),
-                "positive": int((labels == 2).sum()),
-                "positive_fraction": float((labels == 2).mean()),
-            }
+    result["reduction_comparisons"] = []
+    for row in result["rows"]:
+        if row["reduction_method"] is None:
+            continue
+        baseline = next(item for item in result["rows"]
+                        if item["variant_id"] == row["base_algorithm"] and item["split"] == row["split"])
+        metrics = ("rmse", "mae")
+        result["reduction_comparisons"].append({
+            "baseline_variant_id": baseline["variant_id"], "variant_id": row["variant_id"],
+            "split": row["split"], "feature_family": row["feature_family"],
+            "delta_reduced_minus_baseline": {
+                metric: (row[metric] - baseline[metric]
+                         if row[metric] is not None and baseline[metric] is not None else None)
+                for metric in metrics
+            },
+        })
     update(95, "All selected models evaluated; CV and held-out results saved to CSV")
     return result

@@ -10,7 +10,6 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -20,18 +19,17 @@ import numpy as np
 import pandas as pd
 import psutil
 import torch
-from sklearn.preprocessing import StandardScaler
 
 from movie_rating.experiment_config import ALGORITHMS, ExperimentRequest, preset_catalog
 from movie_rating.experiment_data import ExperimentData
 from movie_rating.experiment_logs import LOGGED_GROUPS, RunLogger, log_page
-from movie_rating.models.regression import FeatureRegression, StreamingLinearRegression
 from movie_rating.windows_dlls import enable_unicode_dll_paths
 
 enable_unicode_dll_paths()
 
 GROUPS = tuple(ALGORITHMS)
 CATALOG = json.loads(Path(__file__).with_name('lab_catalog.json').read_text(encoding='utf-8'))
+CATALOG['groups'] = [group for group in CATALOG['groups'] if group['id'] == 'rating']
 PRESETS = preset_catalog()
 
 
@@ -84,86 +82,6 @@ def read_json(path):
             time.sleep(.01 * (attempt + 1))
 
 
-@contextmanager
-def measured():
-    """Peak RSS is process-wide, sampled during this operation; not model-only RAM."""
-    process = psutil.Process()
-    done = threading.Event()
-    stats = {'peak_rss_mb': process.memory_info().rss / 2**20}
-
-    def sample():
-        while not done.wait(0.025):
-            stats['peak_rss_mb'] = max(stats['peak_rss_mb'], process.memory_info().rss / 2**20)
-
-    sampler = threading.Thread(target=sample, daemon=True)
-    sampler.start()
-    start = time.perf_counter()
-    try:
-        yield stats
-    finally:
-        stats['fit_seconds'] = time.perf_counter() - start
-        stats['peak_rss_mb'] = max(stats['peak_rss_mb'], process.memory_info().rss / 2**20)
-        done.set()
-        sampler.join(timeout=1)
-
-
-def latency(call, repetitions=12):
-    call()
-    timings = []
-    for _ in range(repetitions):
-        start = time.perf_counter()
-        call()
-        timings.append((time.perf_counter() - start) * 1000)
-    return {'latency_p50_ms': np.median(timings), 'latency_p95_ms': np.percentile(timings, 95)}
-
-
-class LinearRating(FeatureRegression):
-    def _estimator(self):
-        return StreamingLinearRegression()
-
-
-def pair_features(train, frames, movies):
-    builder = LinearRating()
-    builder.set_movie_metadata(movies)
-    builder.fit_statistics(train)
-    u, i = builder.encode_queries(train.userId, train.movieId)
-    x_train = builder._feature_batch(
-        u, i, exclude=train.rating.to_numpy(),
-        timestamps=train.timestamp.to_numpy() if 'timestamp' in train else None,
-        movie_ids=train.movieId.to_numpy())
-    matrices = []
-    for frame in frames:
-        u, i = builder.encode_queries(frame.userId, frame.movieId)
-        matrices.append(builder._features(u, i))
-    return builder, x_train, matrices
-
-
-def object_features(train, movies, request):
-    """A shared, train-only representation used by both clustering algorithms."""
-    genre_names = sorted({g for s in movies.genres.fillna('') for g in s.split('|') if g and g != '(no genres listed)'})
-    metadata = movies.set_index('movieId')
-    stats = train.groupby('movieId').rating.agg(['mean', 'count', 'std']).fillna(0)
-    if request.cluster_object == 'movies':
-        stats = stats.sort_values(['count'], ascending=False, kind='stable').head(request.max_items)
-        ids = stats.index.to_numpy()
-        genre_values = np.asarray([[float(g in str(metadata.loc[m, 'genres']).split('|')) for g in genre_names] for m in ids])
-        x = np.column_stack([genre_values, stats['mean'], np.log1p(stats['count']), stats['std']])
-        labels = [str(metadata.loc[m, 'title']) for m in ids]
-    else:
-        stats = train.groupby('userId').rating.agg(['mean', 'count', 'std']).fillna(0)
-        ids = stats.index.to_numpy()
-        genre_map = {int(m): set(str(g).split('|')) for m, g in zip(movies.movieId, movies.genres)}
-        genre_values = []
-        by_user = {u: frame for u, frame in train.groupby('userId')}
-        for user in ids:
-            frame = by_user[user]
-            genre_values.append([float(np.mean([float(g in genre_map[int(m)]) for m in frame.movieId])) for g in genre_names])
-        x = np.column_stack([genre_values, stats['mean'], np.log1p(stats['count']), stats['std']])
-        labels = [f'User {u}' for u in ids]
-    names = [*genre_names, 'Rating trung bình', 'log(1 + số rating)', 'Độ lệch chuẩn rating']
-    return StandardScaler().fit_transform(x), np.asarray(x), labels, names
-
-
 def points(xs, ys):
     return [{'x': native(x), 'y': native(y)} for x, y in zip(xs, ys)]
 
@@ -175,42 +93,6 @@ def chart(index, title, kind, x_label, y_label, series=None, split='train', **kw
 
 def series(label, xs, ys, **kwargs):
     return {'label': label, 'points': points(xs, ys), **kwargs}
-
-
-def cost_charts(rows, split='train'):
-    output = []
-    for field, title, unit in [('fit_seconds', 'Thời gian huấn luyện / khai phá', 'Giây ↓'),
-                               ('peak_rss_mb', 'Bộ nhớ đỉnh RSS của tiến trình', 'MiB'),
-                               ('latency_p95_ms', 'Độ trễ p95', 'ms ↓')]:
-        values = [r for r in rows if r.get(field) is not None]
-        if values:
-            output.append(chart(-1, title, 'bar', 'Phương pháp / cấu hình', unit,
-                                [series(title, [r['name'] for r in values], [r[field] for r in values])], split))
-    quality = next((key for key in ('rmse', 'macro_f1', 'silhouette', 'return_mean') if any(r.get(key) is not None for r in rows)), None)
-    tradeoff = [r for r in rows if quality and r.get(quality) is not None and r.get('latency_p95_ms') is not None]
-    if tradeoff:
-        output.append(chart(-1, 'Chất lượng và độ trễ', 'scatter', 'p95 (ms) ↓', quality,
-                            [series(r['name'], [r['latency_p95_ms']], [r[quality]]) for r in tradeoff], split,
-                            note='Đối chiếu trong cùng giao thức đo. Với RMSE, thấp hơn tốt hơn; với F1/return, cao hơn tốt hơn.'))
-    return output
-
-
-def summarize(rows):
-    """Average independent model seeds, preserving details from the first seed."""
-    result = []
-    for algorithm in dict.fromkeys(r['algorithm'] for r in rows):
-        runs = [r for r in rows if r['algorithm'] == algorithm]
-        row = dict(runs[0])
-        row['n_runs'] = len(runs)
-        row['std'] = {}
-        for key in runs[0]:
-            values = [r.get(key) for r in runs]
-            if key not in ('seed', 'threshold') and all(isinstance(v, (int, float, np.number)) and not isinstance(v, bool) for v in values):
-                row[key] = float(np.mean(values))
-                if len(values) > 1:
-                    row['std'][key] = float(np.std(values, ddof=1))
-        result.append(row)
-    return result
 
 
 class LabService:
@@ -260,6 +142,22 @@ class LabService:
         result = path.with_name('result.json')
         if result.is_file():
             job['result'] = read_json(result)
+            if job.get('group') == 'rating' and job.get('status') == 'completed' and not job['result'].get('baseline'):
+                from movie_rating.experiment_baseline import baseline_from_provenance
+
+                with self.lock:
+                    saved = read_json(result)
+                    if not saved.get('baseline'):
+                        try:
+                            baseline = baseline_from_provenance(
+                                saved.get('provenance', {}), self.settings.artifacts_dir,
+                            )
+                            if baseline:
+                                saved['baseline'] = baseline
+                                save_json(result, saved)
+                        except (OSError, ValueError, KeyError):
+                            pass
+                    job['result'] = saved
         from movie_rating.experiment_resume import ProgressStore
 
         # The progress snapshot is atomically replaced by the worker. Reading it
@@ -275,7 +173,7 @@ class LabService:
             job['epoch_checkpoint_available'] = progress['active_fit_checkpoint']
         job['resume_available'] = bool(
             progress
-            and job.get('group') in ('rating', 'classification')
+            and job.get('group') == 'rating'
             and job.get('status') in ('cancelled', 'failed', 'interrupted')
             and not job.get('resume_blocked')
             and not result.exists()
@@ -311,8 +209,8 @@ class LabService:
             job = self.get(run_id)
             if self.active is not None:
                 raise RuntimeError('Đang có một thực nghiệm chạy. Hãy đợi hoàn tất trước khi tiếp tục.')
-            if job.get('group') not in ('rating', 'classification'):
-                raise RuntimeError('Chỉ thực nghiệm hồi quy/phân loại hiện hỗ trợ tiếp tục từ checkpoint.')
+            if job.get('group') != 'rating':
+                raise RuntimeError('Only regression runs can resume from checkpoints.')
             if job.get('status') not in ('cancelled', 'failed', 'interrupted'):
                 raise RuntimeError('Chỉ có thể tiếp tục lần chạy đã dừng, lỗi hoặc bị gián đoạn.')
             if not job.get('resume_available'):
@@ -406,107 +304,52 @@ class LabService:
 
         try:
             message = (
-                'Đọc dữ liệu; chuẩn bị lịch sử theo thời gian trong từng user cho RL'
-                if request.group == 'reinforcement'
-                else 'Đọc dữ liệu; chuẩn bị lịch sử theo user cho hồi quy/phân loại/phân cụm'
+                'Read prepared per-user chronological rating history'
                 if request.use_all_data
-                else 'Lấy mẫu lịch sử MovieLens, chia 70/15/15 với seed 42'
+                else 'Sample MovieLens user histories and split them 70/15/15 with seed 42'
             )
-            if request.group == 'association':
-                message = ('Association Rules · đọc toàn bộ data/train.parquet; '
-                           'movies.parquet cung cấp metadata; Validation/Test không dùng khai phá luật.')
             update(2, message)
             splits, movies, provenance = self._load(request)
             update(None, 'Đã nạp dữ liệu · ' + ' · '.join(
                 f'{name}: {len(frame):,} rating' for name, frame in splits.items()))
-            if request.group == 'clustering':
-                source = provenance.get('split_files') or {}
-                update(None, f"Phân cụm · nguồn Train: {source.get('train', 'lịch sử user lấy mẫu, chia lại theo thời gian')} · "
-                       f"metadata: {provenance.get('metadata_file', 'movies.parquet')}")
-                update(None, 'Hồ sơ sở thích và fit mô hình chỉ đọc Train; '
-                       'Validation/Test đánh giá gợi ý tương lai. Fit cuối dùng hết user Train đủ lịch sử.')
-            if request.group == 'association':
-                source = provenance['association_source']
-                update(8, f"Nguồn Train: {source['train_file']} · "
-                       f"{len(splits['train']):,} ratings · "
-                       f"{provenance['splits']['train']['users']:,} users · không lấy mẫu user.")
-                if source['prepared_user_sample_fraction'] not in (None, 1, 1.0):
-                    update(None, 'Lưu ý: dùng hết Train đã chuẩn bị, nhưng dữ liệu nguồn '
-                           'đã được lấy mẫu ở bước chuẩn bị; xem tỷ lệ nguồn trong báo cáo.')
             from movie_rating.experiment_pipeline import execute
-            progress_store = None
-            if request.group in ('rating', 'classification'):
-                from movie_rating.experiment_resume import ProgressStore, resume_fingerprint
+            from movie_rating.experiment_resume import ProgressStore, resume_fingerprint
 
-                fingerprint = resume_fingerprint(request, splits, movies, provenance)
-                progress_store = ProgressStore(path, fingerprint)
-                if job.get('resume_count', 0):
-                    update(None, 'Đã xác minh dữ liệu, split, tham số, seed, thư viện và code để tiếp tục.')
-
+            fingerprint = resume_fingerprint(request, splits, movies, provenance)
+            progress_store = ProgressStore(path, fingerprint)
+            if job.get('resume_count', 0):
+                update(None, 'Data, splits, parameters, seed, libraries, and code verified for resume.')
             from movie_rating.native_threads import limit_native_threadpools
 
-            thread_limit = (
-                request.parameters.xgb_n_jobs
-                if request.group == 'rating' and 'xgboost' in request.algorithms
-                else 2
-            )
+            thread_limit = request.parameters.xgb_n_jobs if 'xgboost' in request.algorithms else 2
             with limit_native_threadpools(
                 thread_limit,
-                include_xgboost=(
-                    request.group == 'rating' and 'xgboost' in request.algorithms
-                ),
+                include_xgboost='xgboost' in request.algorithms,
             ):
-                if progress_store is None:
-                    result = execute(splits, movies, request, update)
-                else:
-                    result = execute(
-                        splits, movies, request, update, progress_store=progress_store
-                    )
+                result = execute(
+                    splits, movies, request, update, progress_store=progress_store
+                )
             update(98, 'Lưu bảng tiêu chí, số liệu biểu đồ và dấu vết lần chạy')
             data_note = (
                 'Kết quả dùng toàn bộ dữ liệu đã chuẩn bị.'
                 if request.use_all_data
                 else 'Kết quả thuộc mẫu user công bố ở trên; không đại diện tự động cho toàn bộ MovieLens 25M.'
             )
-            protocol_note = 'Chọn cấu hình trên validation; test chỉ báo cáo đánh giá cuối, không dùng để tuning tiếp.'
-            if request.group in ('rating', 'classification'):
-                protocol_note = ('GridSearchCV với cv=5 chỉ dùng Train để chọn tham số; '
-                                 'Validation so sánh mô hình; Test chỉ đánh giá cuối. '
-                                 'StandardScaler chỉ áp dụng cho Linear Regression và Logistic Regression.')
-            if request.group == 'association':
-                data_note = 'Kết quả dùng toàn bộ tập Train đã chuẩn bị; không lấy mẫu user.'
-                protocol_note = ('Ngưỡng khai phá áp dụng trên Train. Validation/Test không tham gia '
-                                 'sinh luật; các chỉ số Train chưa xác nhận chất lượng gợi ý tương lai.')
+            protocol_note = (
+                'GridSearchCV with cv=5 selects parameters using Train only; Validation compares models; '
+                'Test reports final held-out scores. Linear Regression scales features with StandardScaler.'
+            )
             result.update(provenance=provenance, group=request.group, config=request.model_dump(),
                           notes=[*result.get('notes', []), data_note, protocol_note])
             result['sample_sha256'] = provenance.get('sample_sha256')
-            result['protocol'] = (
-                result.get('rl_protocol', {}).get('name')
-                or result.get('clustering_protocol')
-                or provenance.get('protocol')
-            )
+            result['protocol'] = provenance.get('protocol')
             for row in result.get('rows', []):
                 row.setdefault('variant_id', row.get('algorithm'))
                 row.setdefault('base_algorithm', row.get('algorithm'))
-                row.setdefault(
-                    'representation',
-                    'global_transactions' if request.group == 'association'
-                    else 'raw_taste_profiles' if request.group == 'clustering'
-                    else 'raw_profile' if request.group == 'reinforcement' and row.get('algorithm') == 'dqn'
-                    else 'not_applicable' if request.group == 'reinforcement'
-                    else 'raw',
-                )
+                row.setdefault('representation', 'raw')
                 row.setdefault('reduction_method', None)
                 row.setdefault('components', None)
-                if 'fit_scope' not in row:
-                    row['fit_scope'] = (
-                        'train_plus_validation' if row.get('split') == 'test'
-                        else 'train' if row.get('split') == 'validation'
-                        else 'train_all_eligible_users' if request.group == 'clustering'
-                        else 'train' if request.group == 'association'
-                        else 'not_applicable' if request.group == 'reinforcement'
-                        else 'train'
-                    )
+                row.setdefault('fit_scope', 'train')
                 row.setdefault('sample_sha256', result['sample_sha256'])
                 row.setdefault('protocol', result['protocol'])
             for key, config in result.get('best_configs', {}).items():
@@ -515,11 +358,7 @@ class LabService:
                     config.setdefault('protocol', result['protocol'])
                     config.setdefault('sample_sha256', result['sample_sha256'])
             device = 'CPU'
-            if (
-                request.group == 'rating'
-                and 'ncf' in request.algorithms
-                and torch.cuda.is_available()
-            ):
+            if 'ncf' in request.algorithms and torch.cuda.is_available():
                 device = f'CUDA · {torch.cuda.get_device_name(0)}'
             result['runtime'] = {'python': platform.python_version(),
                                  'config_sha256': hashlib.sha256(json.dumps(request.model_dump(), sort_keys=True).encode()).hexdigest(),
@@ -527,12 +366,12 @@ class LabService:
                                  'cpu_count': os.cpu_count(), 'ram_bytes': psutil.virtual_memory().total,
                                  'device': device, 'time_unit': 'seconds',
                                  'xgb_n_jobs': request.parameters.xgb_n_jobs
-                                 if request.group == 'rating' and 'xgboost' in request.algorithms
+                                 if 'xgboost' in request.algorithms
                                  else None,
                                  'threadpool_limit': thread_limit,
                                  'torch_cuda_runtime': torch.version.cuda,
                                  'measurement': 'perf_counter; fit includes preprocessing; RSS process-wide',
-                                 'libraries': {name: version(name) for name in ['numpy', 'pandas', 'scikit-learn', 'torch', 'xgboost', 'mlxtend']},
+                                 'libraries': {name: version(name) for name in ['numpy', 'pandas', 'scikit-learn', 'torch', 'xgboost']},
                                  'code_sha256': hashlib.sha256(b''.join(p.read_bytes() for p in sorted(Path(__file__).parent.rglob('*.py'))) + Path(__file__).with_name('lab_catalog.json').read_bytes()).hexdigest()}
             save_json(path / 'result.json', result)
             job.update(status='completed', progress=100, message='Đã hoàn tất', finished_at=datetime.now(UTC).isoformat())
@@ -563,16 +402,6 @@ class LabService:
     def csv_export(self, run_id):
         job = self.get(run_id)
         flattened = self.export_rows(job)
-        for rule in job.get('result', {}).get('rules', []):
-            flattened.append({'record_type': 'association_rule', **{
-                key: json.dumps(native(value), ensure_ascii=False) if isinstance(value, list) else value
-                for key, value in rule.items()}})
-        for rule in job.get('result', {}).get('group_rules', []):
-            flattened.append({'record_type': 'association_group_rule', **{
-                key: json.dumps(native(value), ensure_ascii=False) if isinstance(value, (list, dict)) else value
-                for key, value in rule.items()}})
-        for row in job.get('result', {}).get('recommendation', {}).get('rows', []):
-            flattened.append({'record_type': 'future_recommendation', **row})
         fields = list(dict.fromkeys(k for row in flattened for k in row))
         buffer = io.StringIO(newline='')
         writer = csv.DictWriter(buffer, fieldnames=fields)
@@ -607,44 +436,13 @@ class LabService:
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             pd.DataFrame(self.export_rows(job)).to_excel(writer, sheet_name='Metrics', index=False)
-            if result.get('rules'):
-                rules = [{k: json.dumps(v, ensure_ascii=False) if isinstance(v, list) else v
-                          for k, v in r.items()} for r in result['rules']]
-                pd.DataFrame(rules).to_excel(writer, sheet_name='Rules', index=False)
-            if result.get('group_rules'):
-                group_rules = [{k: json.dumps(native(v), ensure_ascii=False)
-                                if isinstance(v, (list, dict)) else v for k, v in row.items()}
-                               for row in result['group_rules']]
-                pd.DataFrame(group_rules).to_excel(writer, sheet_name='Grouped rules', index=False)
-            if result.get('grouped_variants'):
-                groups = []
-                for variant in result['grouped_variants']:
-                    for group in variant.get('groups', []):
-                        groups.append({
-                            'variant_id': variant['variant_id'],
-                            'k': variant['k'],
-                            **group,
-                            'rule_summary': json.dumps(native(variant['rule_summary']), ensure_ascii=False),
-                            'reduction': json.dumps(native(variant['fit_metadata']), ensure_ascii=False),
-                        })
-                pd.DataFrame(groups).to_excel(writer, sheet_name='Apriori groups', index=False)
             if result.get('cv'):
                 folds = [{'algorithm': a, **{k: v for k, v in row.items() if not isinstance(v, list)}}
                          for a, data in result['cv'].items() for row in data['folds']]
                 pd.DataFrame(folds).to_excel(writer, sheet_name='CV folds', index=False)
-            if result.get('recommendation'):
-                pd.DataFrame(result['recommendation']['rows']).to_excel(
-                    writer, sheet_name='Future ranking', index=False)
-            if result.get('clustering_protocol'):
-                search = [{k: json.dumps(native(v), ensure_ascii=False)
-                           if isinstance(v, (list, dict)) else v for k, v in row.items()}
-                          for row in result.get('search', [])]
-                pd.DataFrame(search).to_excel(writer, sheet_name='Cluster search', index=False)
-            pd.DataFrame({'key': ['request', 'provenance', 'runtime', 'selection', 'rl_protocol',
-                                  'paired_test_uncertainty', 'reduction'],
+            pd.DataFrame({'key': ['request', 'provenance', 'runtime', 'selection', 'reduction'],
                           'value': [json.dumps(result.get(k, job.get(k)), ensure_ascii=False)
-                                    for k in ['request', 'provenance', 'runtime', 'selection', 'rl_protocol',
-                                              'paired_test_uncertainty', 'reduction']]}).to_excel(
+                                    for k in ['request', 'provenance', 'runtime', 'selection', 'reduction']]}).to_excel(
                                         writer, sheet_name='Protocol', index=False)
             # Preserve movie titles literally even if a title starts with '='.
             for sheet in writer.book:

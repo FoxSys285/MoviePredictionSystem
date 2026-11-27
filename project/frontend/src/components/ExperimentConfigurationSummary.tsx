@@ -16,7 +16,14 @@ export function ExperimentConfigurationSummary({ group, preset, algorithms }: {
         </div>
         {algorithms.map((id) => {
           const algorithm = group.algorithms.find((item) => item.id === id);
-          const settings = preset?.algorithms[id]?.settings ?? [];
+          const config = preset?.algorithms[id];
+          const settings = [...(config?.settings ?? [])];
+          if (group.id === "rating" && id === "linear") {
+            const reduction = config?.reduction;
+            settings.push({label: "reduction", value: reduction
+              ? `PCA(n_components=${reduction.components})`
+              : "None"});
+          }
           return (
             <div key={id}>
               <dt>{algorithm?.name ?? id}</dt>
