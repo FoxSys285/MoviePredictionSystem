@@ -49,11 +49,11 @@ export function LabChartFigure({ chart }: { chart: LabChart }) {
           const groupWidth = barWidth * chart.series.length + 8 * (chart.series.length - 1);
           const x = left + (categoryIndex + 0.5) * slot - groupWidth / 2 + seriesIndex * (barWidth + 8);
           const center = x + barWidth / 2;
-          const valid = finite(point.y);
-          const labelY = valid ? y(point.y) + (point.y < 0 ? 18 : -10) : y(0) - 10;
-          return <g key={pointIndex}>{valid && <rect x={x} y={Math.min(y(0), y(point.y))} width={barWidth}
-            height={Math.max(0.8, Math.abs(y(point.y) - y(0)))} fill={colors[seriesIndex % colors.length]} rx={2}/>}
-            <text className={valid ? "lab-bar-value" : "lab-bar-missing"} x={center} y={labelY} textAnchor="middle"
+          const value = finite(point.y) ? point.y : undefined;
+          const labelY = value === undefined ? y(0) - 10 : y(value) + (value < 0 ? 18 : -10);
+          return <g key={pointIndex}>{value !== undefined && <rect x={x} y={Math.min(y(0), y(value))} width={barWidth}
+            height={Math.max(0.8, Math.abs(y(value) - y(0)))} fill={colors[seriesIndex % colors.length]} rx={2}/>}
+            <text className={value !== undefined ? "lab-bar-value" : "lab-bar-missing"} x={center} y={labelY} textAnchor="middle"
               transform={`rotate(-38 ${center} ${labelY})`}>{number(point.y)}</text>
           </g>;
         })}
