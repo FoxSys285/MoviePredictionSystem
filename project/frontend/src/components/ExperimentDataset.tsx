@@ -1,5 +1,6 @@
 import type { Dataset } from "../lib/api";
 import { usePreferences } from "../lib/preferences";
+import { ExperimentDisclosure } from "./ExperimentDisclosure";
 
 const files = [
   ["ratings.csv", "Mã người dùng, mã phim, điểm đánh giá và thời gian đánh giá."],
@@ -14,8 +15,7 @@ export function ExperimentDataset({ dataset, loading }: { dataset: Dataset | nul
   const number = (value: number) => value.toLocaleString(locale);
   const date = (value: string) => new Date(value).toLocaleDateString(locale, { timeZone: "UTC" });
 
-  return <section className="experiment-dataset" aria-labelledby="experiment-dataset-title">
-    <h3 id="experiment-dataset-title">{t("Bộ dữ liệu sử dụng")}</h3>
+  return <ExperimentDisclosure className="experiment-dataset" title="Bộ dữ liệu sử dụng">
     <p className="experiment-dataset-description">
       <strong>{dataset?.name || "MovieLens"}</strong>
       {" — "}{t("Bộ dữ liệu đánh giá phim, gồm thông tin phim, điểm của người dùng, nhãn cộng đồng và liên kết tham chiếu.")}
@@ -49,5 +49,5 @@ export function ExperimentDataset({ dataset, loading }: { dataset: Dataset | nul
         <dd>{t(description)}</dd>
       </div>)}
     </dl>
-  </section>;
+  </ExperimentDisclosure>;
 }

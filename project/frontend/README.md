@@ -84,11 +84,30 @@ Menu thu gọn trên màn hình hẹp. Mục **Thực nghiệm** và nút nổi 
 `/experiments`. Nút lên đầu trang nằm phía trên nút thực nghiệm khi cùng xuất hiện.
 Mục thực nghiệm đang chọn được lưu trong query `section=baseline`, `improved` hoặc
 `evaluation`; tải lại trang và nút Back/Forward giữ đúng mục tương ứng.
-Mô hình cơ sở và Mô hình cải tiến có bốn ô chọn dạng nút: Linear Regression,
-XGBoost, SVD, NCF. Hai mục giữ lựa chọn riêng trong lúc chuyển qua lại trên trang.
+Mô hình cơ sở có bốn ô chọn dạng nút: Linear Regression, XGBoost, SVD, NCF.
+Mô hình cải tiến có dropdown chọn một thuật toán (mặc định SVD), mô tả và vùng
+**Các phương án cải tiến** bên dưới. Hiện danh sách phương án rỗng cho cả bốn
+thuật toán; không đưa các ví dụ trong bản thiết kế vào dữ liệu thật. Nút chạy
+cải tiến bị khoá kèm lý do cho tới khi có phương án. Lựa chọn thuật toán của
+hai mục được giữ riêng trong lúc chuyển qua lại trên trang.
 Bên dưới là mô tả MovieLens và bốn CSV. Số rating, user, phim, thể loại, giai đoạn
 đánh giá và mật độ ma trận dùng thống kê từ `/api/v1/dataset`, dùng chung dữ liệu
 đã tải ở ứng dụng.
+Phần quy trình bên dưới mô tả chia theo user 70/15/15, baseline Global Mean,
+GridSearchCV 5-fold trên Train, Validation để early stopping/so sánh, tuỳ chọn
+refit 85% và đánh giá Test một lần cho cả bốn mô hình cùng baseline.
+Hai tiêu đề **Bộ dữ liệu sử dụng** và **Chia dữ liệu và quy trình thực nghiệm**
+có nút thu gọn/mở rộng. Nút **Chạy thực nghiệm** bên dưới quy trình khởi chạy
+đúng các thuật toán đang chọn của mục cơ sở hoặc cải tiến; mặc định lấy mẫu tối
+đa 1.000 user, seed 42, không refit 85%. Log thật, thời gian đã chạy và thanh
+tiến độ được cập nhật bên dưới. Mã lượt chạy lưu riêng cho từng mục trong
+localStorage, nên tải lại trang hoặc chuyển mục vẫn theo dõi được.
+Mục So sánh và đánh giá đọc tiến độ/kết quả từ API thực nghiệm, hiển thị phạm vi
+dữ liệu, RMSE/MAE Validation/Test của Global Mean và các mô hình, siêu tham số
+đã chọn và liên kết tải JSON. Tiến độ của lượt đang chạy được cập nhật tự động.
+Nút **Biểu đồ** ở góc trên phải bảng bật/tắt hai biểu đồ thanh RMSE và MAE.
+Mỗi biểu đồ so sánh Validation/Test của đúng các mô hình trong lượt đang xem,
+có Global Mean, chú giải màu, trục bắt đầu từ 0 và giá trị chi tiết trên từng thanh.
 
 Home và Gallery có hàng "Các phim có thể bạn yêu thích", cuộn ngang tối đa 20 phim.
 Home có thêm 5 hàng thể loại, tối đa 10 phim mỗi hàng; nút Xem tất cả mở Gallery
@@ -104,8 +123,6 @@ Gợi ý cá nhân lấy lịch sử tài khoản thật: khi có model đã tra
 và tên mô hình; khi chưa train thì dùng hồ sơ thể loại từ rating và ghi nhãn nguồn.
 Guest/user chưa có lịch sử nhận gợi ý cộng đồng. Những phim đã đánh giá được loại
 khỏi hàng gợi ý. Không tạo predicted_rating giả hoặc đồng nhất app user ID với MovieLens.
-Phần Experiments trên giao diện đã được làm trống để xây dựng lại. Mô tả thuật toán và
-thiết kế đánh giá mới sẽ được bổ sung sau khi nhận danh sách thuật toán.
 
 Nhấn poster hoặc tên phim để chuyển đến `/movies/:movieId`. Trang này có thể
 mở trực tiếp, tải lại, dùng nút Back; bộ lọc Gallery được giữ trong URL khi quay lại.

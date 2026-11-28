@@ -7,6 +7,12 @@ Swagger `/docs` cung cấp schema và thử request trực tiếp.
 |---|---|---|
 | GET | `/health` | Trạng thái API, dataset, dữ liệu đã chuẩn bị và mô hình |
 | GET | `/models` | Bốn thuật toán chính và ba thuật toán tham chiếu, cùng trạng thái artifact |
+| GET | `/experiments/runs` | Lịch sử và tiến độ thực nghiệm từ web hoặc CLI |
+| POST | `/experiments/runs` | Khởi chạy worker với variant, algorithms, max_users, seed, refit_85; trả 202, hoặc 409 nếu mục đang chạy cấu hình khác |
+| GET | `/experiments/runs/{run_id}` | Trạng thái và kết quả của một lượt thực nghiệm |
+| GET | `/experiments/runs/{run_id}/result` | Tải kết quả JSON sau khi hoàn tất; trả 409 khi chưa xong |
+| GET | `/experiments/runs/{run_id}/logs?cursor=0` | Đọc log nối tiếp; trả entries, next_cursor, has_more, reset |
+| GET | `/experiments/runs/{run_id}/logs/download` | Tải toàn bộ log JSONL |
 | GET | `/dataset` | Thống kê toàn bộ CSV, phân bố điểm, thể loại và sáu phim phổ biến |
 | GET | `/movies?q=&offset=0&limit=20` | Tìm, lọc và sắp xếp phim; phân trang tối đa 100 mục |
 | GET | `/movies/{movie_id}` | Chi tiết phim, phân bố điểm, nhãn, IMDb/TMDB và phim cùng thể loại |

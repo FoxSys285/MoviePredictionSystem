@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from movie_rating.api.accounts import account_router
 from movie_rating.api.activity import activity_router
+from movie_rating.api.experiments import experiment_router
 from movie_rating.api.frontend import mount_frontend
 from movie_rating.api.schemas import PredictionRequest, PredictionResponse
 from movie_rating.services.catalog import RATING_COLUMNS, CatalogService, movie_records
@@ -149,6 +150,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(503, "Model unavailable. Run: movie-rating train") from error
 
     app.include_router(router)
+    app.include_router(experiment_router(settings))
     app.include_router(account_router(settings))
     app.include_router(activity_router(settings, catalog_service))
     mount_frontend(app, PROJECT_ROOT / "frontend/dist")

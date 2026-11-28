@@ -5,6 +5,10 @@ FastAPI và giao diện React/TypeScript. Người dùng có thể tìm phim, xe
 chấm điểm, quản lý lịch sử đánh giá và nhận gợi ý theo lịch sử.
 
 Phần thực nghiệm và bộ test cũ đã được xoá để xây dựng lại từ đầu.
+Thực nghiệm mới có bốn thuật toán với phiên bản cơ sở/cải tiến, chia theo user
+70/15/15, GridSearchCV 5-fold và baseline Global Mean. Xem
+[hướng dẫn chạy thực nghiệm](project/src/movie_rating/experiments/README.md).
+Trang `/experiments?section=evaluation` hiển thị tiến độ và kết quả đã lưu.
 
 ## Chạy trên Windows
 

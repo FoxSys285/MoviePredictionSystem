@@ -26,7 +26,7 @@ ALGORITHM_REGISTRY = {
 
 
 def build_algorithm(algorithm: str, variant: str = "baseline", **parameters) -> MovieAlgorithm:
-    """Create the selected scaffold; fitting is implemented in a later step."""
+    """Create the selected baseline or improved implementation."""
     if variant not in ALGORITHM_REGISTRY:
         raise ValueError(f"Unknown experiment variant: {variant}")
     implementations = ALGORITHM_REGISTRY[variant]

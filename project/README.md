@@ -5,7 +5,12 @@ Backend FastAPI và frontend React/TypeScript phục vụ tìm kiếm phim, chi 
 API so sánh mô hình, giao diện thực nghiệm và bộ test cũ đã được xoá.
 
 Giao diện thực nghiệm mới ở `/experiments`, mở từ menu hoặc nút nổi **Thực nghiệm**.
-Hiện trang chỉ có tiêu đề và trạng thái trống; chức năng sẽ được bổ sung từng bước.
+Trang có lựa chọn thuật toán, mô tả dữ liệu/quy trình, tiến độ và bảng kết quả.
+Hai mục cơ sở/cải tiến có nút thu gọn phần mô tả và nút **Chạy thực nghiệm**;
+log, thời gian và tiến độ được cập nhật ngay bên dưới khi chạy.
+Để chạy cả hai phiên bản trên mẫu user, dùng
+`.\.venv\Scripts\python.exe -X utf8 -m movie_rating.experiments.run --max-users 1000 --variant both`.
+Xem [hướng dẫn cài đặt thuật toán](src/movie_rating/experiments/README.md).
 
 ## Cấu trúc
 

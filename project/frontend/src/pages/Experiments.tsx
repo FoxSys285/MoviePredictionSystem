@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { BarChart3, Layers3, Sparkles } from "lucide-react";
+import { useCallback, useState } from "react";
+import { BarChart3, ChevronDown, Layers3, Sparkles } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PageHero } from "../components/ui";
 import { ExperimentDataset } from "../components/ExperimentDataset";
+import { ExperimentProtocol } from "../components/ExperimentProtocol";
+import { ExperimentResults } from "../components/ExperimentResults";
+import { ExperimentRunner } from "../components/ExperimentRunner";
 import type { Dataset } from "../lib/api";
 import { usePreferences } from "../lib/preferences";
 import "../experiments.css";
@@ -27,20 +30,17 @@ export function Experiments({ dataset, datasetLoading }: { dataset: Dataset | nu
   const { t } = usePreferences();
   const [searchParams] = useSearchParams();
   const selected = sections.find((section) => section.id === searchParams.get("section")) ?? sections[0];
-  const [selections, setSelections] = useState<Record<ModelSection, AlgorithmId[]>>({
-    baseline: [],
-    improved: [],
-  });
+  const [baselineAlgorithms, setBaselineAlgorithms] = useState<AlgorithmId[]>([]);
+  const [improvedAlgorithm, setImprovedAlgorithm] = useState<AlgorithmId>("svd");
   const modelSection = selected.id === "evaluation" ? null : selected.id;
-  const ActiveIcon = selected.icon;
+  const [running, setRunning] = useState<Record<ModelSection, boolean>>({ baseline: false, improved: false });
+  const onBusyChange = useCallback((variant: ModelSection, busy: boolean) => {
+    setRunning((previous) => previous[variant] === busy ? previous : { ...previous, [variant]: busy });
+  }, []);
 
-  function toggleAlgorithm(section: ModelSection, algorithm: AlgorithmId) {
-    setSelections((current) => ({
-      ...current,
-      [section]: current[section].includes(algorithm)
-        ? current[section].filter((id) => id !== algorithm)
-        : [...current[section], algorithm],
-    }));
+  function toggleAlgorithm(algorithm: AlgorithmId) {
+    setBaselineAlgorithms((current) => current.includes(algorithm)
+      ? current.filter((id) => id !== algorithm) : [...current, algorithm]);
   }
 
   return <>
@@ -62,11 +62,36 @@ export function Experiments({ dataset, datasetLoading }: { dataset: Dataset | nu
       </aside>
       <section className="experiments-content" aria-labelledby="experiments-section-title">
         <h2 id="experiments-section-title">{t(selected.label)}</h2>
-        {modelSection ? <><fieldset className="experiment-algorithm-picker">
+        {modelSection ? <div key={modelSection}>
+        {modelSection === "improved" ? <div className="experiment-improved-setup">
+          <p className="experiment-improved-intro">{t("Lựa chọn thuật toán và thiết lập các phương án cải tiến để đánh giá hiệu quả.")}</p>
+          <div className="experiment-improved-algorithm">
+            <label htmlFor="improved-algorithm">{t("Thuật toán cần cải tiến")}</label>
+            <div className="experiment-improved-select">
+              <select id="improved-algorithm" value={improvedAlgorithm} disabled={running.improved}
+                onChange={(event) => setImprovedAlgorithm(event.target.value as AlgorithmId)}>
+                {algorithms.map((algorithm) => <option key={algorithm.id} value={algorithm.id}>{algorithm.name}</option>)}
+              </select>
+              <ChevronDown size={19} aria-hidden="true" />
+            </div>
+          </div>
+          <section className="experiment-improvement-plans" aria-labelledby="improvement-plans-title">
+            <div className="experiment-improvement-plans-heading">
+              <h3 id="improvement-plans-title">{t("Các phương án cải tiến")}</h3>
+              <span>{t("{count} phương án", { count: 0 })}</span>
+            </div>
+            <div className="experiment-improvement-empty" role="status">
+              <p>{t("Chưa có phương án cải tiến cho {algorithm}.", {
+                algorithm: algorithms.find((algorithm) => algorithm.id === improvedAlgorithm)?.name,
+              })}</p>
+              <p>{t("Các phương án sẽ được bổ sung sau.")}</p>
+            </div>
+          </section>
+        </div> : <fieldset className="experiment-algorithm-picker" disabled={running.baseline}>
           <legend>{t("Chọn thuật toán")}</legend>
           <div className="experiment-algorithm-grid">
             {algorithms.map((algorithm) => {
-              const checked = selections[modelSection].includes(algorithm.id);
+              const checked = baselineAlgorithms.includes(algorithm.id);
               return <label
                 key={algorithm.id}
                 className={`experiment-algorithm-option ${checked ? "is-selected" : ""}`}
@@ -77,19 +102,20 @@ export function Experiments({ dataset, datasetLoading }: { dataset: Dataset | nu
                   name={`${modelSection}-algorithms`}
                   value={algorithm.id}
                   checked={checked}
-                  onChange={() => toggleAlgorithm(modelSection, algorithm.id)}
+                  onChange={() => toggleAlgorithm(algorithm.id)}
                 />
                 <span>{algorithm.name}</span>
               </label>;
             })}
           </div>
-        </fieldset>
+        </fieldset>}
         <ExperimentDataset dataset={dataset} loading={datasetLoading} />
-        </> : <div className="experiments-empty">
-          <ActiveIcon size={36} aria-hidden="true" />
-          <h3>{t("Chưa có nội dung")}</h3>
-          <p>{t("Nội dung của mục này sẽ được bổ sung ở bước tiếp theo.")}</p>
-        </div>}
+        <ExperimentProtocol />
+        <ExperimentRunner variant={modelSection}
+          algorithms={modelSection === "baseline" ? baselineAlgorithms : [improvedAlgorithm]}
+          disabledReason={modelSection === "improved" ? "Chưa có phương án cải tiến để thực nghiệm." : undefined}
+          onBusyChange={onBusyChange} />
+        </div> : <ExperimentResults />}
       </section>
     </main>
   </>;
